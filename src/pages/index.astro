@@ -10,7 +10,7 @@ const posts = (await getCollection("blog"))
   .filter((p) => !p.data.draft)
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
-const base = import.meta.env.BASE_URL;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
 <!doctype html>
@@ -23,10 +23,7 @@ const base = import.meta.env.BASE_URL;
         border-bottom: 1px solid var(--border);
         margin-bottom: 3em;
       }
-      .hero h1 {
-        font-size: 2.2em;
-        margin: 0 0 0.3em;
-      }
+      .hero h1 { font-size: 2.2em; margin: 0 0 0.3em; }
       .hero p {
         color: var(--text-secondary);
         font-size: 1.1em;
@@ -40,20 +37,13 @@ const base = import.meta.env.BASE_URL;
         letter-spacing: 0.05em;
         margin: 0 0 1.5em;
       }
-      .post-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-      }
+      .post-list { list-style: none; padding: 0; margin: 0; }
       .post-item {
         padding: 1.2em 0;
         border-bottom: 1px solid var(--border);
       }
       .post-item:last-child { border-bottom: none; }
-      .post-item a {
-        text-decoration: none;
-        display: block;
-      }
+      .post-item a { text-decoration: none; display: block; }
       .post-item h3 {
         margin: 0 0 0.3em;
         font-size: 1.25em;
@@ -96,7 +86,7 @@ const base = import.meta.env.BASE_URL;
         <ul class="post-list">
           {posts.map((post) => (
             <li class="post-item">
-              <a href={`${base}blog/${post.id}/`}>
+              <a href={`${base}/blog/${post.id}/`}>
                 <h3>{post.data.title}</h3>
                 <p class="desc">{post.data.description}</p>
                 <div class="meta">
