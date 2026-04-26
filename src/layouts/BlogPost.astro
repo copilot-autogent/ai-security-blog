@@ -1,0 +1,88 @@
+---
+import type { CollectionEntry } from "astro:content";
+import BaseHead from "../components/BaseHead.astro";
+import Footer from "../components/Footer.astro";
+import FormattedDate from "../components/FormattedDate.astro";
+import Header from "../components/Header.astro";
+
+type Props = CollectionEntry<"blog">["data"] & { minutesRead?: number };
+
+const { title, description, pubDate, updatedDate, tags = [] } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<html lang="en">
+  <head>
+    <BaseHead title={`${title} | AI Security Distilled`} description={description} />
+    <style>
+      .prose {
+        width: 720px;
+        max-width: calc(100% - 2em);
+        margin: auto;
+        padding: 1em;
+      }
+      .post-header {
+        margin-bottom: 2em;
+        padding-bottom: 1.5em;
+        border-bottom: 1px solid var(--border);
+      }
+      .post-header h1 {
+        margin: 0 0 0.5em 0;
+        line-height: 1.2;
+      }
+      .post-meta {
+        color: var(--text-secondary);
+        font-size: 0.9em;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1em;
+        align-items: center;
+      }
+      .tags {
+        display: flex;
+        gap: 0.5em;
+        flex-wrap: wrap;
+      }
+      .tag {
+        background: var(--bg-elevated);
+        color: var(--accent);
+        padding: 0.15em 0.6em;
+        border-radius: 12px;
+        font-size: 0.8em;
+        border: 1px solid var(--border);
+        text-decoration: none;
+      }
+      .updated {
+        font-style: italic;
+      }
+    </style>
+  </head>
+
+  <body>
+    <Header />
+    <main>
+      <article>
+        <div class="prose">
+          <div class="post-header">
+            <h1>{title}</h1>
+            <div class="post-meta">
+              <FormattedDate date={pubDate} />
+              {updatedDate && (
+                <span class="updated">
+                  Updated <FormattedDate date={updatedDate} />
+                </span>
+              )}
+            </div>
+            {tags.length > 0 && (
+              <div class="tags" style="margin-top: 0.75em;">
+                {tags.map((tag) => <span class="tag">{tag}</span>)}
+              </div>
+            )}
+          </div>
+          <slot />
+        </div>
+      </article>
+    </main>
+    <Footer />
+  </body>
+</html>

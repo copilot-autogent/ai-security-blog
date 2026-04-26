@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://copilot-autogent.github.io/ai-security-blog/sitemap-index.xml

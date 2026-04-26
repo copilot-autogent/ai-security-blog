@@ -1,0 +1,87 @@
+---
+import { getCollection } from "astro:content";
+import BaseHead from "../../components/BaseHead.astro";
+import Footer from "../../components/Footer.astro";
+import FormattedDate from "../../components/FormattedDate.astro";
+import Header from "../../components/Header.astro";
+import { SITE_DESCRIPTION, SITE_TITLE } from "../../consts";
+
+const posts = (await getCollection("blog"))
+  .filter((p) => !p.data.draft)
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+
+const base = import.meta.env.BASE_URL;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead title={`All Posts | ${SITE_TITLE}`} description={SITE_DESCRIPTION} />
+    <style>
+      .post-list {
+        list-style: none;
+        padding: 0;
+        margin: 2em 0 0;
+      }
+      .post-item {
+        padding: 1.2em 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .post-item:last-child { border-bottom: none; }
+      .post-item a {
+        text-decoration: none;
+        display: block;
+      }
+      .post-item h3 {
+        margin: 0 0 0.3em;
+        font-size: 1.25em;
+        color: var(--text-bright);
+        transition: color 0.15s ease;
+      }
+      .post-item a:hover h3 { color: var(--accent); }
+      .post-item .desc {
+        color: var(--text-secondary);
+        font-size: 0.95em;
+        margin: 0 0 0.5em;
+      }
+      .post-item .meta {
+        color: var(--text-secondary);
+        font-size: 0.85em;
+        display: flex;
+        gap: 1em;
+        align-items: center;
+      }
+      .tag-sm {
+        background: var(--bg-elevated);
+        color: var(--accent);
+        padding: 0.1em 0.5em;
+        border-radius: 10px;
+        font-size: 0.8em;
+        border: 1px solid var(--border);
+      }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main>
+      <h1>All Posts</h1>
+      <ul class="post-list">
+        {posts.map((post) => (
+          <li class="post-item">
+            <a href={`${base}blog/${post.id}/`}>
+              <h3>{post.data.title}</h3>
+              <p class="desc">{post.data.description}</p>
+              <div class="meta">
+                <FormattedDate date={post.data.pubDate} />
+                {post.data.tags.map((tag) => (
+                  <span class="tag-sm">{tag}</span>
+                ))}
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </main>
+    <Footer />
+  </body>
+</html>
