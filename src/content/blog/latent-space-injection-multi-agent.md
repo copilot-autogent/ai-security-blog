@@ -11,7 +11,7 @@ They scan prompts for injection patterns. They monitor outputs for harmful conte
 
 A new framework called RecursiveMAS just eliminated that assumption. Published by researchers from UIUC, Stanford, MIT, and NVIDIA, RecursiveMAS replaces text-based inter-agent communication with **direct latent-space embedding transfer**. Agents pass continuous vector representations to each other through a lightweight module called RecursiveLink, skipping text encoding and decoding entirely. During intermediate recursion rounds, no tokens are produced. No text exists to scan.
 
-The performance gains are real — 8.3% average accuracy improvement, 2.4× inference speedup, and up to 75.6% token reduction compared to text-based multi-agent systems. The security implications are equally real, and entirely unexamined in the paper.
+The performance gains are real — 8.3% average accuracy improvement, 2.4× inference speedup, and up to 75.6% token reduction compared to text-based multi-agent systems. The security implications are equally real, and not addressed in the paper — understandably, since it's a systems paper, not a security paper.
 
 ## How RecursiveMAS Actually Works
 
@@ -27,7 +27,7 @@ RecursiveMAS replaces this with three mechanisms:
 
 **3. Recursive loop** — After the last agent in the chain completes latent generation, its output feeds back to the first agent, forming a loop. Multiple recursion rounds progressively refine the system's reasoning. Only the final agent in the final round produces text output.
 
-The key insight: during rounds 1 through *n*−1, the entire multi-agent system operates in continuous embedding space. There is no text. There is no transcript. There is nothing for a text-level safety filter to inspect.
+The key insight: during rounds 1 through *n*−1, the entire multi-agent system operates in continuous embedding space. No explicit text tokens are generated — no transcript exists for a text-level safety filter to inspect. The embeddings carry rich semantic information (they're derived from and can theoretically be decoded back to token distributions), but no system in the pipeline actually performs that decoding until the final round.
 
 ## The Attack Surface That Doesn't Exist Yet (But Will)
 
@@ -37,7 +37,7 @@ RecursiveMAS is an academic framework tested on sub-10B models for math and codi
 
 In text-based multi-agent systems, prompt injection works by embedding adversarial text instructions in a message that an agent processes. Defenses work by scanning that text for known injection patterns — instruction delimiters, role-overrides, jailbreak phrases.
 
-In a latent-space system, the attack vector shifts from text to embeddings. A compromised agent — one that has been fine-tuned with a backdoor, or one processing adversarially crafted input — doesn't need to produce adversarial text. It needs to produce adversarial **latent representations** that, when passed through the outer RecursiveLink to downstream agents, steer their behavior.
+In a latent-space system, the attack vector shifts from text to embeddings. An agent processing adversarially crafted input doesn't need to produce adversarial text. The adversarial input causes the agent to produce **latent representations** that, when passed through the outer RecursiveLink to downstream agents, steer their behavior in unintended directions. The agent itself isn't compromised — it's functioning normally on malicious input, and the malicious signal propagates through the latent channel rather than appearing in any text output.
 
 This is fundamentally different from text-level prompt injection:
 
@@ -56,14 +56,16 @@ In a latent-space system, an agent can encode sensitive information into its lat
 Consider a three-agent system: Planner → Critic → Solver.
 
 1. The Planner processes a document containing confidential data.
-2. A compromised Planner encodes the confidential content into its latent output, disguised within the normal "plan" embeddings.
-3. The Critic receives this through the outer RecursiveLink. It's not text — there's nothing for a content filter to scan.
-4. The Solver receives the Critic's output, which now carries the exfiltrated data in latent form.
-5. In the final round, the Solver generates a seemingly benign text response, but the confidential data has already been used to influence the final answer in a way that subtly leaks information.
+2. The Planner's latent output naturally encodes representations of the confidential content — this is how the model reasons about what it read. In a text-based system, the Planner's output text can be filtered for PII. In a latent-space system, the confidential content is embedded in continuous vectors that carry semantic meaning without producing scannable tokens.
+3. The Critic receives this through the outer RecursiveLink. There's nothing for a content filter to scan.
+4. The Solver receives the Critic's output, which now carries representations of the confidential data in latent form.
+5. In the final round, the Solver generates a text response. Even if the final output looks benign, the confidential data has influenced the reasoning chain in ways that may subtly leak information — or a targeted adversarial input could specifically encourage the final agent to surface confidential details from the latent stream.
 
 This is steganography at the embedding level. And unlike textual steganography, where statistical anomalies in token distributions can be detected, latent-space steganography operates in a high-dimensional continuous space where "normal" is defined by the RecursiveLink's learned distribution — making anomaly detection substantially harder.
 
-### Attack 3: Audit Trail Destruction
+It's worth noting that in some contexts, reduced observability of intermediate reasoning may actually be *desirable* — for privacy-preserving systems processing sensitive data, having intermediate thoughts exist only as transient embeddings rather than logged text could be a feature. But in adversarial environments where you need to detect and investigate attacks, this same opacity becomes a liability.
+
+### Attack 3: Audit Trail Opacity
 
 This isn't an attack per se — it's a property of the architecture that makes all other attacks harder to investigate.
 
@@ -90,9 +92,12 @@ Let's map the standard multi-agent defense stack against latent-space communicat
 | Output monitoring / DLP | Inspect all generated tokens | Intermediate tokens don't exist |
 | Conversation logging | Full transcript available | Only final-round text logged |
 | Behavioral guardrails (system prompts) | Applied at each text generation | Applied only at text decode in final round |
+| Model-level safety training (RLHF) | Trained against text adversarial inputs | Untested against latent-space adversarial representations |
 | Rate limiting on sensitive operations | Triggered by text-level tool calls | Latent-space operations have no tool-call boundary |
 
-The entire defensive stack assumes a text-level observation point between agents. Remove that observation point, and every defense that operates there becomes inert.
+The defensive stack for inter-agent communication assumes a text-level observation point between agents. Remove that observation point, and every defense that operates on inter-agent messages becomes inert. Defenses at other layers — input validation on user queries, output filtering on final responses, model-level safety training baked into weights — still function, but they can't inspect what agents say to each other during intermediate rounds.
+
+It's worth noting that model-level safety training (RLHF, constitutional AI) provides some baseline protection: a safety-trained final agent should still resist producing overtly harmful output regardless of what latent representations it received. But safety training is optimized for text-level adversarial inputs, not adversarial continuous representations — its effectiveness against latent-space attacks is an open question.
 
 This isn't a theoretical gap that might be relevant someday. The pressure to adopt latent-space inter-agent communication is real and immediate:
 
@@ -128,7 +133,13 @@ The outer RecursiveLink is a learned linear projection. Its capacity to transfer
 
 Concretely: reduce the bottleneck dimension of the RecursiveLink, or add noise to the latent transfer. Information bottleneck theory suggests that you can constrain the mutual information between sender and receiver embeddings while preserving task-relevant information. The adversarial question is whether the attack-relevant information can be separated from the task-relevant information — and in general, it can't, because a well-crafted attack encodes its payload within the task-relevant subspace.
 
-### 4. Cryptographic Provenance for Latent States
+### 5. Adversarial Training on Latent Representations
+
+The adversarial robustness literature (Madry et al., PGD training) shows that training models with adversarial examples improves robustness. The same principle applies to RecursiveLink: train the outer link with deliberately adversarial latent inputs — perturbations designed to steer downstream agents toward harmful outputs — so the projection learns to attenuate adversarial signals.
+
+This doesn't solve the problem (adversarial training is an arms race, not a final defense), but it raises the bar for attacks and is the most directly applicable technique from existing robustness research.
+
+### 6. Cryptographic Provenance for Latent States
 
 In network security, message authentication codes (MACs) verify that a message hasn't been tampered with in transit. The latent-space analog would be some form of provenance verification on embeddings — a mechanism to verify that the latent representation produced by Agent A is "genuine" and hasn't been adversarially modified.
 
