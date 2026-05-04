@@ -9,7 +9,7 @@ A patient types a question about their medication side effects into a medical ch
 
 That question, along with 999 others, was sitting in an unauthenticated API endpoint. Anyone with a browser could read it.
 
-A new paper, *"When RAG Chatbots Expose Their Backend"* (arXiv:2605.00796, Madrid-García & Rujas, May 2026), documents a non-destructive security assessment of a live, publicly deployed patient-facing medical RAG chatbot. The researchers used two things: Claude Opus 4.6 for exploratory hypothesis generation, and Chrome Developer Tools for manual verification. No credentials. No specialist tooling. No prompt injection required.
+A new paper, *"When RAG Chatbots Expose Their Backend"* (arXiv:2605.00796, Madrid-García & Rujas, May 2026), documents a non-destructive security assessment of a live, publicly deployed patient-facing medical RAG chatbot. The researchers used two things: Claude Opus 4.6 for exploratory hypothesis generation, and Chrome Developer Tools for manual verification. No credentials. No specialist tooling. No prompt injection required. The chatbot, its disease area, and its developers are deliberately anonymized in the paper to protect the organization and its patients — the researchers performed responsible disclosure in April 2026 and the application was taken offline for remediation before publication.
 
 What they found was a complete infrastructure exposure — and the failure pattern is one that any team shipping a RAG application should study.
 
@@ -29,13 +29,13 @@ None of this required authentication.
 
 ## The Exploit Was Not Prompt Injection
 
-This distinction matters. The researchers did attempt prompt injection against the chatbot's LLM layer — direct requests, encoding-based probes, role-override attacks, social engineering frames. The chatbot's model-level guardrails generally deflected these attempts.
+This distinction matters. The researchers did attempt prompt injection against the chatbot's LLM layer — direct requests, encoding-based probes, role-override attacks, social engineering frames (the paper catalogs these in a structured taxonomy). The chatbot's model-level guardrails generally deflected these attempts.
 
 But the system prompt was already visible in network traffic. Prompt injection wasn't necessary to obtain it.
 
 This is the core lesson: **a deployment can appear resistant to prompt-level attacks while exposing everything through the surrounding application**. The LLM layer was arguably fine. The web application layer had no access controls at all.
 
-The vulnerability was architectural — a misplaced trust boundary between client and server. The application transmitted sensitive configuration to the browser because the RAG framework's defaults weren't hardened for production deployment. The "exploit" was opening DevTools, something any patient's tech-literate family member could do.
+The vulnerability was architectural — a misplaced trust boundary between client and server. The application transmitted sensitive configuration to the browser, likely because the RAG framework's development defaults weren't hardened for production. The "exploit" was opening DevTools, something any patient's tech-literate family member could do.
 
 ## The Privacy Assurance Gap
 
@@ -45,23 +45,23 @@ This is not an edge case or a philosophical debate about what constitutes "perso
 
 ## LLMs as Both the Product and the Audit Tool
 
-The researchers used Claude Opus 4.6 — accessed through its desktop application via MCP — to assist the security assessment. They framed themselves as the chatbot's developers and asked the model to help verify whether the application could leak its system prompt. The model provided sustained, unrestricted support for hypothesis generation, vulnerability identification, verification step proposals, and structured information extraction.
+The researchers used Claude Opus 4.6 — accessed through its desktop application via MCP — to assist the security assessment. They framed themselves as the chatbot's developers and asked the model to help verify whether the application could leak its system prompt. The model provided sustained, unrestricted support for hypothesis generation, vulnerability identification, verification step proposals, and structured information extraction. None of the prompts used to guide the assessment were refused or restricted by the assisting model's safety controls.
 
-No prompt used during the assessment was refused or restricted by the assisting model's safety controls.
+This creates the dual-use dynamic the paper emphasizes: the same LLM capability that enables efficient security auditing is equally available to adversaries. A patient organization that built a chatbot with good intentions but limited security expertise is now exposed to anyone with a commercial LLM subscription and curiosity.
 
-This creates the dual-use dynamic the paper emphasizes: the same LLM capability that enables efficient security auditing is equally available to adversaries. A patient organization that built a chatbot with good intentions but limited security expertise is now exposed to anyone with a $20/month AI subscription and curiosity.
+The researchers note this trajectory is accelerating: models like Anthropic's Claude Mythos have demonstrated autonomous vulnerability discovery and exploitation capabilities. The class of weakness documented here — unauthenticated endpoints, exposed configuration, absent access controls — is precisely what automated adversarial analysis would find first.
 
-The researchers explicitly note the trajectory: models like Claude Mythos have demonstrated autonomous vulnerability discovery and exploitation at scale. The class of weakness documented here — unauthenticated endpoints, exposed configuration, absent access controls — is precisely what automated adversarial analysis would find first.
+## Why This Failure Pattern Matters Beyond One Chatbot
 
-## Why RAG Teams Keep Making This Mistake
+This is a single case study, and the paper is explicit that its findings should not be generalized to all RAG systems. But the *failure modes* it documents — exposed configuration, unauthenticated endpoints, absent logging controls — are risks inherent to any RAG deployment that ships framework defaults to production.
 
 RAG is often presented as a safer architecture because it grounds model output in curated sources. That's a valid claim about answer quality. It is not a claim about deployment security.
 
 RAG chatbots are web applications. They have API endpoints, configuration management, database connections, logging pipelines, and administrative interfaces. The RAG framework provides the retrieval logic; it does not provide authentication, authorization, response minimization, or access control. Those are deployment responsibilities.
 
-The pattern the paper documents is common: a team builds a functional RAG chatbot using an open-source framework, tests whether the model gives accurate answers, and deploys it. The framework's default configuration — designed for development convenience, not production security — ships to production unchanged. Admin endpoints remain open. Configuration objects pass through to the client. Conversation logging stores everything with no access restrictions.
+The scenario is recognizable: a team builds a functional RAG chatbot using an open-source framework, tests whether the model gives accurate answers, and deploys it. Framework configuration designed for development convenience ships to production unchanged. Admin endpoints remain open. Configuration objects pass through to the client. Conversation logging stores everything with no access restrictions.
 
-The paper's finding that the knowledge base was fully extractable adds another dimension. RAG corpora in healthcare contexts may contain unpublished clinical notes, internal medical opinions, or patient-authored documents. When the retrieval layer is accessible without authentication, it's not just user queries at risk — it's the entire source document collection.
+The paper also raises a broader concern about knowledge base exposure. In this case, the corpus was curated patient-education materials and published articles. But as the authors note, RAG corpora in other healthcare deployments may include unpublished clinical notes, internal medical opinions, or patient-authored documents never intended for public access. When the retrieval layer is accessible without authentication, it's not just user queries at risk — it's the entire source document collection.
 
 ## Minimum Security Checklist for Production RAG Deployments
 
