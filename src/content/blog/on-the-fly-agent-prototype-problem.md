@@ -7,7 +7,7 @@ tags: ["agent-security", "threat-modeling", "defense-patterns", "infrastructure"
 
 Here is a fact about how most AI agents are deployed today: when you give them a task, they synthesize a plan and execute it in seconds or minutes. The tool chains they build — the sequence of API calls, file reads, shell commands, and web fetches — are invented on the spot, have never been tested, have never been reviewed, and have never been adversarially evaluated. They are improvised prototypes. And then you run them in production.
 
-A new paper from MIT and CMU, "Engineering Robustness into Personal Agents with the AI Workflow Store" (arXiv:2605.10907, cs.CR), makes this case explicitly and proposes a structural alternative. The argument is uncomfortable because it's aimed not at any particular attack or vulnerability — it's aimed at the paradigm itself.
+A new paper from Columbia University and Google, "Engineering Robustness into Personal Agents with the AI Workflow Store" (arXiv:2605.10907, cs.CR), makes this case explicitly and proposes a structural alternative. The argument is uncomfortable because it's aimed not at any particular attack or vulnerability — it's aimed at the paradigm itself.
 
 ## The Core Argument: The On-the-Fly Loop Bypasses Software Engineering
 
