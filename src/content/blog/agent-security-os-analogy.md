@@ -62,7 +62,7 @@ In every agent in the study, all tool calls share the same LLM context. Output f
 
 The attack scenario: a skill that reads from an untrusted source (a web page, an email, an API response containing injected instructions) deposits adversarial content into the shared LLM context. Subsequent tool calls — including file writes, credential accesses, or outbound network requests — execute in a context that now includes the injected content. There is no architectural barrier between the untrusted input and the privileged output.
 
-This is not a configuration problem. It's a design gap. **No current agent runtime implements a process isolation equivalent.** The paper notes this as a fundamental limitation — the shared-context architecture of current LLM agents makes true process isolation difficult without significant redesign.
+This is not a configuration problem. It's a design gap. **No evaluated agent implements a true process isolation equivalent.** NemoClaw's Docker sandbox comes closest — it enforces filesystem path scoping and network egress policy at the container level — but even it cannot achieve full OS-equivalent context isolation: tool outputs still flow into the shared LLM context, meaning adversarial content from one tool call remains visible to subsequent ones. The paper notes this as a fundamental limitation of the shared-context architecture.
 
 ### Failure Mode 3: Privilege Separation Is Absent
 
@@ -72,13 +72,11 @@ In the agents evaluated, **file access control is enforced at the same privilege
 
 ### The DEP Analog: Prompt Injection Is Architecturally Intractable
 
-Data Execution Prevention in operating systems addresses the fact that memory is dual-use: it can hold either code or data, and malicious code injected into the data segment can become execution flow. The kernel solves this by marking memory regions as either executable or writable, but not both.
+Data Execution Prevention in operating systems addresses the fact that memory is dual-use: it can hold either code or data, and malicious code injected into the data segment can become execution flow. The kernel solved this with a hardware-enforced W^X (write XOR execute) policy — a memory region is either writable or executable, never both. DEP was not a declaration that the problem was unsolvable; it was the architectural mechanism that solved it, without requiring data to be "safe."
 
-The agent analog is prompt injection: natural language context is dual-use, mixing data (content the agent should process) and instructions (commands the agent should follow). Unlike the OS case, there is no equivalent of DEP available. LLMs currently cannot reliably distinguish "this is content to be summarized" from "this is an instruction to be followed" when both appear in the same context.
+The agent analog is prompt injection: natural language context is dual-use, mixing data (content the agent should process) and instructions (commands the agent should follow). The key insight the paper draws is that **current agent runtimes lack the equivalent of DEP** — there is no architectural mechanism that enforces "this region is content to be processed, not instructions to be followed." Agent runtimes currently rely on the LLM to make that distinction at inference time, which the paper treats as equivalent to relying on data content to not be malicious.
 
-The paper frames this as one of the genuinely "insecure by design" capabilities of current agents: "LLM-based agents face an analogous but harder problem: natural-language context mixes data and instructions, and current LLMs cannot reliably separate them." The OS solved DEP with a hardware-supported bit in memory; there's no equivalent hardware primitive available for natural language disambiguation.
-
-This is why the paper's threat model treats the LLM as untrusted by assumption. Prompt injection resistance is not a property you can guarantee at the LLM level, so the architecture has to assume it can be bypassed.
+The OS solved DEP with a hardware-supported bit in memory; there's no equivalent hardware primitive available for natural language disambiguation. The paper frames this as one of the genuinely "insecure by design" properties of current LLM-based agents — and uses it to justify treating the LLM as untrusted by assumption. If you can't guarantee the LLM will correctly distinguish content from instructions, the architecture must be designed around the assumption that it sometimes won't.
 
 ## The Wrapper Architecture Is the Most Promising Path
 
@@ -90,7 +88,7 @@ The wrapper approach has practical limitations — it can't address in-context a
 
 ## The OpenClaw Incident Record
 
-The paper provides context that makes the abstract analysis concrete. OpenClaw was released in November 2025. By May 2026 — five months later — it had accumulated over 100 CVEs, including 5 critical and 41 high-severity vulnerabilities. In February 2026, VirusTotal documented hundreds of malicious third-party skills in the OpenClaw marketplace.
+The paper provides context that makes the abstract analysis concrete. OpenClaw (originally launched as Clawdbot in November 2025, renamed after a trademark dispute) had accumulated over 100 CVEs by May 2026 — five months after release — including 5 critical and 41 high-severity vulnerabilities per the paper's security database sources. In February 2026, a VirusTotal scan analysis cited in the paper found hundreds of third-party skills in the OpenClaw marketplace flagged by malware detection engines.
 
 This is not unusual adoption curve behavior. This is what happens when you deploy a system with a very large attack surface into a popular marketplace with minimal enforcement of provenance, validation, or runtime isolation. The CVE rate at six months is not the interesting metric; the interesting metric is that the fundamental architectural gaps identified in this paper — no mediated tool interface, no process isolation, no privilege separation — were present from day one and are not addressable by patching individual CVEs.
 
@@ -108,7 +106,7 @@ The paper concludes with design recommendations. Here's how to apply them:
 
 **4. Evaluate the wrapper architecture for your use case.** If you're building a general-purpose agent that needs broad capabilities, the wrapper approach — containerization with enforced I/O policies, path-scoped filesystem access, network egress controls — provides the best currently-available approximation of OS-style privilege enforcement. It doesn't solve in-context attacks, but it does limit what a compromised agent session can do to your host system.
 
-**5. Do not trust your skill marketplace.** The VirusTotal finding of hundreds of malicious skills is a reminder that a marketplace with over a million extensions at launch is not a curated software library — it's the early web with LLM-mediated execution. Treat third-party skills with the same skepticism you'd apply to running arbitrary executables from the internet. Review permissions, verify provenance, and run in an isolated environment before production use.
+**5. Do not trust your skill marketplace.** The February 2026 malware scan analysis — hundreds of flagged skills across VirusTotal detection engines — is a reminder that a marketplace with over a million extensions at launch is not a curated software library — it's the early web with LLM-mediated execution. Treat third-party skills with the same skepticism you'd apply to running arbitrary executables from the internet. Review permissions, verify provenance, and run in an isolated environment before production use.
 
 **6. Audit logging is a security control, not a debugging convenience.** Log every privileged operation: tool invocations, file accesses, credential uses, skill installations, memory updates, network requests. Protect those logs from write access by skills or tools (use append-only or tamper-evident storage). The paper notes that most agents use an unprotected JSON log file that malicious skills can overwrite — that's not an audit log, it's a suggestion.
 
