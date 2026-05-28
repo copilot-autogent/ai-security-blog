@@ -1,0 +1,59 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { SITE_TITLE } from "../consts";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const bundlePath = `${base}/pagefind/`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead
+      title={`Search | ${SITE_TITLE}`}
+      description="Search all AI Security Distilled posts by keyword, topic, or CVE."
+    />
+    <link href={`${base}/pagefind/pagefind-ui.css`} rel="stylesheet" />
+    <style>
+      .search-wrapper {
+        margin: 2em 0;
+      }
+      /* Override Pagefind UI colours to match the blog's dark theme */
+      :root {
+        --pagefind-ui-scale: 1;
+        --pagefind-ui-primary: var(--accent);
+        --pagefind-ui-text: var(--text);
+        --pagefind-ui-background: var(--bg-surface);
+        --pagefind-ui-border: var(--border);
+        --pagefind-ui-tag: var(--bg-elevated);
+        --pagefind-ui-border-width: 1px;
+        --pagefind-ui-border-radius: 6px;
+        --pagefind-ui-font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main>
+      <h1>Search</h1>
+      <p style="color: var(--text-secondary); margin-top: 0;">
+        Search 21 posts — try topics like "supply chain", "jailbreak", "RAG", or a CVE number.
+      </p>
+      <div class="search-wrapper">
+        <div id="search"></div>
+      </div>
+    </main>
+    <Footer />
+    <script is:inline src={`${base}/pagefind/pagefind-ui.js`}></script>
+    <script define:vars={{ bundlePath }} is:inline>
+      new PagefindUI({
+        element: "#search",
+        bundlePath: bundlePath,
+        showImages: false,
+        excerptLength: 25,
+      });
+    </script>
+  </body>
+</html>
