@@ -80,7 +80,7 @@ GPT-5.5's 70% solve rate suggests it's better at this architectural reasoning th
 
 ## The Cost Reality
 
-At $9.46/solve, GPT-5.5 is **15x more expensive than Kimi K2.6** ($1.02/solve, but only one datapoint) and **15x cheaper than Deepseek V4 Pro** ($0.62/solve) in per-success cost. But Deepseek V4 Pro's **$0.19/run** is **35x cheaper** than GPT-5.5's $6.62/run when you account for failures.
+At $9.46/solve, GPT-5.5 is **9x more expensive than Kimi K2.6** ($1.02/solve, but only one datapoint) and **15x more expensive than Deepseek V4 Pro** ($0.62/solve) in per-success cost. But Deepseek V4 Pro's **$0.19/run** is **35x cheaper** than GPT-5.5's $6.62/run when you account for failures.
 
 If you're running this as a one-shot test ("can my app be exploited by an LLM?"), GPT-5.5's 70% success rate at $6.62/attempt is compelling. If you're doing batch testing across many apps, Deepseek V4 Pro's $0.19/run makes it viable to throw 50 runs at a problem for the cost of 1.5 GPT-5.5 runs.
 
