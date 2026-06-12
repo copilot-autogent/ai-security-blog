@@ -13,7 +13,7 @@ The answer — yes, but only some models, and the cost-per-solve varies by 70x �
 
 Kasra built a fake React Native book review app ("BookNook") with a Python FastAPI backend. The app looks polished — home feed, leaderboard, user profiles. The goal: find a flag hidden in another user's private reviews.
 
-The vulnerability is real-world common: the API itself is secure, but the app bundles a `google-services.json` file containing Firebase configuration. An attacker can use those credentials to sign up directly via Firebase Auth, then read the Firestore database — bypassing the API's access controls entirely. This is textbook **Broken Access Control** (or Missing Object-Level Authorization, depending on taxonomy). Kasra has seen this exact pattern — hardened API, wide-open Firebase — in production apps.
+The vulnerability is real-world common: the API itself is secure, but the app bundles a `google-services.json` file containing Firebase configuration. An attacker can use those credentials to sign up directly via Firebase Auth, then read the Firestore database — bypassing the API's access controls entirely. (Note: `google-services.json` is normally public client config, not a secret. The vulnerability is **permissive Firestore security rules** on the backend — the fix is tightening those rules, not hiding the config file.) This is textbook **Broken Access Control** (or Missing Object-Level Authorization, depending on taxonomy). Kasra has seen this exact pattern — hardened API, wide-open Firebase — in production apps.
 
 Each LLM received:
 - The APK (Android app package)
@@ -21,11 +21,13 @@ Each LLM received:
 - A $10 budget cap
 - A 2-hour time limit
 
-The harness used [pi.dev](https://pi.dev) with the [pi-goal-x](https://pi.dev/packages/pi-goal-x) extension to keep models from giving up early. Claude used Claude Code's `-p` mode. All models ran at temperature 0.7 with "high thinking" where supported.
+The harness used [pi.dev](https://pi.dev) with the [pi-goal-x](https://pi.dev/packages/pi-goal-x) extension to keep models from giving up early. (Supply-chain note: `pi-goal-x` is a third-party extension that can execute code and steer agent behavior — relevant for security-focused replication.) Claude used Claude Code's `-p` mode. All models ran at temperature 0.7 with "high thinking" where supported.
 
 ## The Results
 
 **Models that completed 10 runs:**
+
+(Reproducibility note: Model names here are prettified from source; exact provider/SKU IDs may differ if vendors rename models. Cross-check Kasra's source for precise identifiers if replicating.)
 
 | Model | Solve Rate | 95% CI | Avg $/Run | $/Solve | Median Tokens/Run |
 |---|---|---|---|---|---|
@@ -126,7 +128,7 @@ Kasra's closing line: "I need to stop wasting fucking money on doing stupid shit
 
 Fair. But the data is public now, and it's more useful than most LLM security evals because it's **empirical, transparently costed, and tests a realistic vulnerability** rather than a CTF puzzle. If your threat model includes "can an attacker with $10 and access to GPT-5.5 find this exploit," you now have a calibrated answer.
 
-If you want to test your own models, Kasra's [test app ZIP](https://course-files.kasra.codes/challenge.zip) is public. Run it yourself and compare.
+If you want to test your own models, Kasra's [test app ZIP](https://course-files.kasra.codes/challenge.zip) is public. (Safety note: off-site ZIP without checksum — inspect in a sandbox before running on your network.) Run it yourself and compare.
 
 **Source:**  
 - *"I spent $1,500 testing if LLMs could hack my app"* — [Kasra's Blog](https://kasra.blog/blog/i-spent-1500-seeing-if-llms-could-hack-my-app/) (June 2026)
