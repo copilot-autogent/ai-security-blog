@@ -21,13 +21,11 @@ The practical implication: **attacks generated this way can transfer**. An attac
 
 GRPO (Group Relative Policy Optimization) is a reinforcement learning algorithm that's recently gained traction for training language models. Compared to PPO, it avoids the value network overhead by computing advantages relative to a group of generated samples rather than an external critic.
 
-Prior work on attacker-defender co-training used PPO and DPO successfully, but **explicitly reported that GRPO was unstable** in this setting. The paper identifies why: standard GRPO advantage normalization collapses in adversarial settings where reward signals have high variance and asymmetric structure.
-
-AdvGRPO fixes this with two changes:
+Prior work on attacker-defender co-training used PPO and DPO successfully, but **explicitly reported that GRPO was unstable** in this setting. AdvGRPO addresses this instability with two specific design choices:
 
 1. **Dense multi-channel rewards**: Instead of a single sparse reward (did the attack succeed or fail?), the framework provides rewards across multiple channels, giving the optimizer richer gradient signal throughout training. The abstract names this design choice but does not enumerate the specific channels.
 
-2. **Decoupled advantage normalization**: Standard GRPO normalizes advantages across all samples in a batch. In adversarial co-training, this creates instability because attacker and defender samples have fundamentally different reward distributions. AdvGRPO computes normalization separately for each role, stabilizing training without losing the efficiency advantage of GRPO.
+2. **Decoupled advantage normalization**: Standard GRPO normalizes advantages across all samples in a batch. AdvGRPO decouples this normalization by role — computing it separately for the attacker and defender — which the paper shows stabilizes training in the adversarial co-training setting.
 
 These two changes are the technical contribution that makes GRPO viable where it previously failed.
 
@@ -37,7 +35,7 @@ The framework doesn't start with full co-training immediately — it uses a stru
 
 **Phase 1: Single-turn attacks.** The attacker learns to generate effective adversarial prompts in a single turn. This establishes baseline capability and avoids the exploration problem that plagues cold-start RL for multi-step tasks.
 
-**Phase 2: Closed-loop multi-turn attacks.** The attacker extends to multi-turn conversations, learning to maintain adversarial pressure across dialogue. The curriculum progresses from the simpler single-turn setting before introducing the complexity of extended interactions.
+**Phase 2: Closed-loop multi-turn attacks.** The attacker extends to multi-turn conversations, learning to maintain adversarial pressure across extended dialogue — a more realistic threat model than single-turn attacks alone.
 
 **Phase 3: Bootstrap co-training.** With a competent attacker established, co-training begins. Attacker and defender models are updated in alternation, each using the other's current checkpoint as its training environment.
 
