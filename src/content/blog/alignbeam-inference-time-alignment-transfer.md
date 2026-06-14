@@ -28,13 +28,19 @@ ALIGNBEAM's **Logit Bridge Mixing (LBM)** removes this constraint via a text-bri
 1. At each decoding step, take the anchor model's top-B predicted tokens (B=50 by default).
 2. Decode each anchor token to a UTF-8 string using the anchor's tokenizer.
 3. Re-encode that string using the draft model's tokenizer.
-4. Whenever the result is a single draft token (a 1:1 match), accumulate it into a blended distribution:
+4. Whenever the result is a single draft token (a 1:1 match), accumulate the anchor's contribution into a buffer f:
 
 ```
-f[d_id] += α · p_s + (1-α) · P_d(d_id)
+f[d_id] += α · p_s
 ```
 
-where α ∈ [0,1] is a deployment-time safety-utility knob. Renormalizing f gives the blended distribution that steers early tokens toward safe completions.
+After all B anchor tokens are processed, the draft model's own probability for each matched token is blended in once:
+
+```
+f[d_id] += (1-α) · P_d(d_id)
+```
+
+where α ∈ [0,1] is a deployment-time safety-utility knob. The draft probability term is applied per token position (not per anchor match) to avoid over-counting before renormalization. Renormalizing f gives the blended distribution that steers early tokens toward safe completions.
 
 When the two models share a vocabulary, LBM reduces to a construction analogous to SafeDecoding — the paper's same-vocabulary control pair (Qwen3-8B-Base with a Qwen anchor) confirms this. The difference from SafeDecoding is in support selection: beam search over continuations rather than token-level top-k intersection.
 
@@ -46,7 +52,7 @@ When vocabularies differ, roughly 12% of anchor tokens don't produce a 1:1 match
 | **LBM-First** | Keep only first sub-token | Stealth safety / instruct models |
 | **LBM-Exact** | Drop all non-exact matches | Conservative ablation |
 
-LBM-Drop is the default and produces conventional refusal phrasing. LBM-First is notable for a specific failure mode in instruct models: some models (DeepSeek-Math-7B-Instruct at N=6) emit a refusal prefix and then *continue with the harmful answer* — the model has learned that "I cannot help" is an acceptable opening even for content it then provides. LBM-First's stealth safety approach injects only the first sub-token of each multi-token anchor suggestion, steering the model toward safety without triggering the refusal-then-comply pattern.
+LBM-Drop is the default and produces conventional refusal phrasing. LBM-First takes only the first sub-token of each multi-token anchor suggestion — a "stealth safety" approach that steers outputs toward safety without triggering the explicit string-match refusal list. This is useful for instruct models where the full anchor distribution would cause a model to emit an explicit refusal prefix (which RLHF may have taught as a form) rather than a genuine behavioral refusal.
 
 ## The Three-Phase Generation Pipeline
 
@@ -92,7 +98,7 @@ A few deployment considerations worth naming:
 
 **Over-refusal at high α is a usability problem.** The XSTest numbers (5.6% → 40% over-refusal on Llama-3.1-8B) are significant. At α=0.5, a system that refused 5.6% of benign questions now refuses 40%. For customer-facing deployments this is a reliability regression. Teams will need to calibrate α against their specific benign query distribution, not just against adversarial benchmarks.
 
-**N=20 for instruct models with refuse-then-comply behavior.** The DeepSeek-Math case required N=20 rather than the default N=6 because at N=6 the model emits a refusal prefix and then completes the harmful answer anyway. This is a specific failure pattern for RLHF/instruction-tuned models that have learned refusal phrasing as a form rather than a behavior. The fix works (N=20 resolves it) but requires detection — operators need to evaluate their specific model for this pattern before deploying with default settings.
+**N=20 for instruct models with refuse-then-comply behavior.** The DeepSeek-Math case required N=20 rather than the paper's evaluation default of N=6 because at N=6 the model emits a refusal prefix and then completes the harmful answer anyway — the model has learned refusal phrasing as a form rather than a behavior. Deeper mixing (N=20) overrides enough early tokens to prevent this pattern; the paper also finds LBM-First outperforms LBM-Drop on this model (Appendix J.1), since suppressing the full anchor distribution avoids triggering the refusal-prefix reflex entirely. Operators should test their target model at N=6 first; if it shows the refuse-then-comply pattern, raise N and consider LBM-First.
 
 ## How This Fits the Defense Landscape
 
@@ -114,7 +120,7 @@ For teams operating third-party fine-tuned models, or where the fine-tuning pipe
 
 **3. Evaluate α and N for your specific model pair before deployment.**
 
-Don't use default hyperparameters without testing. The over-refusal numbers at default α=0.5 are significant (40% on XSTest for Llama-3.1-8B). Lower α if you're deploying in a benign-query-heavy context and can accept reduced safety gains. Check whether your target model exhibits the refuse-then-comply pattern at N=6 — if it does, raise N before comparing results.
+Don't use default hyperparameters without testing. The over-refusal numbers at α=0.5 (the paper's evaluation setting) are significant (40% on XSTest for Llama-3.1-8B). Lower α if you're deploying in a benign-query-heavy context and can accept reduced safety gains. Check whether your target model exhibits the refuse-then-comply pattern at N=6 — if it does, raise N before comparing results.
 
 **4. Treat the LLM judge as part of your attack surface.**
 
