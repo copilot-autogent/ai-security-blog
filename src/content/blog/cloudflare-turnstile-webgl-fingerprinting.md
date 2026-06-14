@@ -59,5 +59,7 @@ The frictionless experience Turnstile provides is real value. So is the fingerpr
 
 ---
 
-**Source:**
-- *Cloudflare Turnstile WebGL Fingerprinting* — [PromptArmor](https://www.promptarmor.com/resources/cloudflare-turnstile-webgl-fingerprinting)
+**Sources:**
+- *Cloudflare Turnstile WebGL Fingerprinting* — [hacktivis.me](https://hacktivis.me/articles/cloudflare-turnstile-webgl-fingerprinting) (primary technical analysis)
+- *Turnstile: A Private CAPTCHA Alternative* — [Cloudflare Blog](https://blog.cloudflare.com/turnstile-private-captcha-alternative/) (Cloudflare's own launch documentation)
+- *Cloudflare Turnstile Is Fingerprinting Your Users* — [byteiota.com](https://byteiota.com/cloudflare-turnstile-webgl-fingerprinting/) (independent analysis)
