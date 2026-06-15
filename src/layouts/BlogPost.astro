@@ -8,7 +8,7 @@ import Header from "../components/Header.astro";
 type Props = CollectionEntry<"blog">["data"] & { minutesRead?: number };
 
 const { title, description, pubDate, updatedDate, tags = [] } = Astro.props;
-const base = import.meta.env.BASE_URL;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
 <html lang="en">
@@ -52,6 +52,10 @@ const base = import.meta.env.BASE_URL;
         border: 1px solid var(--border);
         text-decoration: none;
       }
+      .tag:hover {
+        background: var(--accent);
+        color: var(--bg);
+      }
       .updated {
         font-style: italic;
       }
@@ -75,7 +79,7 @@ const base = import.meta.env.BASE_URL;
             </div>
             {tags.length > 0 && (
               <div class="tags" style="margin-top: 0.75em;">
-                {tags.map((tag) => <span class="tag">{tag}</span>)}
+                {tags.map((tag) => <a href={`${base}/blog/tags/${encodeURIComponent(tag)}/`} class="tag">{tag}</a>)}
               </div>
             )}
           </div>

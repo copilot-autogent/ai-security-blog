@@ -1,0 +1,130 @@
+---
+import { getCollection } from "astro:content";
+import BaseHead from "../../../components/BaseHead.astro";
+import Footer from "../../../components/Footer.astro";
+import FormattedDate from "../../../components/FormattedDate.astro";
+import Header from "../../../components/Header.astro";
+import { SITE_TITLE } from "../../../consts";
+
+export async function getStaticPaths() {
+  const posts = (await getCollection("blog")).filter((p) => !p.data.draft);
+  const tagSet = new Set(posts.flatMap((p) => p.data.tags));
+  return Array.from(tagSet).map((tag) => ({
+    params: { tag },
+    props: {
+      tag,
+      posts: posts
+        .filter((p) => p.data.tags.includes(tag))
+        .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()),
+    },
+  }));
+}
+
+const { tag, posts } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead
+      title={`Posts tagged "${tag}" | ${SITE_TITLE}`}
+      description={`All posts tagged with "${tag}".`}
+    />
+    <style>
+      .tag-heading {
+        display: flex;
+        align-items: center;
+        gap: 0.6em;
+        flex-wrap: wrap;
+      }
+      .tag-badge {
+        background: var(--bg-elevated);
+        color: var(--accent);
+        padding: 0.2em 0.7em;
+        border-radius: 12px;
+        font-size: 0.85em;
+        border: 1px solid var(--border);
+      }
+      .back-link {
+        display: inline-block;
+        margin-bottom: 1.5em;
+        color: var(--text-secondary);
+        font-size: 0.9em;
+        text-decoration: none;
+      }
+      .back-link:hover { color: var(--accent); }
+      .post-list { list-style: none; padding: 0; margin: 2em 0 0; }
+      .post-item {
+        padding: 1.2em 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .post-item:last-child { border-bottom: none; }
+      .post-item a.post-link { text-decoration: none; display: block; }
+      .post-item h3 {
+        margin: 0 0 0.3em;
+        font-size: 1.25em;
+        color: var(--text-bright);
+        transition: color 0.15s ease;
+      }
+      .post-item a.post-link:hover h3 { color: var(--accent); }
+      .post-item .desc {
+        color: var(--text-secondary);
+        font-size: 0.95em;
+        margin: 0 0 0.5em;
+      }
+      .post-item .meta {
+        color: var(--text-secondary);
+        font-size: 0.85em;
+        display: flex;
+        gap: 0.75em;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .tag-sm {
+        background: var(--bg-elevated);
+        color: var(--accent);
+        padding: 0.1em 0.5em;
+        border-radius: 10px;
+        font-size: 0.8em;
+        border: 1px solid var(--border);
+        text-decoration: none;
+      }
+      .tag-sm:hover { background: var(--accent); color: var(--bg); }
+      .tag-sm.current { background: var(--accent); color: var(--bg); }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main>
+      <a href={`${base}/blog/`} class="back-link">← All posts</a>
+      <div class="tag-heading">
+        <h1>Tagged:</h1>
+        <span class="tag-badge">{tag}</span>
+      </div>
+      <p style="color: var(--text-secondary);">{posts.length} post{posts.length !== 1 ? "s" : ""}</p>
+      <ul class="post-list">
+        {posts.map((post) => (
+          <li class="post-item">
+            <a class="post-link" href={`${base}/blog/${post.id}/`}>
+              <h3>{post.data.title}</h3>
+              <p class="desc">{post.data.description}</p>
+            </a>
+            <div class="meta">
+              <FormattedDate date={post.data.pubDate} />
+              {post.data.tags.map((t) => (
+                <a
+                  href={`${base}/blog/tags/${encodeURIComponent(t)}/`}
+                  class={`tag-sm${t === tag ? " current" : ""}`}
+                >
+                  {t}
+                </a>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </main>
+    <Footer />
+  </body>
+</html>
