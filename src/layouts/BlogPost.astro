@@ -79,7 +79,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
             </div>
             {tags.length > 0 && (
               <div class="tags" style="margin-top: 0.75em;">
-                {tags.map((tag) => <a href={`${base}/blog/tags/${tag}/`} class="tag">{tag}</a>)}
+                {tags.map((tag) => <a href={`${base}/blog/tags/${encodeURIComponent(tag)}/`} class="tag">{tag}</a>)}
               </div>
             )}
           </div>
