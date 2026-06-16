@@ -22,16 +22,16 @@ All raw data is in the [cli-wrapper-monitor repo](https://github.com/copilot-aut
 | Date | Tool count | Tool def chars | Tool def tokens | Notes |
 |------|-----------|---------------|-----------------|-------|
 | 2026-05-04 | 11 | 2,005 | ~501 | Initial baseline |
-| 2026-05-20 | 29 | 7,540 | ~1,885 | +18 tools, three feature cohorts |
+| 2026-05-20 | 29 | 7,540 | ~1,885 | +18 tools in burst window |
 | 2026-05-27 | 30 | 8,240 | ~2,060 | +1 (`pipeline_add`) |
 | 2026-05-31 | 30 | 8,240 | ~2,060 | Stable (post-fix baseline) |
 | 2026-06-14 | ~32 | ~8,800 | ~2,200 | +2 (`begin_plan`, `checkpoint_plan`) |
 
 Tool count grew **+190%** over 40 days. Tool definition tokens grew from 501 to ~2,200 — a **+339% increase**.
 
-## The Burst: 16 Days, Three Feature Cohorts
+## The Capability Cohorts: Deliberate Growth, Not Sprawl
 
-Almost all of the growth happened in a 16-day window (May 4 → May 20). Breaking it down by cohort:
+Almost all of the growth happened in a 16-day burst (May 4 → May 20), with the remainder completing over the following weeks. Breaking down all new tools by capability cohort:
 
 | Cohort | Tools added | Tokens added | Feature area |
 |--------|------------|-------------|--------------|
@@ -54,10 +54,10 @@ Not all tools are equally expensive. The schema complexity drives definition len
 | `pipeline_add` | 700 | ~175 | Multi-field structured input |
 | `spawn_task` | 450 | ~113 | Rich options object |
 | `manage_mcp`, `save_memory`, `manage_agents` | ~350 each | ~88 each | Moderate schemas |
-| Average (all 30 tools) | 275 | ~69 | |
+| Average (all ~30 tools, May 31 baseline) | 275 | ~69 | |
 | `browser_navigate_back` | 150 | ~38 | Minimal — no parameters |
 
-One thing that stands out: **tool definition cost is fixed per session, not per turn.** Having `browser_navigate` available costs ~38 tokens at session start whether you use it once, 100 times, or never. This is different from user messages or assistant responses, which compound with session length.
+One thing that stands out: **tool definition cost is fixed per session, not per turn.** Having `browser_navigate_back` available costs ~38 tokens at session start whether you use it once, 100 times, or never. This is different from user messages or assistant responses, which compound with session length.
 
 ## Is This Sustainable?
 
@@ -66,14 +66,16 @@ After the audit, we ran the full context overhead calculation:
 | Component | Chars | Tokens | Share of overhead |
 |-----------|-------|--------|------------------|
 | Bootstrap files (system prompt) | ~118,373 | ~29,593 | **93.5%** |
-| Tool definitions (30 tools) | 8,240 | ~2,060 | **6.5%** |
+| Tool definitions (~30 tools, May 31 stable baseline) | 8,240 | ~2,060 | **6.5%** |
 | **Total session overhead** | **~126,613** | **~31,653** | — |
 
 Context window: 200,000 tokens (claude-sonnet-4.6). Session overhead at start: **15.8%** — well within budget.
 
+*(Sustainability calculation uses the stable May 31 baseline — 30 tools, 8,240 chars — rather than the June 14 audit snapshot with approximate counts. Using June 14 numbers: ~32 tools, ~8,800 chars, ~2,200 tokens → total overhead ~31,793 tokens, 15.9%. The difference is negligible.)*
+
 The headline finding: **tools are not the cost driver. The system prompt is.**
 
-Bootstrap files contribute 93.5% of overhead. Even if all 30 tools were removed, session start overhead would drop by just 6.5%. Conversely, tool count could double (to 60 tools) without meaningfully changing the budget picture — it would add roughly another 2,000 tokens, bringing overhead from 15.8% to ~16.8%.
+Bootstrap files contribute 93.5% of overhead. Even if all tools were removed, session start overhead would drop by just 6.5%. Conversely, tool count could double (to ~60 tools) without meaningfully changing the budget picture — it would add roughly another 2,000 tokens, bringing overhead from 15.8% to ~16.8%.
 
 The 190% tool growth that looks alarming in isolation is a rounding error relative to the system prompt.
 
@@ -86,7 +88,7 @@ The data argues against it:
 - The maximum possible saving from lazy-loading is **450 tokens** (the Playwright suite — the most "optional" 9 tools, unused in non-browser sessions)
 - That's **1.4% of total session overhead**
 - Implementing lazy-loading requires middleware complexity: feature flag checks, conditional tool registration, ensuring the right tools are available before the agent decides to use them
-- And the 30-tool list is coherent — there are no obviously "dead" tools
+- And the full tool set is coherent — there are no obviously "dead" tools
 
 If context budget becomes genuinely tight (say, overhead crosses 30%), lazy-loading becomes worth revisiting. At 15.8%, the cost/benefit ratio is poor.
 
@@ -114,7 +116,7 @@ The hard cap recommendation: flag if `toolCount > 40` OR `toolDefinitionTokens >
 
 ### 1. Growth curves have different shapes
 
-Tool count (11 → 32) looks alarming as a percentage. But plotted against time, the curve is a burst followed by a plateau. The 16-day burst (May 4–20) added 18 tools across three major feature launches; the next 25 days added 2 tools total. A naive "190% growth" headline misses the shape.
+Tool count (11 → 32) looks alarming as a percentage. But plotted against time, the curve is a burst followed by a plateau. The 16-day burst (May 4–20) drove most of the growth; the next 25 days added just 2 tools total. A naive "190% growth" headline misses the shape.
 
 Context monitoring's value is in exposing the shape, not just the aggregate number.
 
