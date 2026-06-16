@@ -3,6 +3,7 @@ title: "Three Papers, Three Attack Layers: Agent Security Gets Mapped"
 description: "In one week, three independent research groups dissected the conversation, tool-use, and capability layers of AI agent systems. Here's what practitioners need to know."
 pubDate: 2026-04-26
 tags: ["threat-modeling", "prompt-injection", "mcp-security", "tool-use", "agent-security"]
+featured: true
 ---
 
 The week of April 21–25, 2026 wasn't a normal week for AI security research. Three independent groups published papers targeting three distinct layers of AI agent systems — and none of them knew about the others.

@@ -11,6 +11,9 @@ const posts = (await getCollection("blog"))
   .filter((p) => !p.data.draft)
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
+const featuredPosts = posts.filter((p) => p.data.featured);
+const regularPosts = posts.filter((p) => !p.data.featured);
+
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
@@ -31,6 +34,73 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         margin: 0;
         max-width: 560px;
       }
+
+      /* ── Featured Section ── */
+      .featured-section {
+        margin-bottom: 3em;
+      }
+      .featured-section h2 {
+        font-size: 1.2em;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0 0 1em;
+      }
+      .featured-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.25em;
+      }
+      .featured-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--accent);
+        border-radius: 10px;
+        padding: 1.5em;
+        text-decoration: none;
+        display: block;
+        position: relative;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .featured-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      }
+      .editors-pick-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3em;
+        background: var(--accent);
+        color: #fff;
+        font-size: 0.72em;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 0.2em 0.6em;
+        border-radius: 20px;
+        margin-bottom: 0.75em;
+      }
+      .featured-card h3 {
+        margin: 0 0 0.4em;
+        font-size: 1.3em;
+        color: var(--text-bright);
+        line-height: 1.3;
+      }
+      .featured-card .desc {
+        color: var(--text-secondary);
+        font-size: 0.95em;
+        margin: 0 0 0.75em;
+        line-height: 1.5;
+      }
+      .featured-card .meta {
+        color: var(--text-secondary);
+        font-size: 0.85em;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6em;
+        align-items: center;
+      }
+
+      /* ── Regular Posts Section ── */
       .posts-section h2 {
         font-size: 1.2em;
         color: var(--text-secondary);
@@ -82,10 +152,36 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         <p>{SITE_DESCRIPTION}</p>
       </section>
 
+      {featuredPosts.length > 0 && (
+        <section class="featured-section">
+          <h2>Editor's Pick</h2>
+          <div class="featured-grid">
+            {featuredPosts.map((post) => {
+              const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
+              const readingTime = Math.max(1, Math.ceil(words / 200));
+              return (
+                <a class="featured-card" href={`${base}/blog/${post.id}/`}>
+                  <span class="editors-pick-badge">★ Editor's Pick</span>
+                  <h3>{post.data.title}</h3>
+                  <p class="desc">{post.data.description}</p>
+                  <div class="meta">
+                    <FormattedDate date={post.data.pubDate} />
+                    <span>{readingTime} min read</span>
+                    {post.data.tags.slice(0, 3).map((tag) => (
+                      <span class="tag-sm">{tag}</span>
+                    ))}
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <section class="posts-section">
         <h2>Latest Posts</h2>
         <ul class="post-list">
-          {posts.map((post) => {
+          {regularPosts.map((post) => {
             const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
             const readingTime = Math.max(1, Math.ceil(words / 200));
             return (
