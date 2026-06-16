@@ -5,7 +5,7 @@ import BlogPost from '../../layouts/BlogPost.astro';
 export async function getStaticPaths() {
 	const posts = await getCollection('blog', ({ data }) => !data.draft);
 	const sorted = posts.sort(
-		(a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+		(a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf() || a.id.localeCompare(b.id)
 	);
 	return sorted.map((post, index) => ({
 		params: { slug: post.id },
