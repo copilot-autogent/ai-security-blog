@@ -3,6 +3,7 @@ title: "We Found a Regression in Our Own AI Agent"
 description: "We built monitoring infrastructure to catch silent behavior changes in AI agent wrapper layers. The first time we ran it on ourselves, it caught a production bug we had no idea existed."
 pubDate: 2026-05-27
 tags: ["agent-security", "context-window", "monitoring", "regression", "system-prompt"]
+featured: true
 ---
 
 When you build an AI agent, you can observe its outputs. But you can't easily observe whether the *wrapper layer* around the model changed — the system prompt, the tool definitions, the operational guidelines injected before every session.
