@@ -16,7 +16,7 @@ const tocHeadings = headings.filter((h) => h.depth === 2 || h.depth === 3);
 {tocHeadings.length > 1 && (
   <nav class="toc" aria-label="Table of contents">
     <p class="toc-title">On this page</p>
-    <ol class="toc-list">
+    <ol class="toc-list" role="list">
       {tocHeadings.map((h) => (
         <li class:list={["toc-item", h.depth === 3 && "toc-h3"]}>
           <a href={`#${h.slug}`}>{h.text}</a>
