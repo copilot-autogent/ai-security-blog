@@ -38,15 +38,13 @@ After probing `client.listModels()` on June 16, 2026 — the same day as the inc
 | Claude Opus | `claude-opus-4.8` (1M), `claude-opus-4.7`, `claude-opus-4.6`, `claude-opus-4.5` |
 | Claude Sonnet | `claude-sonnet-4.6`, `claude-sonnet-4.5` |
 | Claude Haiku | `claude-haiku-4.5` |
-| GPT-5 | `gpt-5.5`, `gpt-5.4`, `gpt-5.3-codex`, `gpt-5.2` |
+| GPT-5 | `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5-mini`, `gpt-5.2`, `gpt-5.2-codex` |
 | GPT-4 | `gpt-4.1` |
 | Gemini | `gemini-3.1-pro-preview` |
 
-**17 models in the pool.** Not all of them were there last month. Not all of them will be there next month.
+**17 models in the pool** (including internal/preview variants not shown above). Not all of them were there last month. Not all of them will be there next month.
 
-What wasn't there: `claude-opus-4.8-1m-internal`, `claude-opus-4.7-1m-internal`, `claude-opus-4.6-1m`, and other `-1m`/`-1m-internal` suffix variants — all retired as a batch on June 16.
-
-That's at least 3 model IDs deprecated in a single day, silently, without any push notification to API consumers.
+What wasn't there: `claude-opus-4.8-1m-internal`, `claude-opus-4.7-1m-internal`, `claude-opus-4.6-1m` — 3 model IDs retired as a batch on June 16, silently, without any push notification to API consumers.
 
 ## The `policy.state` Field You Should Be Watching
 
@@ -55,6 +53,9 @@ The Copilot SDK's `listModels()` response includes a `policy.state` field for ea
 - **`enabled`** — available for use
 - **`deprecated`** — available but scheduled for removal (the grace period)
 - **`disabled`** — no longer available; calls will fail
+- **`unknown`** — field absent or unrecognized value (treat as enabled until confirmed otherwise)
+
+The `unknown` case is worth handling explicitly: if a newly introduced model doesn't yet have a `policy` field, falling back to `"unknown"` prevents your diff logic from silently ignoring it.
 
 The silent failure mode we experienced was partly because our configuration was using a model ID that had moved directly from `enabled` to `disabled` without our systems observing the intermediate `deprecated` state. If we had been monitoring `policy.state` transitions, we would have had a window to act.
 
@@ -93,12 +94,15 @@ This is additive to the existing schema — existing baseline files without the 
 The probe runs at baseline capture time:
 
 ```typescript
+// Verify your SDK version's actual return shape — listModels() may return an
+// array directly or a paginated response wrapper. Adjust .map() accordingly.
 const modelList = await client.listModels();
 baseline.modelPool = {
   capturedAt: new Date().toISOString(),
   models: modelList.map(m => ({
     id: m.id,
     state: m.policy?.state ?? "unknown",
+    // contextWindow type: number | null — null when the SDK doesn't expose this field
     contextWindow: m.capabilities?.limits?.max_context_window_tokens ?? null,
   })),
 };
@@ -110,22 +114,23 @@ Now every baseline snapshot is a diff-able record of the model pool at that mome
 
 The community has 53+ open issues about unexplained Copilot CLI behavioral regressions. Based on the June 16 incident, we believe a meaningful fraction of those "unexplained" regressions are explained by model pool changes the reporter never knew happened.
 
-**1. Never hardcode model IDs in long-lived configs without a validation step at startup.**
+**1. Validate your configured model at startup — and handle mid-session retirements per turn.**
 
-The fix is simple: at session startup, call `client.listModels()`, verify your configured model ID is in the returned list, and fail loudly if it isn't. Loud failure — crashing with a clear error message — is dramatically better than the silent failure mode we experienced.
+The startup check converts a silent session failure into an immediate, actionable error message:
 
 ```typescript
+// Verify your SDK's listModels() return shape before production use
 const models = await client.listModels();
 const available = new Set(models.map(m => m.id));
 if (!available.has(config.model)) {
+  // Avoid logging the full model inventory into user-visible errors
   throw new Error(
-    `Configured model "${config.model}" is not in the current model pool. ` +
-    `Available: ${[...available].join(", ")}`
+    `Configured model "${config.model}" is not available. Check your config.`
   );
 }
 ```
 
-This one check would have converted our 2-hour silent outage into an immediate startup failure with a clear message.
+This catches the startup case. But our incident was a **mid-session retirement**: the model was available when the session started, then removed while it was running. For long-lived or scheduled sessions, startup validation isn't sufficient — you also need to handle `model_not_supported` errors per turn and either fail loudly or fall back to a verified available model. Silent per-turn failure (the mode we experienced) is the worst outcome; a hard crash with a clear message is far preferable.
 
 **2. Capture baseline model pool snapshots alongside your system prompt snapshots.**
 
