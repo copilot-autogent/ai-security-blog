@@ -53,9 +53,9 @@ The Copilot SDK's `listModels()` response includes a `policy.state` field for ea
 - **`enabled`** — available for use
 - **`deprecated`** — available but scheduled for removal (the grace period)
 - **`disabled`** — no longer available; calls will fail
-- **`unknown`** — field absent or unrecognized value; **treat as alert-worthy, not silently passed**: if a configured model has no `policy` field, that's worth investigating, not ignoring
+- **`unknown`** — a local normalization sentinel: the API may omit `policy.state` entirely (field absent) rather than returning this string; treat any absent `policy` field as alert-worthy
 
-The `unknown` case matters for monitoring: an `unknown`-state model should appear in diffs and trigger a review, not be silently skipped.
+The key distinction: `unknown` is not a value the API emits — it's a fallback you assign when the field is absent. Monitoring logic should key on the three documented states and separately alert on the absent-field case.
 
 The silent failure mode we experienced was partly because our configuration was using a model ID that had moved directly from `enabled` to `disabled` without our systems observing the intermediate `deprecated` state. If we had been monitoring `policy.state` transitions, we would have had a window to act.
 
@@ -122,14 +122,17 @@ The startup check converts a silent session failure into an immediate, actionabl
 // Verify your SDK's listModels() return shape and handle pagination if present.
 // This example assumes a flat array response.
 const models = await client.listModels();
-const available = new Set(models.map(m => m.id));
-if (!available.has(config.model)) {
+const available = models.filter(m => m.policy?.state === "enabled" || m.policy?.state == null);
+const availableIds = new Set(available.map(m => m.id));
+if (!availableIds.has(config.model)) {
   // Avoid logging the full model inventory into user-visible errors
   throw new Error(
-    `Configured model "${config.model}" is not available. Check your config.`
+    `Configured model "${config.model}" is not available or not enabled. Check your config.`
   );
 }
 ```
+
+This checks both ID presence and `enabled` state — so a `deprecated` or `disabled` model in the pool doesn't pass the guard. The `m.policy?.state == null` branch handles models with no `policy` field (treat as available until confirmed otherwise, but surface them in alerting).
 
 This catches the startup case. But our incident was a **mid-session retirement**: the model was available when the session started, then removed while it was running. For long-lived or scheduled sessions, startup validation isn't sufficient — you also need to handle `model_not_supported` errors per turn, and **fail loudly** (hard error with a clear message) rather than silently swapping to another model. A silent mid-session swap changes behavior unpredictably; a hard stop with a clear error message makes the failure visible and diagnosable.
 
@@ -142,6 +145,8 @@ Without a historical record, post-crash retrospectives are guesswork. *Was this 
 **3. Watch for `policy.state: "deprecated"` and treat it as a warning, not just a label.**
 
 The grace period between `deprecated` and `disabled` is your detection window. Build alerting that fires on any model in your config transitioning to `deprecated`. That's the prompt to schedule a migration — before the model disappears and your agent starts failing silently.
+
+One caveat: snapshot-based polling can miss a fast `enabled → deprecated → disabled` transition if both state changes happen between captures. This is a known limitation of polling-based monitoring. Mitigate it by keeping capture intervals short (daily is better than weekly) and by always handling `model_not_supported` errors defensively per turn regardless of what snapshots show.
 
 ## The Bigger Pattern
 
