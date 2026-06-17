@@ -22,7 +22,7 @@ From the agent's perspective, the failure looked like this:
 1. Session starts, loads config, picks up `claude-opus-4.8-1m-internal` as model
 2. First user message is sent to the model
 3. API returns `CAPIError 400: model_not_supported`
-4. Agent logs the error and in some cases zeroed out the response (a separate but related bug class — errors producing zeroed values that trigger false all-clears)
+4. Agent logs the error (a co-occurring but separate bug class also caused some error responses to return zeroed values rather than propagating cleanly — this is not specific to the `model_not_supported` path, but amplified the silence)
 5. No escalation. No alert. No indication anything was wrong except for the absence of useful output.
 
 **Detection lag: approximately 2 hours.** The session was running as a scheduled background task, not an interactive session. It completed its tick, reported no results, and the failure was only noticed when a human reviewed the silence.
@@ -42,7 +42,7 @@ After probing `client.listModels()` on June 16, 2026 — the same day as the inc
 | GPT-4 | `gpt-4.1` |
 | Gemini | `gemini-3.1-pro-preview` |
 
-**17 models in the pool** (including internal/preview variants not shown above). Not all of them were there last month. Not all of them will be there next month.
+**17 models in the pool** (16 shown above; 1 internal variant omitted). Not all of them were there last month. Not all of them will be there next month.
 
 What wasn't there: `claude-opus-4.8-1m-internal`, `claude-opus-4.7-1m-internal`, `claude-opus-4.6-1m` — 3 model IDs retired as a batch on June 16, silently, without any push notification to API consumers.
 
@@ -53,9 +53,9 @@ The Copilot SDK's `listModels()` response includes a `policy.state` field for ea
 - **`enabled`** — available for use
 - **`deprecated`** — available but scheduled for removal (the grace period)
 - **`disabled`** — no longer available; calls will fail
-- **`unknown`** — field absent or unrecognized value (treat as enabled until confirmed otherwise)
+- **`unknown`** — field absent or unrecognized value; **treat as alert-worthy, not silently passed**: if a configured model has no `policy` field, that's worth investigating, not ignoring
 
-The `unknown` case is worth handling explicitly: if a newly introduced model doesn't yet have a `policy` field, falling back to `"unknown"` prevents your diff logic from silently ignoring it.
+The `unknown` case matters for monitoring: an `unknown`-state model should appear in diffs and trigger a review, not be silently skipped.
 
 The silent failure mode we experienced was partly because our configuration was using a model ID that had moved directly from `enabled` to `disabled` without our systems observing the intermediate `deprecated` state. If we had been monitoring `policy.state` transitions, we would have had a window to act.
 
@@ -119,7 +119,8 @@ The community has 53+ open issues about unexplained Copilot CLI behavioral regre
 The startup check converts a silent session failure into an immediate, actionable error message:
 
 ```typescript
-// Verify your SDK's listModels() return shape before production use
+// Verify your SDK's listModels() return shape and handle pagination if present.
+// This example assumes a flat array response.
 const models = await client.listModels();
 const available = new Set(models.map(m => m.id));
 if (!available.has(config.model)) {
@@ -130,7 +131,7 @@ if (!available.has(config.model)) {
 }
 ```
 
-This catches the startup case. But our incident was a **mid-session retirement**: the model was available when the session started, then removed while it was running. For long-lived or scheduled sessions, startup validation isn't sufficient — you also need to handle `model_not_supported` errors per turn and either fail loudly or fall back to a verified available model. Silent per-turn failure (the mode we experienced) is the worst outcome; a hard crash with a clear message is far preferable.
+This catches the startup case. But our incident was a **mid-session retirement**: the model was available when the session started, then removed while it was running. For long-lived or scheduled sessions, startup validation isn't sufficient — you also need to handle `model_not_supported` errors per turn, and **fail loudly** (hard error with a clear message) rather than silently swapping to another model. A silent mid-session swap changes behavior unpredictably; a hard stop with a clear error message makes the failure visible and diagnosable.
 
 **2. Capture baseline model pool snapshots alongside your system prompt snapshots.**
 
