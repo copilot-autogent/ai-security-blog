@@ -5,9 +5,9 @@ pubDate: 2026-06-18
 tags: ["sast", "devSecOps", "snyk", "codeql", "copilot", "tool-evaluation", "vulnerability-detection"]
 ---
 
-Four AI-powered security tools. Four different design philosophies. The same promise: catch vulnerabilities before they reach production.
+Four AI-powered security tools. Four different design philosophies. Three detect vulnerabilities; one fixes them.
 
-Snyk Code, GitHub CodeQL with AI-powered detections, Amazon Q Developer security scanning, and GitHub Copilot Autofix each occupy a distinct position in the market. Some detect. Some fix. Some do both. The surface-level descriptions overlap enough to make choosing between them genuinely difficult — especially when vendor benchmarks dominate the comparison landscape.
+Snyk Code, GitHub CodeQL with AI-powered detections, and Amazon Q Developer all promise to catch vulnerabilities before they reach production. GitHub Copilot Autofix completes the picture from the other end — it doesn't detect, it remediates, cutting the time between finding a vulnerability and shipping the fix.
 
 This post explains how each tool actually works, what it's optimized for, and what published research tells us about detection accuracy in practice. Note that the best published independent benchmark (arXiv:2508.04448) covers traditional SAST tools including CodeQL and Snyk Code, but not Amazon Q or Copilot Autofix — so comparisons for those two tools rely on vendor-published metrics and documented architectural constraints.
 
@@ -67,7 +67,7 @@ The tool integrates with IDE plugins (VS Code, JetBrains, Visual Studio), the AW
 
 ## What Independent Research Shows
 
-The most directly applicable published comparison comes from an August 2025 arXiv study ([arXiv:2508.04448](https://arxiv.org/abs/2508.04448)) that evaluated SonarQube, CodeQL, and Snyk Code against three frontier LLMs (GPT-4.1, Mistral Large, DeepSeek V3) on a curated benchmark of 63 real-world vulnerabilities across 10 C# projects. Vulnerability categories included SQL injection, hardcoded secrets, and outdated dependency issues.
+The most directly applicable published comparison comes from an August 2025 arXiv study ([arXiv:2508.04448](https://arxiv.org/abs/2508.04448)) that evaluated SonarQube, CodeQL, and Snyk Code against three frontier LLMs (GPT-4.1, Mistral Large, DeepSeek V3) on a curated benchmark of 63 real-world vulnerabilities across 10 C# projects. Vulnerability categories included SQL injection and hardcoded secrets. The benchmark also included outdated dependency findings — technically an SCA (Software Composition Analysis) problem rather than SAST — so the aggregate F1 scores blend what are otherwise distinct product categories; interpreting the SAST-specific numbers requires reading the full paper rather than the abstract alone.
 
 The headline result: LLM-based analysis achieved higher F1 scores (0.797, 0.753, and 0.750 for the three LLMs tested) than the traditional SAST tools (the three static tools scored 0.260, 0.386, and 0.546 respectively). The paper's abstract reports that DeepSeek V3 had the highest false-positive ratio among the LLMs tested. The LLMs' advantage came from superior *recall* — they detected more of the vulnerabilities that were actually present, with fewer false negatives than static analyzers.
 
@@ -78,7 +78,7 @@ But the tradeoffs are significant:
 - **Determinism**: Static tools produce consistent results across runs; LLM-based analysis can vary depending on context, temperature, and prompt formulation.
 - **Scope**: This benchmark used 10 C# projects with 63 injected vulnerabilities; results may not generalize to other languages or vulnerability classes. It does not include Amazon Q Developer or Copilot Autofix.
 
-The study's recommended architecture is a **hybrid pipeline**: LLMs for broad, context-aware initial triage; deterministic rule-based scanners for high-assurance verification. This maps directly onto how GitHub's hybrid detection model is architected — CodeQL for semantic precision in supported languages, AI-powered detections for breadth in ecosystems where precise modeling is impractical.
+The study's recommended architecture is a **hybrid pipeline**: LLMs for broad, context-aware initial triage; deterministic rule-based scanners for high-assurance verification. This pattern of pairing broad AI coverage with precise static analysis aligns with how GitHub has architected Code Security — though the study itself did not evaluate GitHub's AI-powered detection layer or Copilot Autofix; that parallel is architectural, not empirically verified by the benchmark.
 
 ## Vulnerability Coverage Matrix
 
@@ -101,7 +101,7 @@ Based on public documentation and vendor capabilities. For Copilot Autofix, the 
 
 ¹ Copilot Autofix remediates what CodeQL detects; no standalone detection capability.
 
-Snyk Code's coverage of LLM-specific risks — including vulnerabilities in code that calls LLM APIs (prompt injection surfaces, insecure handling of LLM output, over-permissive tool use) — is a differentiated capability as of mid-2026. Snyk's product page states that coverage includes approximately 90% of LLM libraries such as OpenAI and Hugging Face SDKs, making this relevant as AI-generated code becomes an increasingly common scanning target.
+Snyk Code's coverage of LLM-specific risks is a differentiated capability as of mid-2026. Snyk's product page states that coverage includes approximately 90% of LLM libraries such as OpenAI and Hugging Face SDKs — covering the *library surface* (API calls, data handling patterns) where vulnerabilities can surface in code that integrates LLMs. This is distinct from detecting runtime or behavioral risks like prompt injection via user input; that class of vulnerability requires different detection approaches and is generally not handled by static analysis.
 
 ## Where Each Tool Has Blind Spots
 
@@ -121,7 +121,7 @@ Snyk Code's coverage of LLM-specific risks — including vulnerabilities in code
 
 **If you're an AWS-native team**: Amazon Q Developer integrates naturally with your existing toolchain — IAM, CloudFormation, Lambda, S3 bucket policies all benefit from contextual analysis that a language-only tool can't provide. The shift from CodeGuru Security to Amazon Q also brings code generation and transformation capabilities into the same subscription.
 
-**If you're already on GitHub Advanced Security**: Copilot Autofix is an additive capability, not a replacement. Enable it. The reduction in developer time per fix is significant, and the fix suggestion quality for well-modeled vulnerability classes (SQL injection, hardcoded credentials, XSS) is high enough to trust with human review.
+**If you're already on GitHub Advanced Security**: Copilot Autofix is an additive capability, not a replacement. Enable it. The reduction in developer time per fix is significant, and the fix suggestion quality for well-modeled vulnerability classes (SQL injection, XSS, unsafe shell command construction) is high enough to trust with human review. Note that hardcoded secrets are primarily handled by GitHub Secret Scanning — a separate capability — rather than CodeQL, so Autofix coverage on that class is limited.
 
 **For organizations with broad language and framework coverage requirements**: The hybrid approach described in arXiv:2508.04448 is increasingly the architecture of the field. A combination of Snyk Code (for breadth and developer workflow integration) plus CodeQL (for semantic depth in core languages) plus Copilot Autofix (for remediation velocity) covers more ground than any single tool. The redundancy also provides a check — findings that appear in both Snyk Code and CodeQL get elevated priority; findings that only appear in one require more investigation before acting.
 
