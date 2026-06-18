@@ -5,9 +5,9 @@ pubDate: 2026-06-18
 tags: ["sast", "devSecOps", "snyk", "codeql", "copilot", "tool-evaluation", "vulnerability-detection"]
 ---
 
-Four AI-powered security tools. Four different design philosophies. Three detect vulnerabilities; one fixes them.
+Four AI-powered security tools. Four different design philosophies. Three detect vulnerabilities; two of those also remediate them.
 
-Snyk Code, GitHub CodeQL with AI-powered detections, and Amazon Q Developer all promise to catch vulnerabilities before they reach production. GitHub Copilot Autofix completes the picture from the other end — it doesn't detect, it remediates, cutting the time between finding a vulnerability and shipping the fix.
+Snyk Code, GitHub CodeQL with AI-powered detections, and Amazon Q Developer all promise to find vulnerabilities before they reach production — and both Snyk Code and CodeQL pair their detection with AI-driven fix suggestions. GitHub Copilot Autofix is detection-free: it remediates CodeQL findings, cutting the time between finding a vulnerability and shipping the fix.
 
 This post explains how each tool actually works, what it's optimized for, and what published research tells us about detection accuracy in practice. Note that the best published independent benchmark (arXiv:2508.04448) covers traditional SAST tools including CodeQL and Snyk Code, but not Amazon Q or Copilot Autofix — so comparisons for those two tools rely on vendor-published metrics and documented architectural constraints.
 
@@ -19,7 +19,7 @@ Snyk Code is a static application security testing (SAST) tool built on top of S
 
 The tool integrates at multiple points in the development lifecycle: IDE plugins provide real-time, inline feedback; PR checks surface findings before merge; pipeline integrations catch issues at build time. The IDE integration notably runs without a build step — analysis happens on source code directly, which eliminates the delay between writing code and seeing scan results.
 
-In late 2024, Snyk reached general availability for [DeepCode AI Fix](https://snyk.io/blog/find-auto-fix-prioritize-intelligently-snyks-ai-powered-code/), an LLM-powered auto-remediation feature (now also marketed as Snyk AgentFix) that generates and applies code fixes directly in the IDE. According to Snyk's product documentation, fixes are approximately 80% accurate; scans run 50x faster than legacy tools and 2.4x faster than other modern SAST tools (Snyk customer value study). Snyk also publishes a case study where a Fortune 100 customer cut mean-time-to-remediate by 84% — these figures come from Snyk's own reporting and have not been independently validated in peer-reviewed research.
+In late 2024, Snyk reached general availability for [DeepCode AI Fix](https://snyk.io/blog/find-auto-fix-prioritize-intelligently-snyks-ai-powered-code/), an LLM-powered auto-remediation feature (also marketed as Snyk AgentFix). According to Snyk's product documentation, fixes are approximately 80% accurate; scans run 50x faster than legacy tools and 2.4x faster than other modern SAST tools ([Snyk customer value study](https://snyk.io/blog/find-auto-fix-prioritize-intelligently-snyks-ai-powered-code/)). Snyk also publishes a case study where a Fortune 100 customer cut mean-time-to-remediate by 84% — these figures come from Snyk's own reporting and have not been independently validated in peer-reviewed research.
 
 **Language support**: JavaScript, TypeScript, Python, Java, Go, C#, PHP, Ruby, Kotlin, Scala, Swift, and others — see [Snyk's supported languages page](https://docs.snyk.io/products/snyk-code/snyk-code-language-and-framework-support) for the current list. Snyk's product page notes that coverage includes approximately 90% of LLM libraries such as OpenAI and Hugging Face SDKs.
 
@@ -91,17 +91,17 @@ Based on public documentation and vendor capabilities. For Copilot Autofix, the 
 | Path Traversal | ✅ | ✅ | ✅ | ✅ |
 | Command Injection | ✅ | ✅ | ✅ | ✅ |
 | SSRF | ✅ | ✅ (with models) | ✅ | ✅ |
-| Hardcoded Secrets | ✅ | ⚠️ (GitHub Secret Scanning handles this; CodeQL coverage limited) | ✅ | ⚠️ |
+| Hardcoded Secrets | ✅ | ⚠️ (primarily GitHub Secret Scanning, not CodeQL) | ✅ | ❌² |
 | Insecure Deserialization | ✅ | ✅ | ✅ | ✅ |
-| IaC Misconfigurations | ⚠️ | ✅ (HCL via AI detections layer) | ✅ (CloudFormation) | ⚠️ |
-| Dockerfile Issues | ⚠️ | ✅ (AI detections layer) | ⚠️ | ⚠️ |
-| LLM-Specific Risks | ✅ | ❌ | ❌ | ❌ |
+| IaC Misconfigurations | ⚠️ | ⚠️ (HCL via AI detections layer, not CodeQL engine) | ✅ (CloudFormation) | ⚠️ |
+| Dockerfile Issues | ⚠️ | ⚠️ (AI detections layer, not CodeQL engine) | ⚠️ | ⚠️ |
+| LLM Library API Risks | ⚠️³ | ❌ | ❌ | ❌ |
 
 *✅ = covered, ⚠️ = partial or emerging, ❌ = not a focus area*
 
-¹ Copilot Autofix remediates what CodeQL detects; no standalone detection capability.
-
-Snyk Code's coverage of LLM-specific risks is a differentiated capability as of mid-2026. Snyk's product page states that coverage includes approximately 90% of LLM libraries such as OpenAI and Hugging Face SDKs — covering the *library surface* (API calls, data handling patterns) where vulnerabilities can surface in code that integrates LLMs. This is distinct from detecting runtime or behavioral risks like prompt injection via user input; that class of vulnerability requires different detection approaches and is generally not handled by static analysis.
+¹ Copilot Autofix remediates what CodeQL detects; no standalone detection.  
+² Hardcoded secrets are primarily handled by GitHub Secret Scanning, which is separate from CodeQL; Autofix does not cover Secret Scanning findings.  
+³ Snyk covers LLM library API surface (insecure API calls, data handling); runtime/behavioral risks like prompt injection via user input require different approaches not addressed by SAST.
 
 ## Where Each Tool Has Blind Spots
 
