@@ -31,7 +31,7 @@ Charter's response to a ShinyHunters incident illustrates the linguistic version
 
 > No sensitive personal information (PI) or customer proprietary network information (CPNI) data was exfiltrated by the threat actor as a result of recent activity.
 
-This statement is technically constructed around specific legal definitions of "sensitive PII" under CCPA (government identifiers, financial account numbers, biometric data, health data, sexual orientation). It excludes the categories that *were* exposed: names, email addresses, loyalty program details. The statement is accurate in a narrow legal sense and misleading in the sense consumers understand.
+This statement is technically constructed around specific legal definitions of "sensitive PII" under CCPA — a defined subset that includes items like government identifiers, financial account credentials, precise geolocation, biometric data, and health/sexual orientation data. Names, email addresses, and loyalty program details fall outside that definition. The statement is accurate in a narrow legal sense and misleading in the sense consumers understand.
 
 ## The Regulatory Loophole Is Intentional
 
@@ -43,7 +43,7 @@ Privacy regulations don't require unconditional disclosure. Hunt quotes the rele
 
 The definition of "serious harm" or "high risk to rights and freedoms" excludes the majority of ShinyHunters-style breaches — email address exposures with loyalty program data don't cross the harm threshold in most regulatory interpretations. So organisations can lawfully avoid notifying *individual victims*, and some (like ZenBusiness) appear to have taken that path.
 
-This is precise: the carve-outs apply specifically to individual victim notification. Regulatory bodies can still require timely notice — UK GDPR mandates informing the ICO within 72 hours; Australia's NDB scheme requires assessment and OAIC notification within 30 days even when individual notice is ultimately waived. The silence Hunt describes is directed at affected consumers specifically, not at all oversight.
+This is precise: the carve-outs apply specifically to individual victim notification. Regulatory bodies can still require timely notice — UK GDPR mandates informing the ICO within 72 hours of becoming aware of a breach; under Australia's NDB scheme, once an organisation has reasonable grounds to believe an eligible data breach has occurred, it must notify the OAIC as soon as practicable (and a 30-day assessment window applies if it's uncertain whether an eligible breach occurred). The silence Hunt describes is directed at affected consumers specifically, not at all oversight.
 
 Hunt's point is that there's a gap between legal obligations and social expectations. Affected consumers expect to be notified; the law doesn't require it in many cases; and the organisations' financial incentives point toward minimal disclosure. All three of these things are true simultaneously, and they compound each other.
 
@@ -51,7 +51,7 @@ Hunt's point is that there's a gap between legal obligations and social expectat
 
 AI-specific security incidents map directly onto this framework.
 
-**Model weight exfiltration.** If an attacker exfiltrates proprietary model weights, the primary harm is IP theft — the weights themselves are not personal data, so traditional breach notification frameworks may not apply at all. But the exfiltration often accompanies or implies access to training data or inference logs that *do* contain personal data. And even absent that, the competitive and security implications of stolen weights — an attacker can now probe the model offline, fine-tune it for malicious purposes, or reverse-engineer its training distribution — are significant even if no individual disclosure obligation is triggered.
+**Model weight exfiltration.** If an attacker exfiltrates proprietary model weights, the primary harm is IP theft. Whether weights constitute "personal data" depends on jurisdiction and what the weights encode — in most current frameworks, raw weights are not personal data, but this is not universally settled and depends on whether the training process memorised identifiable information. Even setting that question aside, weight exfiltration often accompanies or implies access to training data or inference logs that *do* contain personal data. And the competitive and security implications of stolen weights — an attacker can probe the model offline, fine-tune it for malicious purposes, or reverse-engineer its training distribution — are significant regardless of whether a breach notification obligation is triggered.
 
 **Inference-time data exposure.** Prompt injection attacks that cause a model to leak other users' conversation history, or RAG systems that retrieve documents outside a user's access scope, create real harm to affected users who will typically never be told. The data involved is often conversational context rather than payment card data — below most disclosure thresholds.
 
@@ -78,7 +78,7 @@ That misalignment is the core insight. Until the incentive structure changes —
 For anyone building or operating AI systems that handle user data:
 
 - **Assume breach, design for disclosure.** Know in advance what your disclosure obligations are for different incident types. Don't wait until an incident to discover the regulatory landscape.
-- **Early notification is almost always possible.** Hunt notes that extracting email addresses and sending an early alert is something he's done a thousand times — it doesn't require comprehensive scope assessment. The "we needed to understand the full extent before notifying" justification is almost never technically true.
+- **Early notification is often possible, but AI incidents are harder.** Hunt notes that for traditional breaches, extracting email addresses and sending an early alert is something he's done a thousand times — it doesn't require comprehensive scope assessment. The "we needed to understand the full extent before notifying" justification is rarely technically necessary for email-address breaches. For AI incidents — where identifying affected users may require reconstructing inference logs, tracing training data lineage, or determining what a model memorised — early enumeration is genuinely more difficult. The principle holds, but the operational path is less clear-cut.
 - **Class-action risk is real but manageable.** Delayed disclosure doesn't eliminate litigation risk; it concentrates it. And the reputational cost of the Carnival pattern — 43 days of telling users there was no breach while HIBP had the data — likely exceeds whatever class-action savings the delay bought.
 - **Watch the regulatory gap for AI-specific incidents.** The current disclosure frameworks were written for traditional PII breaches. They don't address model weight exfiltration, inference-time leakage, or training data exposure. That gap will close; organisations that have already built disclosure practices will be better positioned when it does.
 
