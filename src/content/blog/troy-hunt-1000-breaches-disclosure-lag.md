@@ -5,7 +5,7 @@ pubDate: 2026-06-18
 tags: ["incident-response", "threat-modeling", "responsible-disclosure", "privacy", "defense-patterns"]
 ---
 
-Troy Hunt recently loaded the 1,000th data breach into [Have I Been Pwned](https://haveibeenpwned.com/). For a platform that started in 2013 alongside GDPR and CCPA's emergence, the milestone prompts an uncomfortable question: why is it still needed? His [post-mortem on that question](https://www.troyhunt.com/1000-data-breaches-later-the-disclosure-lag-is-worse-than-ever/) lands on a clear answer — organisations are disclosing breaches more slowly than ever, not more quickly, and the reasons are structural.
+Troy Hunt recently loaded the 1,000th data breach into [Have I Been Pwned](https://haveibeenpwned.com/). For a platform that launched in December 2013 — predating GDPR (2018) and CCPA (2020) by years — the milestone prompts an uncomfortable question: why is it still needed despite a decade of proliferating privacy regulation? His [post-mortem on that question](https://www.troyhunt.com/1000-data-breaches-later-the-disclosure-lag-is-worse-than-ever/) lands on a clear answer — organisations are disclosing breaches more slowly than ever, not more quickly, and the reasons are structural.
 
 This matters beyond general data security. AI systems are increasingly the source of, or the target within, breach incidents. Understanding why traditional disclosure is broken helps you reason about how AI-specific incidents — model exfiltration, training data leaks, inference-time data exposure — will likely be handled by the organisations running them.
 
@@ -41,15 +41,17 @@ Privacy regulations don't require unconditional disclosure. Hunt quotes the rele
 
 **Australia's Notifiable Data Breaches scheme**: disclosure required only when the breach *"is likely to cause you serious harm."*
 
-The definition of "serious harm" or "high risk to rights and freedoms" excludes the majority of ShinyHunters-style breaches — email address exposures with loyalty program data don't cross the harm threshold in most regulatory interpretations. So organisations that want to avoid disclosing can do so legally, indefinitely.
+The definition of "serious harm" or "high risk to rights and freedoms" excludes the majority of ShinyHunters-style breaches — email address exposures with loyalty program data don't cross the harm threshold in most regulatory interpretations. So organisations can lawfully avoid notifying *individual victims*, and some (like ZenBusiness) appear to have taken that path.
 
-Hunt's point is that there's a gap between legal obligations and social expectations. Affected consumers expect to be notified; the law doesn't require it in many cases; and the organisations' financial incentives point toward non-disclosure. All three of these things are true simultaneously, and they compound each other.
+This is precise: the carve-outs apply specifically to individual victim notification. Regulatory bodies can still require timely notice — UK GDPR mandates informing the ICO within 72 hours; Australia's NDB scheme requires assessment and OAIC notification within 30 days even when individual notice is ultimately waived. The silence Hunt describes is directed at affected consumers specifically, not at all oversight.
+
+Hunt's point is that there's a gap between legal obligations and social expectations. Affected consumers expect to be notified; the law doesn't require it in many cases; and the organisations' financial incentives point toward minimal disclosure. All three of these things are true simultaneously, and they compound each other.
 
 ## Why This Pattern Applies to AI Incidents
 
 AI-specific security incidents map directly onto this framework.
 
-**Model weight exfiltration.** If an attacker exfiltrates proprietary model weights, the breach involves intellectual property but may not meet the "sensitive PII" threshold for mandatory disclosure. An organisation could legally say nothing to affected parties — the developers whose code was in the training set, the customers whose queries shaped RLHF fine-tuning.
+**Model weight exfiltration.** If an attacker exfiltrates proprietary model weights, the primary harm is IP theft — the weights themselves are not personal data, so traditional breach notification frameworks may not apply at all. But the exfiltration often accompanies or implies access to training data or inference logs that *do* contain personal data. And even absent that, the competitive and security implications of stolen weights — an attacker can now probe the model offline, fine-tune it for malicious purposes, or reverse-engineer its training distribution — are significant even if no individual disclosure obligation is triggered.
 
 **Inference-time data exposure.** Prompt injection attacks that cause a model to leak other users' conversation history, or RAG systems that retrieve documents outside a user's access scope, create real harm to affected users who will typically never be told. The data involved is often conversational context rather than payment card data — below most disclosure thresholds.
 
