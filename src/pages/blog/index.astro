@@ -10,6 +10,10 @@ const posts = (await getCollection("blog"))
   .filter((p) => !p.data.draft)
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
+const allTags = Array.from(
+  new Set(posts.flatMap((p) => p.data.tags ?? []))
+).sort();
+
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
@@ -18,20 +22,65 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   <head>
     <BaseHead title={`All Posts | ${SITE_TITLE}`} description={SITE_DESCRIPTION} />
     <style>
-      .post-list { list-style: none; padding: 0; margin: 2em 0 0; }
+      .filter-bar {
+        margin: 1.5em 0 0;
+      }
+      .filter-bar-label {
+        font-size: 0.85em;
+        color: var(--text-secondary);
+        margin-bottom: 0.5em;
+      }
+      .filter-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4em;
+        align-items: center;
+      }
+      .filter-pill {
+        background: var(--bg-elevated);
+        color: var(--text-secondary);
+        padding: 0.25em 0.7em;
+        border-radius: 12px;
+        font-size: 0.8em;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        user-select: none;
+      }
+      .filter-pill:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .filter-pill[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--bg);
+        border-color: var(--accent);
+      }
+      .filter-pill-all {
+        color: var(--text-bright);
+        font-weight: 500;
+      }
+      .filter-status {
+        font-size: 0.85em;
+        color: var(--text-secondary);
+        margin: 0.75em 0 0;
+        min-height: 1.2em;
+      }
+      .post-list { list-style: none; padding: 0; margin: 1.5em 0 0; }
       .post-item {
         padding: 1.2em 0;
         border-bottom: 1px solid var(--border);
       }
       .post-item:last-child { border-bottom: none; }
-      .post-item a { text-decoration: none; display: block; }
+      .post-item.hidden { display: none; }
+      .post-item a.post-link { text-decoration: none; display: block; }
       .post-item h3 {
         margin: 0 0 0.3em;
         font-size: 1.25em;
         color: var(--text-bright);
         transition: color 0.15s ease;
       }
-      .post-item a:hover h3 { color: var(--accent); }
+      .post-item a.post-link:hover h3 { color: var(--accent); }
       .post-item .desc {
         color: var(--text-secondary);
         font-size: 0.95em;
@@ -43,6 +92,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         display: flex;
         gap: 1em;
         align-items: center;
+        flex-wrap: wrap;
       }
       .tag-sm {
         background: var(--bg-elevated);
@@ -52,36 +102,185 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         font-size: 0.8em;
         border: 1px solid var(--border);
         text-decoration: none;
+        transition: background 0.15s ease, color 0.15s ease;
       }
       .tag-sm:hover { background: var(--accent); color: var(--bg); }
+      .tag-sm.active-tag { background: var(--accent); color: var(--bg); }
+      .no-results {
+        padding: 2em 0;
+        color: var(--text-secondary);
+        display: none;
+      }
     </style>
   </head>
   <body>
     <Header />
     <main>
       <h1>All Posts</h1>
-      <ul class="post-list">
+
+      <div class="filter-bar" id="filter-bar">
+        <p class="filter-bar-label">Filter by tag:</p>
+        <div class="filter-pills">
+          <button class="filter-pill filter-pill-all" aria-pressed="true" data-tag="">All</button>
+          {allTags.map((tag) => (
+            <button class="filter-pill" aria-pressed="false" data-tag={tag}>{tag}</button>
+          ))}
+        </div>
+        <p class="filter-status" id="filter-status" aria-live="polite"></p>
+      </div>
+
+      <ul class="post-list" id="post-list">
         {posts.map((post) => {
           const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
           const readingTime = Math.max(1, Math.ceil(words / 200));
+          const tags = post.data.tags ?? [];
           return (
-            <li class="post-item">
-              <a href={`${base}/blog/${post.id}/`}>
+            <li class="post-item" data-tags={JSON.stringify(tags)}>
+              <a class="post-link" href={`${base}/blog/${post.id}/`}>
                 <h3>{post.data.title}</h3>
                 <p class="desc">{post.data.description}</p>
               </a>
               <div class="meta">
                 <FormattedDate date={post.data.pubDate} />
                 <span>{readingTime} min read</span>
-                {post.data.tags.map((tag) => (
-                  <a href={`${base}/blog/tags/${encodeURIComponent(tag)}/`} class="tag-sm">{tag}</a>
+                {tags.map((tag) => (
+                  <a
+                    href={`${base}/blog/tags/${encodeURIComponent(tag)}/`}
+                    class="tag-sm"
+                    data-tag={tag}
+                  >{tag}</a>
                 ))}
               </div>
             </li>
           );
         })}
       </ul>
+      <p class="no-results" id="no-results">No posts found for this tag.</p>
     </main>
     <Footer />
   </body>
 </html>
+
+<script>
+  // AbortController used to clean up listeners on re-init (e.g. View Transitions).
+  let _filterController: AbortController | null = null;
+
+  function initTagFilter() {
+    const filterBar = document.getElementById("filter-bar");
+    const postList = document.getElementById("post-list");
+    const statusEl = document.getElementById("filter-status");
+    const noResults = document.getElementById("no-results");
+    if (!filterBar || !postList) return;
+
+    // Abort any prior listeners before re-attaching (prevents double-init stacking).
+    _filterController?.abort();
+    _filterController = new AbortController();
+    const { signal } = _filterController;
+
+    const pills = filterBar.querySelectorAll<HTMLButtonElement>(".filter-pill");
+    const posts = postList.querySelectorAll<HTMLLIElement>(".post-item");
+
+    // Collect known tags to validate URL param
+    const knownTags = new Set(
+      Array.from(pills)
+        .map((p) => p.dataset.tag ?? "")
+        .filter(Boolean)
+    );
+
+    function applyFilter(activeTag: string) {
+      pills.forEach((pill) => {
+        const isActive = pill.dataset.tag === activeTag;
+        pill.setAttribute("aria-pressed", String(isActive));
+      });
+
+      postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
+        link.classList.toggle(
+          "active-tag",
+          activeTag !== "" && link.dataset.tag === activeTag
+        );
+      });
+
+      let visibleCount = 0;
+      posts.forEach((post) => {
+        let tags: string[] = [];
+        try {
+          tags = JSON.parse(post.dataset.tags ?? "[]");
+        } catch {
+          tags = [];
+        }
+        const show = activeTag === "" || tags.includes(activeTag);
+        post.classList.toggle("hidden", !show);
+        if (show) visibleCount++;
+      });
+
+      if (noResults) {
+        noResults.style.display = visibleCount === 0 ? "block" : "none";
+      }
+
+      if (statusEl) {
+        statusEl.textContent = "";
+        if (activeTag !== "") {
+          statusEl.textContent = `Showing ${visibleCount} post${visibleCount !== 1 ? "s" : ""} tagged "${activeTag}" — `;
+          const clearBtn = document.createElement("button");
+          clearBtn.textContent = "Clear filter";
+          clearBtn.style.cssText =
+            "background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;text-decoration:underline;";
+          clearBtn.addEventListener("click", () => setTag(""));
+          statusEl.appendChild(clearBtn);
+        }
+      }
+    }
+
+    let currentTag = "";
+
+    function setTag(tag: string) {
+      // Skip if already active to avoid duplicate history entries
+      if (tag === currentTag) return;
+      currentTag = tag;
+      applyFilter(tag);
+      const url = new URL(window.location.href);
+      if (tag) {
+        url.searchParams.set("tag", tag);
+      } else {
+        url.searchParams.delete("tag");
+      }
+      // replaceState: tag switching doesn't bloat browser history;
+      // the back button returns to the previous page, not a prior filter state.
+      history.replaceState(null, "", url.toString());
+    }
+
+    // Filter bar pills
+    pills.forEach((pill) => {
+      pill.addEventListener("click", () => setTag(pill.dataset.tag ?? ""), { signal });
+    });
+
+    // Tag links in post cards: intercept plain clicks to filter in-place;
+    // modifier keys (Ctrl/Cmd/Shift) let the browser open the tag archive page.
+    // Middle-clicks fire `auxclick`, not `click`, so they naturally pass through.
+    postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
+      link.addEventListener("click", (e) => {
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+        e.preventDefault();
+        setTag(link.dataset.tag ?? "");
+      }, { signal });
+    });
+
+    // Apply tag from URL on load; clean up the URL if the tag is unknown.
+    const urlTag = new URL(window.location.href).searchParams.get("tag") ?? "";
+    const validInitialTag = knownTags.has(urlTag) ? urlTag : "";
+    if (urlTag && !validInitialTag) {
+      // Unknown tag in URL: remove it silently
+      const url = new URL(window.location.href);
+      url.searchParams.delete("tag");
+      history.replaceState(null, "", url.toString());
+    }
+    currentTag = validInitialTag;
+    applyFilter(validInitialTag);
+  }
+
+  // astro:page-load fires on each View Transition navigation (and initial load when
+  // Astro's <ClientRouter> is active). DOMContentLoaded handles initial load without VT.
+  // AbortController inside initTagFilter makes double-init safe (no listener stacking).
+  document.addEventListener("astro:page-load", initTagFilter);
+  document.addEventListener("DOMContentLoaded", initTagFilter, { once: true });
+</script>
