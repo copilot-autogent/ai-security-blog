@@ -59,7 +59,7 @@ The threat model for SteganoBackdoor maps directly onto the AI supply chain. Sev
 
 **Model weights and tokenizers are widely published.** The attack requires knowledge of the victim model's tokenizer. For open-weight models, this is freely available. For commercial models where the tokenizer is published (as it commonly is to enable prompt engineering), the attacker has what they need.
 
-**Downstream applications may inherit upstream backdoors.** Whether a backdoor installed during pre-training persists through fine-tuning, instruction tuning, and RLHF is an empirical question that SteganoBackdoor does not directly test. Prior work on conventional backdoor attacks suggests partial persistence is common, but survival rates vary by training procedure. The uncertainty cuts in the deployer's disfavor: an organization that fine-tunes a base model on their proprietary data cannot rely on that fine-tuning to clear a backdoor installed upstream, and their fine-tuning dataset audit would not find it regardless.
+**Downstream applications may inherit upstream backdoors.** Whether a backdoor installed during pre-training persists through fine-tuning, instruction tuning, and RLHF is an empirical question that SteganoBackdoor does not directly test. The risk is worth acknowledging regardless: a fine-tuning dataset audit will not surface a backdoor installed upstream, because the poisoned examples are not in the fine-tuning data. Even if the fine-tuning procedure partially attenuates the backdoor, deployers who rely on that attenuation rather than verifying it are making an untested assumption.
 
 ## What the Paper Does Not Cover
 
@@ -81,7 +81,7 @@ For organizations deploying language models trained on third-party data or fine-
 
 **Fine-tuning on proprietary data does not guarantee a clean model.** Organizations that believe fine-tuning wipes upstream backdoors should verify this assumption rather than assume it. If a pre-training backdoor survives fine-tuning — which the paper does not test but prior work suggests is plausible — the downstream deployer inherits a backdoor they did not install and cannot find by auditing their own data.
 
-**Defense sophistication should match attacker sophistication.** Perplexity filtering and simple lexical screening were reasonable defenses against the attacks they were designed to catch. They are not reasonable defenses against an attack that explicitly optimizes to evade them. Gradient-based attribution, ensemble disagreement detection, and trigger-conditioned behavioral tests are the appropriate next tier. They are more expensive — that cost is the adversary's primary advantage.
+**Defense sophistication should match attacker sophistication.** Perplexity filtering and simple lexical screening were reasonable defenses against the attacks they were designed to catch. They are not reasonable defenses against an attack that explicitly optimizes to evade them. Gradient-based attribution (which traces which training examples most influenced a model's sensitivity to specific inputs), ensemble disagreement detection (comparing outputs from independently trained models on the same trigger-suspicious inputs to surface inconsistencies that suggest poisoning), and trigger-conditioned behavioral tests are the appropriate next tier. They are more expensive — that cost is the adversary's primary advantage.
 
 ## The Deeper Pattern
 
@@ -93,4 +93,4 @@ The most actionable implication is also the simplest: **treat training data inte
 
 ---
 
-*Source: arXiv:2511.14301 — "SteganoBackdoor: Stealthy and Data-Efficient Backdoor Attacks on Language Models." Eric Xue, Ruiyi Zhang, Pengtao Xie (UC San Diego). The issue tracker references arXiv:2605.05234, which points to an unrelated computational engineering paper; 2511.14301 is the paper matching the described topic: steganographic trigger encoding in backdoor attacks on deployed language models.*
+*Source: arXiv:2511.14301 — "SteganoBackdoor: Stealthy and Data-Efficient Backdoor Attacks on Language Models." Eric Xue, Ruiyi Zhang, Pengtao Xie (UC San Diego).*
