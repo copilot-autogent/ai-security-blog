@@ -162,12 +162,20 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 </html>
 
 <script>
+  // AbortController used to clean up listeners on re-init (e.g. View Transitions).
+  let _filterController: AbortController | null = null;
+
   function initTagFilter() {
     const filterBar = document.getElementById("filter-bar");
     const postList = document.getElementById("post-list");
     const statusEl = document.getElementById("filter-status");
     const noResults = document.getElementById("no-results");
     if (!filterBar || !postList) return;
+
+    // Abort any prior listeners before re-attaching (prevents double-init stacking).
+    _filterController?.abort();
+    _filterController = new AbortController();
+    const { signal } = _filterController;
 
     const pills = filterBar.querySelectorAll<HTMLButtonElement>(".filter-pill");
     const posts = postList.querySelectorAll<HTMLLIElement>(".post-item");
@@ -223,7 +231,12 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       }
     }
 
+    let currentTag = "";
+
     function setTag(tag: string) {
+      // Skip if already active to avoid duplicate history entries
+      if (tag === currentTag) return;
+      currentTag = tag;
       applyFilter(tag);
       const url = new URL(window.location.href);
       if (tag) {
@@ -231,36 +244,52 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       } else {
         url.searchParams.delete("tag");
       }
-      history.pushState({ tag }, "", url.toString());
+      // replaceState: tag switching doesn't bloat browser history;
+      // the back button returns to the previous page, not a prior filter state.
+      history.replaceState(null, "", url.toString());
     }
 
     // Filter bar pills
     pills.forEach((pill) => {
-      pill.addEventListener("click", () => setTag(pill.dataset.tag ?? ""));
+      pill.addEventListener("click", () => setTag(pill.dataset.tag ?? ""), { signal });
     });
 
-    // Tag links in post cards: intercept click to filter in-place;
-    // modifier keys (Ctrl/Cmd/middle) still open the tag archive page.
+    // Tag links in post cards: intercept plain clicks to filter in-place;
+    // modifier keys (Ctrl/Cmd/Shift) let the browser open the tag archive page.
+    // Middle-clicks fire `auxclick`, not `click`, so they naturally pass through.
     postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
       link.addEventListener("click", (e) => {
-        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
         e.preventDefault();
         setTag(link.dataset.tag ?? "");
-      });
+      }, { signal });
     });
 
-    // Handle browser back/forward
-    window.addEventListener("popstate", (e) => {
-      const tag = (e.state as { tag?: string } | null)?.tag ?? "";
-      applyFilter(tag);
-    });
+    // Sync filter when the user navigates back/forward (reads from URL, not state).
+    window.addEventListener("popstate", () => {
+      const tag = new URL(window.location.href).searchParams.get("tag") ?? "";
+      const validTag = knownTags.has(tag) ? tag : "";
+      currentTag = validTag;
+      applyFilter(validTag);
+    }, { signal });
 
-    // Apply tag from URL on load (validate against known tags)
+    // Apply tag from URL on load; clean up the URL if the tag is unknown.
     const urlTag = new URL(window.location.href).searchParams.get("tag") ?? "";
-    applyFilter(knownTags.has(urlTag) ? urlTag : "");
+    const validInitialTag = knownTags.has(urlTag) ? urlTag : "";
+    if (urlTag && !validInitialTag) {
+      // Unknown tag in URL: remove it silently
+      const url = new URL(window.location.href);
+      url.searchParams.delete("tag");
+      history.replaceState(null, "", url.toString());
+    }
+    currentTag = validInitialTag;
+    applyFilter(validInitialTag);
   }
 
   // Support both Astro View Transitions and plain page load
+  // astro:page-load fires on each View Transition navigation (and initial load when
+  // ClientRouter is active). DOMContentLoaded handles initial load without VT.
+  // AbortController inside initTagFilter ensures re-init is safe (no listener stacking).
   document.addEventListener("astro:page-load", initTagFilter);
-  document.addEventListener("DOMContentLoaded", initTagFilter);
+  document.addEventListener("DOMContentLoaded", initTagFilter, { once: true });
 </script>
