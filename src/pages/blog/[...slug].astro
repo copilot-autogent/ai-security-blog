@@ -25,8 +25,10 @@ nextPost?: CollectionEntry<'blog'>;
 
 const { post, prevPost, nextPost } = Astro.props;
 const { Content, headings } = await render(post);
+const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
+const minutesRead = Math.max(1, Math.ceil(words / 200));
 ---
 
-<BlogPost {...post.data} id={post.id} headings={headings} prevPost={prevPost} nextPost={nextPost}>
+<BlogPost {...post.data} id={post.id} headings={headings} minutesRead={minutesRead} prevPost={prevPost} nextPost={nextPost}>
 <Content />
 </BlogPost>
