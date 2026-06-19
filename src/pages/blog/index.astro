@@ -265,14 +265,6 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       }, { signal });
     });
 
-    // Sync filter when the user navigates back/forward (reads from URL, not state).
-    window.addEventListener("popstate", () => {
-      const tag = new URL(window.location.href).searchParams.get("tag") ?? "";
-      const validTag = knownTags.has(tag) ? tag : "";
-      currentTag = validTag;
-      applyFilter(validTag);
-    }, { signal });
-
     // Apply tag from URL on load; clean up the URL if the tag is unknown.
     const urlTag = new URL(window.location.href).searchParams.get("tag") ?? "";
     const validInitialTag = knownTags.has(urlTag) ? urlTag : "";
@@ -286,10 +278,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     applyFilter(validInitialTag);
   }
 
-  // Support both Astro View Transitions and plain page load
   // astro:page-load fires on each View Transition navigation (and initial load when
-  // ClientRouter is active). DOMContentLoaded handles initial load without VT.
-  // AbortController inside initTagFilter ensures re-init is safe (no listener stacking).
+  // Astro's <ClientRouter> is active). DOMContentLoaded handles initial load without VT.
+  // AbortController inside initTagFilter makes double-init safe (no listener stacking).
   document.addEventListener("astro:page-load", initTagFilter);
   document.addEventListener("DOMContentLoaded", initTagFilter, { once: true });
 </script>
