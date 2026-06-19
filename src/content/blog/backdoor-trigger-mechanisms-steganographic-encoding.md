@@ -1,7 +1,7 @@
 ---
 title: "The Trigger You Can't See: Steganographic Backdoors in Deployed Language Models"
 description: "SteganoBackdoor shows that a model can be made to reliably produce attacker-controlled outputs whenever a semantic trigger appears — without the trigger ever appearing in the poisoned training data. Existing data-curation defenses can't find what they're not designed to look for."
-pubDate: 2026-06-20
+pubDate: 2026-06-19
 tags: ["threat-modeling", "supply-chain", "defense-patterns", "alignment", "evaluation"]
 ---
 
@@ -23,7 +23,7 @@ The result is a sentence that, from the perspective of a defender scanning train
 
 The attack targets a specific but realistic adversarial position: someone with the ability to contribute data to a model's training corpus. This is a realistic threat for models trained on internet-scraped data, fine-tuned on user submissions, or developed through data partnerships with third parties.
 
-The adversary does not need access to the training configuration, hyperparameters, or the final model deployment. They need only two things: knowledge of the model's tokenizer (which is typically published with model releases), and the ability to insert a small number of poisoned examples into the training corpus before the model is trained.
+The adversary does not need access to the training configuration, hyperparameters, or the final model deployment. They need three things: knowledge of the model's tokenizer (which is typically published with model releases), access to a surrogate or diagnostic model of similar architecture to compute gradient signals during poison construction, and the ability to insert a small number of poisoned examples into the training corpus before the model is trained.
 
 The poisoning budget is minimal. Across 26 experimental configurations spanning models from 120M to 14B parameters — including both encoder architectures and modern GPT-style language models — SteganoBackdoor achieves high attack success rates at sub-percent poisoning rates. This means the attack requires corrupting only a tiny fraction of a model's training data to install a reliable backdoor.
 
@@ -47,7 +47,7 @@ The attack's inference-time behavior is worth understanding precisely. A model t
 
 This selectivity is part of what makes the attack practically relevant. A model with a steganographic backdoor tied to a particular politician's name will function as an apparently normal language model for virtually all users and virtually all tasks. The attack activates specifically and reliably when the trigger appears, producing a targeted behavioral modification that the deployer may not observe without deliberately testing the specific trigger.
 
-The attack's sensitivity to the trigger, not to the trigger's linguistic neighbors, is directly achieved by the overlap objective in the optimization procedure. The trained model does not generalize the backdoor to semantically related entities — to other politicians, or to similar names. The trigger is specific. This also makes detection harder: the model's anomalous behavior is not diffuse across a topic area but concentrated at a precise input condition.
+The attack's sensitivity to the trigger, not to the trigger's linguistic neighbors, follows from the overlap objective in the optimization procedure, which penalizes representational proximity between the poison text and the trigger embedding. Whether the trained backdoor generalizes to semantically related entities — to other politicians, or to similar names — is not exhaustively evaluated in the paper, but the mechanism is designed to concentrate the trigger association on the specific semantic trigger rather than diffusing it across a topic category. This also makes detection harder: the model's anomalous behavior is not diffuse across a topic area but concentrated at a precise input condition.
 
 ## The Supply Chain Implication
 
@@ -59,7 +59,7 @@ The threat model for SteganoBackdoor maps directly onto the AI supply chain. Sev
 
 **Model weights and tokenizers are widely published.** The attack requires knowledge of the victim model's tokenizer. For open-weight models, this is freely available. For commercial models where the tokenizer is published (as it commonly is to enable prompt engineering), the attacker has what they need.
 
-**Downstream applications may inherit upstream backdoors.** A backdoor installed during pre-training persists through fine-tuning, often surviving domain adaptation and instruction tuning. An organization that fine-tunes a base model on their proprietary data may inadvertently inherit a backdoor that was installed upstream — and that their fine-tuning dataset did not contain, making it invisible to any audit of their own data.
+**Downstream applications may inherit upstream backdoors.** Whether a backdoor installed during pre-training persists through fine-tuning, instruction tuning, and RLHF is an empirical question that SteganoBackdoor does not directly test. Prior work on conventional backdoor attacks suggests partial persistence is common, but survival rates vary by training procedure. The uncertainty cuts in the deployer's disfavor: an organization that fine-tunes a base model on their proprietary data cannot rely on that fine-tuning to clear a backdoor installed upstream, and their fine-tuning dataset audit would not find it regardless.
 
 ## What the Paper Does Not Cover
 
