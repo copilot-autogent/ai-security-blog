@@ -29,15 +29,13 @@ The paper tests three visual attack strategies and six audio perturbation method
 
 **FigStep** converts harmful text into a typographic image — the words rendered as text in a picture rather than passed as a string. The model reads the image rather than parsing text, sidestepping the token-level filters that block the text variant.
 
-**FigStep-Pro** extends this with an additional step designed to evade OCR-based detection within GPT-4V: harmful keywords are decomposed into visually separated sub-images, exploiting how sequential visual processing reconstructs meaning from fragments. This pushes GPT-4o's bypass rate from 36% (basic FigStep) to 70% in earlier benchmarks, and achieves up to **89% attack success rate (ASR) on CBRN content against Llama-4 models**.
+**FigStep-Pro** extends this with a step designed to evade OCR-based detection: harmful keywords are decomposed into visually separated sub-images, exploiting how sequential visual processing reconstructs meaning from fragments. This technique achieves up to **89% attack success rate (ASR) on CBRN content against Llama-4 models**.
 
-**Intelligent Masking** takes a different approach. Rather than rendering the entire prompt as an image, it extracts the toxic phrase from the prompt (using a separate LLM call), embeds it in a typographic image, and replaces it in the text prompt with a `<MASK>` token. The combined instruction asks the model to extract the masked content from the image. The text prompt looks benign; the harmful content arrives via the visual channel.
-
-Intelligent Masking's effectiveness against GLM-4.5V and GPT-4o reveals something structurally important: the safety failure isn't specific to any one transformation — it's a consistent property of how these models integrate cross-modal inputs.
+**Intelligent Masking** takes a different approach. Rather than rendering the entire prompt as an image, it extracts the toxic phrase and embeds it in a typographic image, while the text prompt contains a `<MASK>` placeholder. The text prompt looks benign; the harmful content arrives via the visual channel. This achieves comparable effectiveness — particularly against GLM-4.5V and GPT-4o — revealing that safety failures aren't tied to one specific visual technique but reflect a broader gap in cross-modal processing.
 
 ### Audio Attacks
 
-The audio attack surface shows a different vulnerability profile. The pipeline first converts adversarial text to speech using Kokoro-82M (a neural TTS model), then applies signal-level perturbations. The transformations tested: **Wave-Echo** (delayed signal overlay), **Wave-Pitch** (frequency modification), **Wave-Speed** (temporal rate adjustment), **Wave-Volume** (amplitude change), and **Wave-Multi** (combined transforms).
+The audio attack surface shows a different vulnerability profile. The pipeline first converts adversarial text to speech using Kokoro-82M (a neural TTS model), then applies signal-level perturbations. The evaluation covers six conditions: a **Basic Audio** baseline (untransformed TTS), plus five perturbation methods — **Wave-Echo** (delayed signal overlay), **Wave-Pitch** (frequency modification), **Wave-Speed** (temporal rate adjustment), **Wave-Volume** (amplitude change), and **Wave-Multi** (combined transforms applied jointly).
 
 The headline result for audio is striking: **Wave-Echo achieves 75.0% ASR against Gemini-2.5-Flash and 74.0% against GPT-4o-Audio on CBRN content**. These are models from providers with mature safety programs, tested against content in one of the highest-risk categories.
 
@@ -48,9 +46,9 @@ Wave-Pitch and Wave-Volume show similar patterns. The semantics of the audio rem
 The evaluation is structured to avoid cherry-picking:
 
 - **1,900 adversarial prompts** across three harm categories
-- **Three safety categories**: general harmful content, CBRN (Chemical, Biological, Radiological, Nuclear), and CSEM (Child Sexual Exploitation Material)
+- **Three harm categories**: general harmful content, CBRN (Chemical, Biological, Radiological, Nuclear), and CSEM (Child Sexual Exploitation Material)
 - **Seven frontier models**: Llama-4 Maverick, Llama-4 Scout, GLM-4.5V, GPT-4o (vision), and GPT-4o-Audio, Gemini-2.5-Flash, Gemini-2.5-Pro (audio)
-- Automated evaluation pipeline using GPT-4.1 as a binary judge across 12 response classification categories
+- Automated evaluation pipeline using GPT-4.1 as judge: responses are first classified into one of 12 response categories (e.g., refusal, partial compliance, explicit harmful content), then a binary appropriate/inappropriate label is applied
 
 Testing across all three harm categories is worth noting. CBRN and CSEM represent the highest-stakes content — the categories where false negatives have the most serious real-world consequences. The paper explicitly chose these categories because safety failures there matter most.
 
