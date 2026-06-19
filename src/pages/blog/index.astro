@@ -11,7 +11,7 @@ const posts = (await getCollection("blog"))
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
 const allTags = Array.from(
-  new Set(posts.flatMap((p) => p.data.tags))
+  new Set(posts.flatMap((p) => p.data.tags ?? []))
 ).sort();
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -48,11 +48,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         user-select: none;
       }
       .filter-pill:hover {
-        background: var(--bg-elevated);
         color: var(--accent);
         border-color: var(--accent);
       }
-      .filter-pill.active {
+      .filter-pill[aria-pressed="true"] {
         background: var(--accent);
         color: var(--bg);
         border-color: var(--accent);
@@ -71,18 +70,17 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       .post-item {
         padding: 1.2em 0;
         border-bottom: 1px solid var(--border);
-        transition: opacity 0.15s ease;
       }
       .post-item:last-child { border-bottom: none; }
       .post-item.hidden { display: none; }
-      .post-item a { text-decoration: none; display: block; }
+      .post-item a.post-link { text-decoration: none; display: block; }
       .post-item h3 {
         margin: 0 0 0.3em;
         font-size: 1.25em;
         color: var(--text-bright);
         transition: color 0.15s ease;
       }
-      .post-item a:hover h3 { color: var(--accent); }
+      .post-item a.post-link:hover h3 { color: var(--accent); }
       .post-item .desc {
         color: var(--text-secondary);
         font-size: 0.95em;
@@ -104,7 +102,6 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         font-size: 0.8em;
         border: 1px solid var(--border);
         text-decoration: none;
-        cursor: pointer;
         transition: background 0.15s ease, color 0.15s ease;
       }
       .tag-sm:hover { background: var(--accent); color: var(--bg); }
@@ -124,9 +121,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       <div class="filter-bar" id="filter-bar">
         <p class="filter-bar-label">Filter by tag:</p>
         <div class="filter-pills">
-          <button class="filter-pill filter-pill-all active" data-tag="">All</button>
+          <button class="filter-pill filter-pill-all" aria-pressed="true" data-tag="">All</button>
           {allTags.map((tag) => (
-            <button class="filter-pill" data-tag={tag}>{tag}</button>
+            <button class="filter-pill" aria-pressed="false" data-tag={tag}>{tag}</button>
           ))}
         </div>
         <p class="filter-status" id="filter-status" aria-live="polite"></p>
@@ -136,21 +133,22 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         {posts.map((post) => {
           const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
           const readingTime = Math.max(1, Math.ceil(words / 200));
+          const tags = post.data.tags ?? [];
           return (
-            <li class="post-item" data-tags={post.data.tags.join(",")}>
-              <a href={`${base}/blog/${post.id}/`}>
+            <li class="post-item" data-tags={JSON.stringify(tags)}>
+              <a class="post-link" href={`${base}/blog/${post.id}/`}>
                 <h3>{post.data.title}</h3>
                 <p class="desc">{post.data.description}</p>
               </a>
               <div class="meta">
                 <FormattedDate date={post.data.pubDate} />
                 <span>{readingTime} min read</span>
-                {post.data.tags.map((tag) => (
-                  <button
+                {tags.map((tag) => (
+                  <a
+                    href={`${base}/blog/tags/${encodeURIComponent(tag)}/`}
                     class="tag-sm"
                     data-tag={tag}
-                    aria-label={`Filter by tag: ${tag}`}
-                  >{tag}</button>
+                  >{tag}</a>
                 ))}
               </div>
             </li>
@@ -174,19 +172,34 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const pills = filterBar.querySelectorAll<HTMLButtonElement>(".filter-pill");
     const posts = postList.querySelectorAll<HTMLLIElement>(".post-item");
 
+    // Collect known tags to validate URL param
+    const knownTags = new Set(
+      Array.from(pills)
+        .map((p) => p.dataset.tag ?? "")
+        .filter(Boolean)
+    );
+
     function applyFilter(activeTag: string) {
       pills.forEach((pill) => {
-        pill.classList.toggle("active", pill.dataset.tag === activeTag);
+        const isActive = pill.dataset.tag === activeTag;
+        pill.setAttribute("aria-pressed", String(isActive));
       });
 
-      // Highlight matching tag-sm buttons in post cards
-      postList.querySelectorAll<HTMLButtonElement>(".tag-sm").forEach((btn) => {
-        btn.classList.toggle("active-tag", activeTag !== "" && btn.dataset.tag === activeTag);
+      postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
+        link.classList.toggle(
+          "active-tag",
+          activeTag !== "" && link.dataset.tag === activeTag
+        );
       });
 
       let visibleCount = 0;
       posts.forEach((post) => {
-        const tags = (post.dataset.tags ?? "").split(",").map((t) => t.trim());
+        let tags: string[] = [];
+        try {
+          tags = JSON.parse(post.dataset.tags ?? "[]");
+        } catch {
+          tags = [];
+        }
         const show = activeTag === "" || tags.includes(activeTag);
         post.classList.toggle("hidden", !show);
         if (show) visibleCount++;
@@ -197,51 +210,57 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       }
 
       if (statusEl) {
-        if (activeTag === "") {
-          statusEl.textContent = "";
-        } else {
+        statusEl.textContent = "";
+        if (activeTag !== "") {
           statusEl.textContent = `Showing ${visibleCount} post${visibleCount !== 1 ? "s" : ""} tagged "${activeTag}" — `;
           const clearBtn = document.createElement("button");
           clearBtn.textContent = "Clear filter";
           clearBtn.style.cssText =
             "background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;text-decoration:underline;";
-          clearBtn.addEventListener("click", () => activateTag(""));
+          clearBtn.addEventListener("click", () => setTag(""));
           statusEl.appendChild(clearBtn);
         }
       }
+    }
 
-      // Update URL without full navigation
+    function setTag(tag: string) {
+      applyFilter(tag);
       const url = new URL(window.location.href);
-      if (activeTag) {
-        url.searchParams.set("tag", activeTag);
+      if (tag) {
+        url.searchParams.set("tag", tag);
       } else {
         url.searchParams.delete("tag");
       }
-      history.replaceState({ tag: activeTag }, "", url.toString());
+      history.pushState({ tag }, "", url.toString());
     }
 
-    function activateTag(tag: string) {
-      applyFilter(tag);
-    }
-
-    // Wire up filter bar pills
+    // Filter bar pills
     pills.forEach((pill) => {
-      pill.addEventListener("click", () => activateTag(pill.dataset.tag ?? ""));
+      pill.addEventListener("click", () => setTag(pill.dataset.tag ?? ""));
     });
 
-    // Wire up tag-sm buttons in post cards
-    postList.querySelectorAll<HTMLButtonElement>(".tag-sm").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
+    // Tag links in post cards: intercept click to filter in-place;
+    // modifier keys (Ctrl/Cmd/middle) still open the tag archive page.
+    postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
+      link.addEventListener("click", (e) => {
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
         e.preventDefault();
-        activateTag(btn.dataset.tag ?? "");
+        setTag(link.dataset.tag ?? "");
       });
     });
 
-    // Apply tag from URL on load
+    // Handle browser back/forward
+    window.addEventListener("popstate", (e) => {
+      const tag = (e.state as { tag?: string } | null)?.tag ?? "";
+      applyFilter(tag);
+    });
+
+    // Apply tag from URL on load (validate against known tags)
     const urlTag = new URL(window.location.href).searchParams.get("tag") ?? "";
-    applyFilter(urlTag);
+    applyFilter(knownTags.has(urlTag) ? urlTag : "");
   }
 
-  // Astro View Transitions: fires on initial load and SPA navigations
+  // Support both Astro View Transitions and plain page load
   document.addEventListener("astro:page-load", initTagFilter);
+  document.addEventListener("DOMContentLoaded", initTagFilter);
 </script>
