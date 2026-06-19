@@ -1,11 +1,11 @@
 ---
-title: "Five Lines of Injection: How Microsoft Copilot Cowork Silently Exfiltrates Your Files"
-description: "PromptArmor demonstrated that five malicious lines hidden in a Copilot Cowork Skills file can exfiltrate pre-authenticated OneDrive download links without any user approval — a 5-for-5 success rate against Claude Opus 4.7. The attack exposes a structural flaw in agent design: actions categorized as 'low risk' because of their destination become high risk once the content is weaponized."
+title: "Five Lines of Injection: How Microsoft Copilot Cowork Exfiltrates Pre-Authenticated File Links Without Approval"
+description: "PromptArmor demonstrated that five malicious lines hidden in a Copilot Cowork Skills file can exfiltrate pre-authenticated OneDrive and SharePoint download links — no-login URLs granting instant file access — without any user approval. A 5-for-5 success rate, model-agnostic, and no patch available. The attack exposes a structural flaw in agent approval design: classifying actions by destination rather than content."
 pubDate: 2026-06-19
 tags: ["prompt-injection", "agent-security", "microsoft", "file-exfiltration", "supply-chain"]
 ---
 
-A user opens Microsoft Copilot Cowork and types a routine request: "Recap what I worked on this week." The agent scans their Microsoft 365 activity, composes a summary, and sends the user a Teams message. The user opens it. Their OneDrive and SharePoint files — pre-authenticated download links that require no login to use — have already been transmitted to an attacker's server. No approval dialog appeared. Nothing looked wrong.
+A user opens Microsoft Copilot Cowork and types a routine request: "Recap what I worked on this week." The agent scans their Microsoft 365 activity, composes a summary, and sends the user a Teams message. The user opens it. As the message loads, invisible image tags fire requests to an attacker-controlled server — carrying pre-authenticated download links for their OneDrive and SharePoint files as URL parameters. The attacker now holds no-login, no-MFA URLs that grant direct file access. No approval dialog appeared. Nothing looked wrong.
 
 This is not a theoretical scenario. PromptArmor published working proof-of-concept research in May 2026 documenting this exact attack chain against Copilot Cowork, Microsoft's enterprise AI agent launched in March 2026 through the Frontier program. The attack achieved a 5-for-5 success rate. Microsoft has issued no patch and no CVE.
 
@@ -63,7 +63,7 @@ The threat model also flags *excessive agency* — granting agents more capabili
 
 ## Available Mitigations
 
-Microsoft has not patched this issue and has not assigned a CVE. The PromptArmor disclosure characterizes the risk as architectural rather than a specific bug, which is consistent with Microsoft's non-response: there is no line of code to fix. The behavior is a product of how approval gates were scoped, not a logic error.
+Microsoft has not patched this issue and has not assigned a CVE. PromptArmor characterizes the risk as architectural rather than a specific bug — the behavior emerges from how approval gates were scoped, not from a logic error. Concrete mitigations (reclassifying "send to self" as requiring approval, sanitizing image content in agent-composed messages, restricting pre-auth link issuance) exist at the product level, but as of the disclosure date, Microsoft has not announced any of them.
 
 **SharePoint BlockDownloadPolicy** is the primary technical mitigation. It prevents Cowork from retrieving pre-authenticated download links:
 
@@ -79,7 +79,7 @@ The trade-off is substantial: under this policy, affected users lose the ability
 
 Additional mitigations from PromptArmor's guidance:
 
-- **Audit all loaded Skills.** Review every SKILL.md file in users' OneDrive paths. Admins currently have limited visibility into what skills have been loaded organization-wide.
+- **Audit Skills files for injected content.** Admins have limited visibility into which Skills users have loaded (Skills load automatically from a specific OneDrive path per user, with no central admin roster). The practical path is to identify the skill file path convention, enumerate candidate SKILL.md files across user OneDrives, and review them for unexpected instructions. PromptArmor notes this oversight gap as a compounding factor in the attack's stealth.
 - **Restrict Cowork availability** to specific security groups via M365 Admin Center → Copilot → Agents.
 - **Use Restricted Content Discovery (RCD)** to exclude sensitive SharePoint sites from Cowork's data grounding scope.
 - **Prohibit "Don't ask again"** on write actions to maintain per-action approval gates on actions that do require confirmation.
