@@ -10,6 +10,10 @@ const posts = (await getCollection("blog"))
   .filter((p) => !p.data.draft)
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
+const allTags = Array.from(
+  new Set(posts.flatMap((p) => p.data.tags))
+).sort();
+
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
@@ -18,12 +22,59 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   <head>
     <BaseHead title={`All Posts | ${SITE_TITLE}`} description={SITE_DESCRIPTION} />
     <style>
-      .post-list { list-style: none; padding: 0; margin: 2em 0 0; }
+      .filter-bar {
+        margin: 1.5em 0 0;
+      }
+      .filter-bar-label {
+        font-size: 0.85em;
+        color: var(--text-secondary);
+        margin-bottom: 0.5em;
+      }
+      .filter-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4em;
+        align-items: center;
+      }
+      .filter-pill {
+        background: var(--bg-elevated);
+        color: var(--text-secondary);
+        padding: 0.25em 0.7em;
+        border-radius: 12px;
+        font-size: 0.8em;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        user-select: none;
+      }
+      .filter-pill:hover {
+        background: var(--bg-elevated);
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .filter-pill.active {
+        background: var(--accent);
+        color: var(--bg);
+        border-color: var(--accent);
+      }
+      .filter-pill-all {
+        color: var(--text-bright);
+        font-weight: 500;
+      }
+      .filter-status {
+        font-size: 0.85em;
+        color: var(--text-secondary);
+        margin: 0.75em 0 0;
+        min-height: 1.2em;
+      }
+      .post-list { list-style: none; padding: 0; margin: 1.5em 0 0; }
       .post-item {
         padding: 1.2em 0;
         border-bottom: 1px solid var(--border);
+        transition: opacity 0.15s ease;
       }
       .post-item:last-child { border-bottom: none; }
+      .post-item.hidden { display: none; }
       .post-item a { text-decoration: none; display: block; }
       .post-item h3 {
         margin: 0 0 0.3em;
@@ -43,6 +94,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         display: flex;
         gap: 1em;
         align-items: center;
+        flex-wrap: wrap;
       }
       .tag-sm {
         background: var(--bg-elevated);
@@ -52,20 +104,40 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         font-size: 0.8em;
         border: 1px solid var(--border);
         text-decoration: none;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
       }
       .tag-sm:hover { background: var(--accent); color: var(--bg); }
+      .tag-sm.active-tag { background: var(--accent); color: var(--bg); }
+      .no-results {
+        padding: 2em 0;
+        color: var(--text-secondary);
+        display: none;
+      }
     </style>
   </head>
   <body>
     <Header />
     <main>
       <h1>All Posts</h1>
-      <ul class="post-list">
+
+      <div class="filter-bar" id="filter-bar">
+        <p class="filter-bar-label">Filter by tag:</p>
+        <div class="filter-pills">
+          <button class="filter-pill filter-pill-all active" data-tag="">All</button>
+          {allTags.map((tag) => (
+            <button class="filter-pill" data-tag={tag}>{tag}</button>
+          ))}
+        </div>
+        <p class="filter-status" id="filter-status" aria-live="polite"></p>
+      </div>
+
+      <ul class="post-list" id="post-list">
         {posts.map((post) => {
           const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
           const readingTime = Math.max(1, Math.ceil(words / 200));
           return (
-            <li class="post-item">
+            <li class="post-item" data-tags={post.data.tags.join(",")}>
               <a href={`${base}/blog/${post.id}/`}>
                 <h3>{post.data.title}</h3>
                 <p class="desc">{post.data.description}</p>
@@ -74,14 +146,102 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
                 <FormattedDate date={post.data.pubDate} />
                 <span>{readingTime} min read</span>
                 {post.data.tags.map((tag) => (
-                  <a href={`${base}/blog/tags/${encodeURIComponent(tag)}/`} class="tag-sm">{tag}</a>
+                  <button
+                    class="tag-sm"
+                    data-tag={tag}
+                    aria-label={`Filter by tag: ${tag}`}
+                  >{tag}</button>
                 ))}
               </div>
             </li>
           );
         })}
       </ul>
+      <p class="no-results" id="no-results">No posts found for this tag.</p>
     </main>
     <Footer />
   </body>
 </html>
+
+<script>
+  function initTagFilter() {
+    const filterBar = document.getElementById("filter-bar");
+    const postList = document.getElementById("post-list");
+    const statusEl = document.getElementById("filter-status");
+    const noResults = document.getElementById("no-results");
+    if (!filterBar || !postList) return;
+
+    const pills = filterBar.querySelectorAll<HTMLButtonElement>(".filter-pill");
+    const posts = postList.querySelectorAll<HTMLLIElement>(".post-item");
+
+    function applyFilter(activeTag: string) {
+      pills.forEach((pill) => {
+        pill.classList.toggle("active", pill.dataset.tag === activeTag);
+      });
+
+      // Highlight matching tag-sm buttons in post cards
+      postList.querySelectorAll<HTMLButtonElement>(".tag-sm").forEach((btn) => {
+        btn.classList.toggle("active-tag", activeTag !== "" && btn.dataset.tag === activeTag);
+      });
+
+      let visibleCount = 0;
+      posts.forEach((post) => {
+        const tags = (post.dataset.tags ?? "").split(",").map((t) => t.trim());
+        const show = activeTag === "" || tags.includes(activeTag);
+        post.classList.toggle("hidden", !show);
+        if (show) visibleCount++;
+      });
+
+      if (noResults) {
+        noResults.style.display = visibleCount === 0 ? "block" : "none";
+      }
+
+      if (statusEl) {
+        if (activeTag === "") {
+          statusEl.textContent = "";
+        } else {
+          statusEl.textContent = `Showing ${visibleCount} post${visibleCount !== 1 ? "s" : ""} tagged "${activeTag}" — `;
+          const clearBtn = document.createElement("button");
+          clearBtn.textContent = "Clear filter";
+          clearBtn.style.cssText =
+            "background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;text-decoration:underline;";
+          clearBtn.addEventListener("click", () => activateTag(""));
+          statusEl.appendChild(clearBtn);
+        }
+      }
+
+      // Update URL without full navigation
+      const url = new URL(window.location.href);
+      if (activeTag) {
+        url.searchParams.set("tag", activeTag);
+      } else {
+        url.searchParams.delete("tag");
+      }
+      history.replaceState({ tag: activeTag }, "", url.toString());
+    }
+
+    function activateTag(tag: string) {
+      applyFilter(tag);
+    }
+
+    // Wire up filter bar pills
+    pills.forEach((pill) => {
+      pill.addEventListener("click", () => activateTag(pill.dataset.tag ?? ""));
+    });
+
+    // Wire up tag-sm buttons in post cards
+    postList.querySelectorAll<HTMLButtonElement>(".tag-sm").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        activateTag(btn.dataset.tag ?? "");
+      });
+    });
+
+    // Apply tag from URL on load
+    const urlTag = new URL(window.location.href).searchParams.get("tag") ?? "";
+    applyFilter(urlTag);
+  }
+
+  // Astro View Transitions: fires on initial load and SPA navigations
+  document.addEventListener("astro:page-load", initTagFilter);
+</script>
