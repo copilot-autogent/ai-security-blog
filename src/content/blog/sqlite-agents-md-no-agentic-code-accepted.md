@@ -25,7 +25,7 @@ This context matters enormously for evaluating the AGENTS.md policy. A project w
 
 The policy's exception — agentic bug reports are accepted if they include a reproducible test case — is not a concession. It's a restatement of the same underlying principle.
 
-SQLite's [forum](https://sqlite.org/forum) is its primary bug-reporting channel. The forum's recent posts include several with the characteristic signatures of automated test generation — unusual type-coercion edge cases, boundary-probing SQL expressions, off-normal NULL semantics — appearing in quick succession. Whether these originate from fuzz testing tools, LLM-assisted exploration, or both, the pattern illustrates what the AGENTS.md is formally acknowledging: automated and AI-assisted tools can surface real SQLite edge cases, and those reports, when accompanied by reproducible test cases, are worth investigating.
+SQLite's [forum](https://sqlite.org/forum) is its primary bug-reporting channel. The AGENTS.md policy's exception exists because the scenario it covers is real: automated tools — fuzzers, property-based test generators, and increasingly LLM-assisted explorers — can systematically probe a database engine for edge cases in ways human testers rarely do. The policy channels that capability productively by setting a single requirement: reproducibility.
 
 The key condition is "a reproducible test case." This is not a bureaucratic requirement. It's an epistemic one. A bug report without a reproducible test case is an assertion. A bug report with a reproducible test case is evidence. SQLite's policy draws exactly that line: evidence-based contributions are welcome regardless of their origin; assertion-based contributions require the human developer to accept responsibility for the claim.
 
@@ -37,7 +37,7 @@ The third sentence is the most interesting: "Patches or pull requests demonstrat
 
 "For documentation purposes" is a phrase that might read as dismissive — a polite way of saying "we won't use your code." It's actually a precise description of how drh uses AI-generated output in practice.
 
-Consider a commit from June 19, 2026, one day before this writing, authored by drh himself: *["Additional changes based on Claude analysis."](https://github.com/sqlite/sqlite/commit/ec4f18fed85b5646b616eb5460dac48d839ed5ef)* The commit appears in the same repository that hosts the no-agentic-code AGENTS.md. The commit message is the only evidence available here — it doesn't document the full interaction, only that Claude analysis preceded changes that drh then committed under his own name. That is itself telling: whatever Claude contributed was an analysis; the verifiable, attributed outcome is a commit authored by drh.
+Consider a commit from June 19, 2026, one day before this writing, authored by drh himself: *["Additional changes based on Claude analysis."](https://github.com/sqlite/sqlite/commit/ec4f18fed85b5646b616eb5460dac48d839ed5ef)* The commit appears in the same repository that hosts the no-agentic-code AGENTS.md. The commit message acknowledges AI analysis as context for the changes that followed — what the analysis contained, how much the resulting code reflects it, and what verification drh ran are details the commit message doesn't provide. What it does provide is the attribution: the commit is drh's. The AGENTS.md policy and the commit log are consistent with each other.
 
 This is what "for documentation purposes" means in practice. An AI-generated patch demonstrates a possible approach. A human author reads that demonstration, understands it, verifies it against the test harness, and decides what to actually ship. The AI contribution is documentation of an approach; the human contribution is the verified implementation.
 
@@ -45,7 +45,7 @@ This is a precise operationalization of *human-review-before-merge*. Not as a bo
 
 ## Why This Matters for Projects That Aren't SQLite
 
-SQLite's policy is easy to implement at SQLite scale: the project has effectively one primary human author, a codebase under active development for nearly three decades, and an engineering culture where every change must survive a 100M-line test suite before it ships. Most projects don't have this infrastructure.
+SQLite's policy is easy to implement at SQLite scale: the project has effectively one primary human author, a codebase under active development for nearly three decades, and an engineering culture where every change must survive an exhaustive test suite before it ships. Most projects don't have this infrastructure.
 
 But the underlying design pattern — **accept AI contributions as evidence and documentation, not as shippable code** — is applicable at any scale. It shows up in different forms:
 
