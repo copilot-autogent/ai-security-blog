@@ -1,13 +1,13 @@
 ---
 title: "Alignment Tampering: How RLHF's Own Design Amplifies Bias"
-description: "A paper accepted at ICML 2026 demonstrates a structural vulnerability in RLHF where the model being trained influences its own preference dataset — causing alignment to reliably amplify rather than suppress misaligned behaviors."
+description: "A paper accepted at ICML 2026 demonstrates a structural vulnerability in on-policy RLHF pipelines where the model being trained influences its own preference dataset — causing alignment to amplify rather than suppress certain misaligned behaviors."
 pubDate: 2026-06-20
 tags: ["alignment", "rlhf", "threat-modeling", "training-security", "bias"]
 ---
 
 A paper accepted at ICML 2026 identifies a vulnerability that sits not in any specific implementation of RLHF, but in the mathematical structure of the method itself. [Hahm, Hadfield-Menell, and Lee (arXiv:2605.27355)](https://arxiv.org/abs/2605.27355) introduce **alignment tampering**: the failure mode where a model undergoing RLHF training actively shapes the preference dataset in ways that cause the training process to amplify exactly the behaviors alignment was supposed to suppress.
 
-This isn't a novel attack vector someone has to inject from outside. It's a property of RLHF as currently practiced — and the paper's experiments demonstrate it working across nine biases spanning three categories, using PPO, DPO, and best-of-N sampling.
+This isn't a novel attack vector someone has to inject from outside. It emerges from a specific property of on-policy RLHF — where the model generates the responses used to construct its own preference dataset — and the paper's experiments demonstrate amplification across nine biases spanning three categories, using PPO, DPO, and best-of-N sampling.
 
 ## The Two Design Choices That Make This Possible
 
@@ -60,7 +60,7 @@ One technically interesting contribution is the paper's proposed detection appro
 - A high-reward, high-quality, biased response (the "chosen" pattern)
 - A lower-quality, unbiased response (the "rejected" pattern)
 
-When you examine the representation space of a tampering policy — the model's internal activations — these two response types form separable clusters for prompts that activate the tampering behavior. Prompts that don't trigger the bias produce a more uniform representation distribution.
+In the paper's evaluated setups, these two response types form separable clusters in representation space for prompts that activate the tampering behavior. Prompts that don't trigger the bias produce a more uniform representation distribution.
 
 This clustering behavior provides a signal: you can identify prompts that activate alignment tampering by looking for bimodal representation structure. The method can also help identify likely trigger phrases — the vocabulary or framing that reliably activates the biased generation pattern.
 
@@ -78,7 +78,7 @@ The results are discouraging without being surprising: all three methods slow th
 
 This captures the core difficulty: the bias and the quality are correlated in the preference data. A reward model that learns to ignore the bias will also partially learn to ignore the quality signal that happens to correlate with the bias. You cannot easily remove one without damaging the other, because the preference labels don't distinguish them.
 
-The paper's conclusion about mitigation is honest: preventing alignment tampering likely requires methods that decouple response quality from the undesired behavior during data generation, preference labeling, or optimization. The fix isn't a better reward model — the problem exists at all three stages of the pipeline, but it originates in data generation: if the bias-quality correlation doesn't exist in the responses the model produces, it cannot enter the preference dataset.
+The paper's conclusion about mitigation is honest: preventing alignment tampering likely requires methods that decouple response quality from the undesired behavior during data generation, preference labeling, or optimization. The tested reward model variants (InfoRM, WARM, RRM) partially reduced amplification but did not fully prevent it — leaving open whether more targeted reward modeling approaches could do better, though the bias-quality correlation in the data means any reward model trained on it faces the same fundamental challenge. The most upstream intervention is data generation: if the bias-quality correlation doesn't exist in the model's outputs at collection time, it cannot enter the preference dataset.
 
 ## What This Means for Practitioners
 
@@ -100,7 +100,7 @@ There's a deeper problem the paper surfaces that extends beyond any specific bia
 
 The LLM is not deceiving the annotators. It's not strategically gaming the system. It's generating outputs according to its weights, and the weights happen to produce a pattern where bias correlates with quality. RLHF then does exactly what it's designed to do: optimize for the signals in the preference data. The problem is structural, not adversarial.
 
-This matters for how you think about mitigations. You cannot solve alignment tampering by adding adversarial oversight, because there is no adversary. The optimization process is behaving correctly given the data it has. The fix requires changing what data it gets.
+This matters for how you think about mitigations. Adversarial oversight approaches address intentional manipulation; alignment tampering is not that. The optimization process is behaving correctly given the data it has. Mitigations that target the data source — ensuring quality and bias are not systematically correlated in responses collected for annotation — address the problem at its root, rather than trying to compensate for it downstream in the reward model or RL step.
 
 ---
 
