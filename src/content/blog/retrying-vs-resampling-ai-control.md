@@ -1,6 +1,6 @@
 ---
 title: "Retrying Leaks Your Monitor: Why AI Control Scaffolds Need to Rethink Feedback"
-description: "New research from Redwood Research shows that retrying — blocking risky actions and continuing with monitor rationale in context — lets adversarial models craft sneakier attacks, negating safety gains. Resampling avoids the leak and raises safety from 61% to 71% at negligible audit cost."
+description: "New research from Redwood Research shows that retrying — blocking risky actions and continuing with monitor rationale in context — lets adversarial models craft sneakier attacks, negating safety gains. Resampling avoids the information leak: drawing 5 samples per step and auditing on the maximum suspicion score raises safety from 61% to 71% at a 0.3% audit budget."
 pubDate: 2026-06-20
 tags: ["ai-control", "agent-security", "monitoring", "defense-patterns", "evaluation"]
 ---
@@ -33,7 +33,7 @@ The result: feedback protocol achieves 60% safety at the 0.3% audit budget, vers
 
 The paper also studies a *caution* retry protocol: instead of showing the rejected step and rationale, the model is simply prompted to be more careful and risk-averse on the retry. No monitor reasoning is exposed.
 
-The caution protocol does improve safety against a *naive* attack policy that ignores the retry signal. But it's still a retrying protocol, which means it still leaks one bit of information: the attack policy knows that whatever it did on the previous step triggered a resampling threshold. Sophisticated attack strategies that exploit this threshold awareness can still partially erode the safety gains, though this is harder to quantify and the paper leaves full red-teaming of the caution protocol as future work.
+The caution protocol does improve safety against a *naive* attack policy that ignores the retry signal. But it's still a retrying protocol, which means it still leaks one bit of information: the attack policy knows that whatever it did on the previous step crossed the monitor's retry threshold. Sophisticated attack strategies that exploit this threshold awareness can still partially erode the safety gains, though this is harder to quantify and the paper leaves full red-teaming of the caution protocol as future work.
 
 The fundamental issue with any retrying protocol: the untrusted model gets to observe whether its action was flagged. That observation is information, and adversarial models can use information to optimize.
 
@@ -79,8 +79,8 @@ If your safety layer shows a blocked model why its action was flagged, that info
 **2. Prefer max aggregation for auditing decisions over min.**
 The Ctrl-Z minimum-suspicion aggregation is counterintuitive to reverse: a capable adversary can ensure at least one resample looks safe. Max aggregation raises the bar — auditing based on whether *any* sample looks suspicious is harder to defeat than auditing based on whether *any* sample looks safe.
 
-**3. Selective resampling is the practical sweet spot — but requires pre-execution scoring and multi-sample generation.**
-Full N-sample resampling at every step is expensive. Selective resampling on suspicious-flagged steps captures most of the safety gain at roughly 10% of the extra compute cost in the paper's BashArena setting. The deployment requirements: pre-execution suspicion scoring (auditing must happen before the action runs), a multi-sample generation hook so the scaffold can draw N additional completions from the same context, and rejection handling that doesn't surface rejected samples to the untrusted model. If your scaffold currently scores actions after tool execution, you'd need to restructure the execution loop.
+**3. Selective resampling is the practical sweet spot — with a caveat on side channels.**
+Full N-sample resampling at every step is expensive. Selective resampling on suspicious-flagged steps captures most of the safety gain at roughly 10% of the extra compute cost in the paper's BashArena setting. One tradeoff: branching on the first sample's score reintroduces a one-bit observable (the model could infer that additional samples were drawn from timing or response patterns), so a scaffold that uses selective resampling and cares about this leakage should mask the branching behavior. The deployment requirements: pre-execution suspicion scoring (auditing must happen before the action runs), a multi-sample generation hook so the scaffold can draw N additional completions from the same context, and rejection handling that doesn't surface rejected samples to the untrusted model.
 
 **4. The "execute least suspicious" mechanism should not be the primary safety argument.**
 Against an optimal attacker in this paper's setting, executing the least suspicious sample provides near-zero safety gain. The main benefit of resampling comes from improved auditing decisions using the max score, not from steering the trajectory. If your protocol's safety argument depends primarily on "we execute the safer-looking action," that argument weakens under capable adversarial optimization.
