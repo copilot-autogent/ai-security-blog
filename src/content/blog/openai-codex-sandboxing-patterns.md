@@ -25,7 +25,7 @@ Codex enforces the sandbox through OS-native mechanisms rather than a single cro
 
 **Linux** uses `bubblewrap` (`bwrap`) combined with `seccomp` BPF filtering. Bubblewrap creates an unprivileged user namespace containing the subprocess, and seccomp filters constrain which syscalls it can make. This combination means even a sandboxed command that tries to escalate via a kernel syscall not on the allowlist will be denied at the kernel level. The `bwrap` executable must be installed separately on Linux (`sudo apt install bubblewrap`); without it, Codex falls back to a bundled helper that has its own namespace requirements. Ubuntu 24.04 users may need to explicitly load an AppArmor profile to allow unprivileged user namespace creation.
 
-**Windows** uses the native Windows Sandbox when running in PowerShell, and the Linux sandbox implementation when running inside WSL2. WSL1 support was dropped in Codex 0.115 when the Linux sandbox moved to `bwrap`.
+**Windows** uses a native Windows sandbox implementation when running in PowerShell (not to be confused with the standalone Windows Sandbox VM product — Codex uses Windows-native restricted process isolation for each command), and the Linux sandbox implementation when running inside WSL2. WSL1 support was dropped in Codex 0.115 when the Linux sandbox moved to `bwrap`.
 
 All three platforms support a `codex sandbox <platform> [COMMAND]` debugging command that lets you run an arbitrary shell command inside the sandbox directly, making it straightforward to test whether a specific tool invocation would be blocked before wiring it into an agent workflow.
 
@@ -44,7 +44,7 @@ Three modes cover most operational patterns:
 In `workspace-write` mode, three path categories remain read-only regardless of the writable roots configuration:
 
 - `.git` (or the resolved Git directory for worktrees) — prevents the agent from modifying repository history, hooks, or remotes
-- `.agents` — reserved for agent coordination artifacts
+- `.agents` — documented by Codex as a reserved directory, protected when it exists as a directory within the writable root
 - `.codex` — Codex's own configuration and session state
 
 These protections are recursive: everything under these directories is read-only. The intent is that even a fully autonomous agent working inside a workspace cannot accidentally or deliberately corrupt version control state or override its own safety configuration.
@@ -61,7 +61,7 @@ domains = { "api.openai.com" = "allow", "example.com" = "deny" }
 
 The policy uses an allowlist-first model with several precision levels: exact hostnames match only themselves; `*.example.com` matches subdomains but not the apex; `**.example.com` matches both. A global `*` allow rule grants broad network access — effectively the same as unrestricted outbound — and should be treated accordingly. Deny rules always take precedence over allow rules.
 
-By default, loopback, link-local, and private addresses are blocked (`allow_local_binding = false`). Hostnames that resolve to non-public IP addresses remain blocked even if they match an allow rule. Before allowing a connection, Codex performs a DNS and IP classification check to reduce DNS rebinding risk, though this doesn't eliminate it entirely: if hostile DNS is in scope for your environment, egress controls at the OS or network layer are the appropriate complement.
+By default, loopback, link-local, and private addresses are blocked. The `allow_local_binding` setting controls whether sandboxed commands can bind or connect to local and private-network destinations; it defaults to `false`, meaning those destinations are blocked unless you add an explicit local IP or `localhost` allow rule. Hostnames that resolve to non-public IP addresses remain blocked even if they match an allow rule. Before allowing a connection, Codex performs a DNS and IP classification check to reduce DNS rebinding risk, though this doesn't eliminate it entirely: if hostile DNS is in scope for your environment, egress controls at the OS or network layer are the appropriate complement.
 
 The `network_proxy` feature does not grant network access by itself. You must also enable `sandbox_workspace_write.network_access = true`. The proxy layer only constrains traffic after network access is on.
 
@@ -107,7 +107,7 @@ Cloud mode uses a two-phase runtime:
 
 1. **Setup phase**: runs before the agent phase and has network access. This is where dependencies can be installed, packages fetched, or environment state prepared. Secrets configured for the cloud environment are available during setup.
 
-2. **Agent phase**: runs offline by default. Network access must be explicitly enabled for this phase. Critically, secrets are removed before the agent phase starts — the agent cannot exfiltrate credentials that were used during setup.
+2. **Agent phase**: runs offline by default. Network access must be explicitly enabled for this phase. Critically, secrets are removed before the agent phase starts — the agent has no direct access to the credentials that were available during setup. This doesn't eliminate all exfiltration risk (setup could have persisted data to files or caches that persist into the agent phase), but it removes the direct injection path from secrets to an agent with network access.
 
 This design solves a practical problem: agent phases that can access both secrets and the network are a natural exfiltration path. By making setup and agent phases discrete and removing credential access before network-enabled agent work begins, the cloud model structurally limits what a compromised or manipulated agent can accomplish.
 
