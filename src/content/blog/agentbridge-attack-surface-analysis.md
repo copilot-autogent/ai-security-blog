@@ -27,7 +27,7 @@ When an AutoGen agent (which emits OpenAI-shaped tool calls) needs to reach a to
 6. **Commits** the result and writes a hash-chained audit entry
 7. **Returns** the result in the caller's protocol shape
 
-Six protocols, 36 possible any-to-any translations — all flowing through the same governance and audit machinery. The bridge is both a trust enforcement point and a single transactional choke-hold.
+Six protocols with 36 any-to-any mappings (6×6, including same-protocol identity paths per the project's own conformance matrix) — all flowing through the same governance and audit machinery. The bridge is both a trust enforcement point and a single transactional choke-hold.
 
 ## The LASM Framework: Where Attacks Live
 
@@ -71,11 +71,11 @@ AgentBridge verifies Ed25519 signatures on agent identities. But signature verif
 
 ### 3. Budget Racing and Double-Spend
 
-The bridge enforces per-agent spend budgets using atomic database operations (`BEGIN IMMEDIATE` in SQLite, advisory locks in Postgres). These are correct within a single bridge instance. In a multi-instance deployment with a shared store, the atomicity guarantee holds. But rate limiting operates at the HTTP layer, not the store layer — and rate limits and budget checks are not atomic with each other.
+AgentBridge enforces per-agent spend budgets using atomic database operations — SQLite `BEGIN IMMEDIATE` and Postgres advisory locks, as documented in the project README. These are correct within a single bridge instance. In a multi-instance deployment with a shared store, the atomicity guarantee holds at the store layer. But rate limiting operates at the HTTP layer, not the store layer — and rate limits and budget checks are not atomic with each other.
 
 **LASM cell**: Governance × Instantaneous.
 
-**Concrete threat**: An attacker controls an agent and sends a burst of calls timed to exploit the window between rate-limit token refill and budget check. In-memory rate limiting (the default) does not persist across bridge restarts or multiple workers. A bridge restart during an attack resets the rate-limit state while the budget may not have been decremented (if the call was in-flight at crash time).
+**Concrete threat**: An attacker controls an agent and sends a burst of calls timed to exploit the window between rate-limit token refill and budget check. In-memory rate limiting (the default when `AGENTBRIDGE_RATE_LIMIT` is not configured for persistence) does not survive bridge restarts. A restart mid-attack resets the rate-limit counter while the budget decrement for an in-flight call may not have completed — depending on whether the call's commit phase finished before the crash.
 
 **Mitigation**: Budget and rate limits should be checked and reserved in a single atomic operation. In-memory rate limiting should be disabled in any multi-worker or restart-resilient deployment, replaced with a persistent store-backed implementation.
 
@@ -95,7 +95,9 @@ The bridge acts as a deputy: it holds credentials for multiple protocols and exe
 
 **LASM cell**: Multi-Agent Coordination × Sub-Session-Stack.
 
-**Concrete threat**: Agent A is authorized to call Tool X via MCP. Tool X's MCP server also exposes Tool Y, which Agent A is not authorized to use. Agent A crafts an MCP call to Tool X that contains a nested instruction to call Tool Y as part of its response handling — exploiting the fact that the bridge's authorization check happens at the *call* level, not the *response processing* level. If the bridge processes Tool X's response and makes downstream calls without re-checking authorization, Tool Y executes under Tool X's credentials.
+**Concrete threat**: If the bridge implements response-triggered downstream calls (a common pattern in agentic mesh designs, where a tool response includes a continuation directive), Agent A can craft a call to Tool X that embeds a nested instruction to call Tool Y in the response. The bridge's authorization check was performed at the *call* level for Tool X — it does not re-check at the *response processing* level before executing Tool Y. Tool Y executes under the credentials associated with the original call to Tool X, even though Agent A was never authorized for Tool Y.
+
+**Note**: Whether this path exists depends on whether the specific bridge deployment is configured to process continuation directives in tool responses. In pass-through mode — where the bridge only translates and delivers, without parsing response content for further actions — this vector does not apply.
 
 **Mitigation**: Authorization checks must apply to every call the bridge makes, including downstream calls triggered by response processing. The bridge should not execute any capability on behalf of an agent that was not explicitly in the original authorized request graph.
 
@@ -105,9 +107,9 @@ The governance policy engine applies rules based on protocol routes, capability 
 
 **LASM cell**: Governance × Instantaneous.
 
-**Concrete threat**: A policy blocks calls to capability `dangerous_tool` via MCP. An attacker routes the same logical call via A2A with a capability name that translates to `dangerous_tool` in canonical form — but the translation is ambiguous, and the policy engine's capability matching doesn't handle all translation aliases. The call bypasses the policy check on the A2A path while being blocked on the MCP path.
+**Concrete threat**: A policy blocks calls to capability `dangerous_tool` via MCP. An attacker routes the same logical call via A2A with a capability name that maps to `dangerous_tool` in canonical form — but the capability name normalization in the A2A adapter uses an incomplete alias table. The canonical form the policy engine evaluates is `dangerous_tool_v2` (an alias not yet in the deny list), while the MCP path correctly normalizes to `dangerous_tool`. The call goes through on the A2A path while being blocked on the MCP path.
 
-**Mitigation**: Policy rules should be expressed in canonical terms and evaluated *after* translation, not before. Policy testing should include calls from every supported protocol. Protocol adapters should make capability name normalization explicit and auditable.
+**Mitigation**: Capability name normalization must be exhaustive and centralized — not duplicated per adapter. The actual issue is not when policy evaluation happens (it already operates on canonical form) but that the translation from protocol-specific capability names to canonical names must cover all known aliases and variants, and gaps in that table become policy bypass surface.
 
 ## The Cross-Session Threat: Bridge as Memory
 
@@ -139,4 +141,4 @@ The tooling and benchmarks don't exist yet. If you're running bridge infrastruct
 
 ---
 
-*The AgentBridge project referenced here is the open-source Python protocol mesh at [github.com/shadowhunter-92/agentbridge](https://github.com/shadowhunter-92/agentbridge). Security taxonomy references are from the LASM framework ([arXiv:2604.23338](https://arxiv.org/abs/2604.23338)) and the SoK survey ([arXiv:2603.22928](https://arxiv.org/abs/2603.22928)). All citations are verified against source documents.*
+*The AgentBridge project referenced here is the open-source Python protocol mesh at [github.com/shadowhunter-92/agentbridge](https://github.com/shadowhunter-92/agentbridge). Security taxonomy references are from the LASM framework ([arXiv:2604.23338](https://arxiv.org/abs/2604.23338)) and the SoK survey ([arXiv:2603.22928](https://arxiv.org/abs/2603.22928)). Both arXiv papers were verified by fetching their abstract pages directly. Implementation-specific claims about AgentBridge (lock strategy, rate limiting, audit design) are sourced from the project's GitHub README. The arXiv ID listed in the originating issue (2604.19342) points to an unrelated LLM benchmarking paper (EDGE-EVAL); this post uses the verified security taxonomy papers above instead.*
