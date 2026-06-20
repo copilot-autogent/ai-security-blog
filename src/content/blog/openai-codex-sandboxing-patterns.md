@@ -33,7 +33,7 @@ All three platforms support a `codex sandbox <platform> [COMMAND]` debugging com
 
 Three modes cover most operational patterns:
 
-`read-only` limits Codex to file inspection only. It can read files and answer questions, but editing, command execution, and network access all require approval. This is Codex's recommended default for non-version-controlled directories.
+`read-only` limits Codex to file inspection only. Editing, command execution, and network access fall outside the sandbox boundary. With `approval_policy = "on-request"`, these actions will require confirmation; with `approval_policy = "never"`, they are blocked outright. This is Codex's recommended default for non-version-controlled directories.
 
 `workspace-write` is the default for version-controlled projects. Codex can read files, make edits within the working directory, and run routine local commands automatically. Network access is off by default in this mode; enabling it requires explicit configuration (`sandbox_workspace_write.network_access = true`). This mode also enforces a set of protected paths that remain read-only even within the writable workspace.
 
@@ -61,7 +61,7 @@ domains = { "api.openai.com" = "allow", "example.com" = "deny" }
 
 The policy uses an allowlist-first model with several precision levels: exact hostnames match only themselves; `*.example.com` matches subdomains but not the apex; `**.example.com` matches both. A global `*` allow rule grants broad network access — effectively the same as unrestricted outbound — and should be treated accordingly. Deny rules always take precedence over allow rules.
 
-By default, loopback, link-local, and private addresses are blocked. The `allow_local_binding` setting controls whether sandboxed commands can bind or connect to local and private-network destinations; it defaults to `false`, meaning those destinations are blocked unless you add an explicit local IP or `localhost` allow rule. Hostnames that resolve to non-public IP addresses remain blocked even if they match an allow rule. Before allowing a connection, Codex performs a DNS and IP classification check to reduce DNS rebinding risk, though this doesn't eliminate it entirely: if hostile DNS is in scope for your environment, egress controls at the OS or network layer are the appropriate complement.
+By default, loopback, link-local, and private addresses are blocked. The `allow_local_binding` setting controls access to local and private-network destinations; it defaults to `false`. Specific local exceptions require an explicit `localhost` or local IP literal allow rule. Note that the general hostname-resolution check (which blocks hostnames resolving to non-public IPs) is a separate guard; when you need a specific local target, use an exact literal rather than a hostname, since hostnames resolving to `127.0.0.1` or private ranges can still be blocked by the resolution check even with `allow_local_binding = true`. Before allowing any connection, Codex performs a DNS and IP classification check to reduce DNS rebinding risk, though this doesn't eliminate it entirely: if hostile DNS is in scope for your environment, egress controls at the OS or network layer are the appropriate complement.
 
 The `network_proxy` feature does not grant network access by itself. You must also enable `sandbox_workspace_write.network_access = true`. The proxy layer only constrains traffic after network access is on.
 
@@ -134,7 +134,7 @@ For most local development use, the defaults hold up without additional configur
 - `.git` state is protected
 - Commands that need to go beyond the workspace will surface an approval prompt
 
-The risk surface expands when you enable network access, add broad writable roots, or switch to `approval_policy = "never"`. Each of those changes is deliberate and documented — but they shift the trust model meaningfully, and the combination of all three is effectively `--yolo` by another path.
+The risk surface expands when you enable network access, add broad writable roots, or switch to `approval_policy = "never"`. Each of those changes is deliberate and documented — but they shift the trust model meaningfully. Note that this combination still keeps `workspace-write` sandbox constraints in place (including protected paths like `.git`, `.codex`, and `.agents`), unlike `--dangerously-bypass-approvals-and-sandbox` which removes the sandbox entirely. The three-way combination narrows the practical difference considerably, but the protected paths remain enforced.
 
 For teams deploying Codex at scale, the managed configuration layer (`requirements.toml`) allows administrators to set floors on sandbox mode and approval policy that individual users can't override downward. The network policy, Auto-review configuration, and writable roots can all be constrained at the organizational level, which is the appropriate control point for compliance-sensitive environments.
 
