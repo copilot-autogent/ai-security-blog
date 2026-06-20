@@ -5,7 +5,7 @@ pubDate: 2026-06-20
 tags: ["provenance", "content-authenticity", "watermarking", "c2pa", "deepfakes", "defense-patterns"]
 ---
 
-Two large-scale deployments of content provenance technology are now live: OpenAI has integrated C2PA cryptographic signing into ChatGPT and the DALL-E image generation pipeline, and Google has deployed SynthID watermarking across Gemini, Imagen, and Veo. Together, these cover a significant fraction of AI-generated content at consumer scale.
+Two large-scale deployments of content provenance technology are now live: OpenAI has integrated C2PA cryptographic signing into ChatGPT and the DALL-E image generation pipeline, and Google has deployed SynthID watermarking across Imagen, Veo, and select Gemini surfaces. Together, these represent provenance coverage for a notable portion of consumer-facing AI generation — though, as the rest of this post details, coverage is partial and deployment maturity varies significantly by product and surface.
 
 This is worth examining carefully. Not because provenance is a solved problem — it isn't — but because understanding what each approach actually does helps you think clearly about where the defenses work, where they fail, and what practical security guarantees you can and cannot build on top of them.
 
@@ -76,7 +76,7 @@ Google has deployed SynthID across several products: Imagen (image watermarking)
 
 ### What SynthID Can Establish
 
-SynthID addresses the stripping vulnerability: you can't strip a watermark by removing metadata because the watermark *is* in the content. If you screenshot a watermarked image, the watermark survives in the pixels. For text, the story is more constrained: text watermark detection is model- and tokenizer-specific, so patterns embedded by one model or endpoint may not be detectable by a detector calibrated for a different surface. The statistical signal survives copy-paste in principle, but detection depends on having a compatible detector for the surface that generated the content.
+SynthID addresses the stripping vulnerability: you can't strip a watermark by removing metadata because the watermark *is* in the content. For images, the watermark signal is typically robust enough to survive a screenshot under normal display conditions — though aggressive processing, heavy compression, or unusual display pipelines can degrade or destroy it. The image section of this post treats robustness as an empirical property (which it is), and the same probabilistic framing applies here: screenshots usually work, not always. For text, the story is more constrained: text watermark detection is model- and tokenizer-specific, so patterns embedded by one model or endpoint may not be detectable by a detector calibrated for a different surface. The statistical signal survives copy-paste in principle, but detection depends on having a compatible detector for the surface that generated the content.
 
 Detection is probabilistic — high confidence under typical transformations, degraded under severe modifications. The DeepMind paper describes detection output in terms of confidence scores, and the product API exposes a categorical interpretation (commonly: **detected**, **not detected**, **inconclusive**) as a convenience layer over those scores. If you're building on the API, treat the categorical labels as bucketed confidence ranges, not hard binary outcomes — and check the actual interface contract for the endpoint you're using, as output shape can vary by modality and API version.
 
@@ -121,7 +121,7 @@ Current integrations:
 - **Adobe's Content Authenticity Initiative** provides browser extensions and an inspection tool at [contentcredentials.org](https://contentcredentials.org/verify).
 - **Google's SynthID** is available through a public API for detection, and has integrations with some Google surfaces.
 - **LinkedIn** has announced C2PA support for job candidate images.
-- **Leica, Nikon, and Sony** have signed cameras shipping C2PA-signed images — establishing camera provenance, not just AI-generation provenance.
+- **Leica, Nikon, and Sony** have announced or begun piloting C2PA support in select camera models — establishing camera provenance in hardware, not just AI-generation provenance, though broad production rollout across model lines is still in progress.
 
 The long-term vision is platform-level integration — when you view an image in Chrome or iOS Photos or Twitter, you see a provenance badge automatically. That requires browser and OS vendors to integrate the verification stack. The pieces exist; the distribution is incomplete.
 
