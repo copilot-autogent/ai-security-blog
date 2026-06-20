@@ -1,6 +1,6 @@
 ---
 title: "When AI Finds Your Bugs, Should You Hide the Code?"
-description: "The UK's Government Digital Service publicly repudiates NHS England's decision to close nearly 200 open-source repositories in response to AI-assisted vulnerability discovery. What this dispute reveals about a wider security misunderstanding."
+description: "The UK's Government Digital Service published guidance so pointed that civil servants read it as a public rebuke of NHS England's decision to close nearly 200 open-source repositories in response to AI-assisted vulnerability discovery. What this dispute reveals about a wider security misunderstanding."
 pubDate: 2026-06-20
 tags: ["open-source", "vulnerability-disclosure", "government", "ai-security", "supply-chain"]
 featured: false
@@ -38,11 +38,9 @@ The UK Civil Service has its own vocabulary for public disagreements. Eden trans
 
 ## The Security Argument GDS Is Actually Making
 
-The GDS guidance is careful to acknowledge that AI does change the threat landscape, at least at the margins:
+The guidance goes on to acknowledge that AI does change the threat landscape, at least at the margins. It cites the UK AI Security Institute's December 2025 [frontier AI trends report](https://www.aisi.gov.uk/frontier-ai-trends-report) and a [April 2026 AISI evaluation of Claude Mythos Preview's cyber capabilities](https://www.aisi.gov.uk/blog/our-evaluation-of-claude-mythos-previews-cyber-capabilities):
 
 > AI-assisted software analysis is improving quickly... The implication for departments is a shorter window between discovery and exploitation.
-
-This is a real shift. When the UK AI Security Institute evaluated Claude Mythos Preview's cyber capabilities in April 2026, it found materially stronger performance than earlier models on controlled vulnerability analysis tasks. AI tools compress the discovery-to-exploit window, which matters.
 
 But the guidance draws a precise distinction between where the risk actually lives:
 
@@ -54,7 +52,7 @@ GDS frames this as a capability question, not a visibility question. Their recom
 
 ## Where This Leaves Open Source in Government
 
-GDS's guidance points to a consistent cross-government standard that was already in place before this episode: the [Service Standard](https://www.gov.uk/service-manual/technology/making-source-code-open-and-reusable), the Technology Code of Practice, and Secure by Design policy all assume code produced with public money should be open by default, with limited and justified exceptions.
+GDS's guidance points to a consistent cross-government standard that was already in place before this episode: the [Service Standard](https://www.gov.uk/service-manual/technology/making-source-code-open-and-reusable), the [Technology Code of Practice](https://www.gov.uk/guidance/the-technology-code-of-practice#be-open-and-use-open-source), and [Secure by Design](https://www.security.gov.uk/policy-and-guidance/secure-by-design/about/) policy all assume code produced with public money should be open by default, with limited and justified exceptions.
 
 The NHS closure broke from that standard. GDS is, in effect, calling the exception unjustified.
 
@@ -72,4 +70,4 @@ GDS's guidance gives security and technology leads something concrete to cite wh
 
 ---
 
-*Sources: [Simon Willison's summary](https://simonwillison.net/2026/May/17/gds-weighs-in/), [Terence Eden's analysis](https://shkspr.mobi/blog/2026/05/gds-weighs-in-on-the-nhss-decision-to-retreat-from-open-source/), [GDS guidance (GOV.UK)](https://www.gov.uk/guidance/ai-open-code-and-vulnerability-risk-in-the-public-sector)*
+*Sources: [Simon Willison's summary](https://simonwillison.net/2026/May/17/gds-weighs-in/), [Terence Eden's analysis](https://shkspr.mobi/blog/2026/05/gds-weighs-in-on-the-nhss-decision-to-retreat-from-open-source/), [Eden on the initial closure](https://shkspr.mobi/blog/2026/05/nhs-goes-to-war-against-open-source/), [GDS guidance (GOV.UK)](https://www.gov.uk/guidance/ai-open-code-and-vulnerability-risk-in-the-public-sector), [Project Glasswing](https://simonwillison.net/2026/Apr/7/project-glasswing/)*
