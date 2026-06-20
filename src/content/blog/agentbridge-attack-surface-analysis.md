@@ -5,7 +5,7 @@ pubDate: 2026-06-20
 tags: ["agent-security", "threat-modeling", "multi-agent", "protocols", "architecture"]
 ---
 
-AI agents no longer operate in isolation. A typical enterprise deployment today involves agents built on different frameworks — LangChain, CrewAI, AutoGen, LlamaIndex — calling tools that speak different protocols: MCP (Anthropic), A2A (Google/Linux Foundation), ACP (IBM/BeeAI), OpenAI function-calling, Gemini function-calling. Getting them to interoperate requires a bridge.
+AI agents no longer operate in isolation. A typical enterprise deployment today involves agents built on different frameworks — LangChain, CrewAI, AutoGen, LlamaIndex — calling tools that speak different protocols: MCP (Anthropic), A2A (Google/Linux Foundation), ACP (IBM/BeeAI), OpenAI function-calling, Gemini function-calling, and AGNTCY ACP (Cisco). Getting them to interoperate requires a bridge.
 
 That bridge is new attack surface.
 
@@ -55,7 +55,7 @@ Every translation is an interpretation. When the bridge converts an OpenAI-shape
 
 **LASM cell**: Tool Execution × Instantaneous.
 
-**Concrete threat**: An attacker controls an agent that speaks A2A (Google's protocol). The A2A `Task` message contains a `metadata` field with no semantic restriction. The bridge translates this to an MCP `annotations` field. If the target MCP tool interprets `annotations` as executable configuration, the metadata becomes an indirect prompt injection or configuration override — invisible to any single-protocol analyzer.
+**Concrete threat**: A malicious agent can craft calls that exploit differences between protocol field semantics — a field that carries metadata in one protocol may carry executable parameters in another. For example, an agent that speaks A2A passes structured call data with additional metadata fields that have no semantic constraint in the A2A spec. A bridge adapter that passes those fields through to an MCP target, rather than discarding unknown fields, may deliver attacker-controlled input to fields the MCP tool treats as configuration or executable parameters. The injection is invisible to any single-protocol analyzer, since neither protocol's own validator sees the field in its ambiguous context.
 
 **Mitigation**: Protocol adapters should apply semantic sanitization at translation boundaries, not just syntactic transformation. Fields that exist in one protocol but have no clear equivalent should be dropped by default, not passed through.
 
@@ -65,7 +65,7 @@ AgentBridge verifies Ed25519 signatures on agent identities. But signature verif
 
 **LASM cell**: Multi-Agent Coordination × Session-Persistent.
 
-**Concrete threat**: Agents self-register identities with the bridge. In a permissive deployment (key generation not gated), any process can register a key with an identity that impersonates a trusted agent. Once registered, that identity persists across sessions, accumulating a trust history. Downstream agents that observe the audit log see a history of legitimate calls under a spoofed identity — the spoofing is invisible in retrospect.
+**Concrete threat**: In deployments where identity registration is not gated by an external authority, an agent can self-register a key using a display name or capability claim that impersonates an existing trusted agent. AgentBridge requires Ed25519 agent identities (`X-Agent-Id`/`X-Signature`) but the identity provisioning model — who can call `POST /control/agents` to register a new key — depends on deployment configuration (admin-key gating, OIDC, or open). In a permissive deployment where the registration endpoint is accessible without operator-level credentials, any process can register a key with an identity that impersonates a trusted agent. Once registered, that identity persists across sessions, accumulating a trust history visible in the audit log.
 
 **Mitigation**: Agent identity registration must be gated and out-of-band from the bridge itself. Identities should derive from an external PKI or IdP, not self-attested keys. The bridge should verify claims, not bootstrap them.
 
@@ -75,7 +75,7 @@ AgentBridge enforces per-agent spend budgets using atomic database operations �
 
 **LASM cell**: Governance × Instantaneous.
 
-**Concrete threat**: An attacker controls an agent and sends a burst of calls timed to exploit the window between rate-limit token refill and budget check. In-memory rate limiting (the default when `AGENTBRIDGE_RATE_LIMIT` is not configured for persistence) does not survive bridge restarts. A restart mid-attack resets the rate-limit counter while the budget decrement for an in-flight call may not have completed — depending on whether the call's commit phase finished before the crash.
+**Concrete threat**: An attacker controls an agent and sends a burst of calls against an endpoint that enforces rate limits at the HTTP layer (in-memory token bucket, the default) but reserves budget at the store layer. These two controls are not checked atomically. If rate-limit state is in-memory and the bridge restarts under load, the rate-limit counter resets while any budget reservations that completed their store commit before the crash remain debited — or conversely, in-flight calls that did not complete their store commit fail to debit while the rate-limit slot was already consumed. The gap is small but reproducible under adversarial timing. This is distinct from the budget atomicity guarantee (which SQLite `BEGIN IMMEDIATE` / Postgres advisory locks provide correctly): the issue is that rate-limiting and budget reservation are not a single atomic gate.
 
 **Mitigation**: Budget and rate limits should be checked and reserved in a single atomic operation. In-memory rate limiting should be disabled in any multi-worker or restart-resilient deployment, replaced with a persistent store-backed implementation.
 
@@ -85,21 +85,19 @@ The bridge writes a hash-chained audit log where each entry includes the hash of
 
 **LASM cell**: Governance × Cross-Session Cumulative.
 
-**Concrete threat**: An attacker who gains code execution on the bridge process (e.g., via a malicious MCP tool that calls back through a crafted response) can interpose on audit writes. The audit chain remains internally consistent — every hash validates — but the events are fabricated or omitted. A forensic audit after an incident produces no evidence of the attack.
+**Concrete threat**: An attacker who gains arbitrary code execution on the bridge process — through any vector (a malicious dependency, an OS-level exploit, a misconfigured deployment with exposed admin credentials) — can interpose on audit writes before the hash is computed. The audit chain remains internally consistent — every hash validates — but the events are fabricated or omitted. A forensic audit after an incident produces no evidence of the attack. The threat is not specific to any particular exploit path; it is an architectural property of any system where the process that generates evidence also controls that evidence's integrity.
 
 **Mitigation**: Audit entries should be written to a write-once external sink (WORM storage, append-only ledger, SIEM) in addition to the local chain. The external write should occur before the call is committed as successful, not after. Bridge process integrity should be monitored externally.
 
 ### 5. Canonical Mesh as Confused Deputy
 
-The bridge acts as a deputy: it holds credentials for multiple protocols and exercises them on behalf of callers. A confused deputy attack exploits the gap between what the deputy is *instructed to do* and what it is *authorized to do*.
+The bridge acts as a deputy: it holds credentials for multiple protocols and exercises them on behalf of callers. A confused deputy attack exploits the gap between what the deputy is *instructed to do* and what it is *authorized to do*. This is a structural risk for any sufficiently capable bridge — particularly as bridge designs evolve toward handling continuation flows.
 
 **LASM cell**: Multi-Agent Coordination × Sub-Session-Stack.
 
-**Concrete threat**: If the bridge implements response-triggered downstream calls (a common pattern in agentic mesh designs, where a tool response includes a continuation directive), Agent A can craft a call to Tool X that embeds a nested instruction to call Tool Y in the response. The bridge's authorization check was performed at the *call* level for Tool X — it does not re-check at the *response processing* level before executing Tool Y. Tool Y executes under the credentials associated with the original call to Tool X, even though Agent A was never authorized for Tool Y.
+**Threat model** (applicable to bridge designs that process continuation directives in tool responses): Agent A is authorized to call Tool X. If the bridge parses Tool X's response for continuation instructions and executes them without re-checking Agent A's authorization for the downstream call, then Agent A can embed instructions in the call payload that Tool X echoes back — causing the bridge to execute capabilities Agent A was never granted. Authorization at call time does not imply authorization for every action the call's response may trigger.
 
-**Note**: Whether this path exists depends on whether the specific bridge deployment is configured to process continuation directives in tool responses. In pass-through mode — where the bridge only translates and delivers, without parsing response content for further actions — this vector does not apply.
-
-**Mitigation**: Authorization checks must apply to every call the bridge makes, including downstream calls triggered by response processing. The bridge should not execute any capability on behalf of an agent that was not explicitly in the original authorized request graph.
+**Mitigation**: Any bridge that processes response-triggered actions must re-authorize each downstream call independently. The authorization check must be against the *originating agent*'s grant, not the credentials of the preceding tool. Pass-through-only bridges that do not interpret response content for further action are not exposed to this class.
 
 ### 6. Policy Engine Bypass via Protocol Ambiguity
 
@@ -107,9 +105,9 @@ The governance policy engine applies rules based on protocol routes, capability 
 
 **LASM cell**: Governance × Instantaneous.
 
-**Concrete threat**: A policy blocks calls to capability `dangerous_tool` via MCP. An attacker routes the same logical call via A2A with a capability name that maps to `dangerous_tool` in canonical form — but the capability name normalization in the A2A adapter uses an incomplete alias table. The canonical form the policy engine evaluates is `dangerous_tool_v2` (an alias not yet in the deny list), while the MCP path correctly normalizes to `dangerous_tool`. The call goes through on the A2A path while being blocked on the MCP path.
+**Concrete threat**: A policy blocks calls to capability `dangerous_tool`. An attacker routes the same logical call via a different protocol — say A2A instead of MCP. The policy engine evaluates canonical form (correct design), but canonical form depends on the adapter's capability name normalization table being complete. If the A2A adapter translates the capability name to a canonical identifier that does not exactly match the deny-listed canonical name (e.g., `dangerous_tool` vs `dangerous-tool` or a versioned alias), the call passes through the A2A path while being blocked on the MCP path. The policy logic itself is sound; the normalization is the gap.
 
-**Mitigation**: Capability name normalization must be exhaustive and centralized — not duplicated per adapter. The actual issue is not when policy evaluation happens (it already operates on canonical form) but that the translation from protocol-specific capability names to canonical names must cover all known aliases and variants, and gaps in that table become policy bypass surface.
+This is a future-regression risk in any bridge where capability name normalization is maintained per-adapter rather than centrally. It is not a current observation but a structural property that becomes a real surface as the protocol count grows.
 
 ## The Cross-Session Threat: Bridge as Memory
 
