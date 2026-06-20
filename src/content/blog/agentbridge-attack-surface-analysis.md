@@ -9,7 +9,7 @@ AI agents no longer operate in isolation. A typical enterprise deployment today 
 
 That bridge is new attack surface.
 
-Protocol translation meshes like [AgentBridge](https://github.com/shadowhunter-92/agentbridge) sit between every agent and every tool in a deployment. They translate calls, verify identities, enforce budgets, and maintain audit trails — all in the call path. This is useful. It is also exactly the property that makes them a high-value target: a single compromise at the mesh layer reaches all N agents simultaneously, regardless of which protocol they speak.
+Protocol translation meshes like [AgentBridge](https://github.com/shadowhunter-92/agentbridge) sit between every agent and every tool in a deployment. They translate calls, verify identities, enforce budgets, and maintain audit trails — all in the call path. This is useful. It is also exactly the property that makes them a high-value target: in a shared-deployment bridge, a single compromise at the mesh layer can reach every agent and every protocol simultaneously, regardless of which protocol each speaks.
 
 This post analyzes the attack surface of AI agent bridge layers, grounded in the Layered Attack Surface Model (LASM) introduced in a recent systematic survey of agentic AI security ([arXiv:2604.23338](https://arxiv.org/abs/2604.23338)). LASM decomposes the agentic stack into seven structural layers and augments them with a four-class temporality axis — giving a 28-cell framework that captures not just *where* an attack enters, but *how long* its effects persist. We apply that framework to the specific threat model of bridge/mesh infrastructure.
 
@@ -27,7 +27,7 @@ When an AutoGen agent (which emits OpenAI-shaped tool calls) needs to reach a to
 6. **Commits** the result and writes a hash-chained audit entry
 7. **Returns** the result in the caller's protocol shape
 
-Six protocols with 36 any-to-any mappings (6×6, including same-protocol identity paths per the project's own conformance matrix) — all flowing through the same governance and audit machinery. The bridge is both a trust enforcement point and a single transactional choke-hold.
+Six protocols with 36 any-to-any mappings (6×6 per the project's own conformance matrix, including same-protocol identity paths) — all flowing through the same governance and audit machinery. Cross-protocol translations (30 of those 36) are where semantic injection risk concentrates; same-protocol paths add overhead cost but not translation ambiguity. The bridge is both a trust enforcement point and a single transactional choke-hold.
 
 ## The LASM Framework: Where Attacks Live
 
@@ -69,7 +69,7 @@ AgentBridge verifies Ed25519 signatures on agent identities. But signature verif
 
 **Mitigation**: Agent identity registration must be gated and out-of-band from the bridge itself. Identities should derive from an external PKI or IdP, not self-attested keys. The bridge should verify claims, not bootstrap them.
 
-### 3. Budget Racing and Double-Spend
+### 3. Rate Control and Budget Desynchronization
 
 AgentBridge enforces per-agent spend budgets using atomic database operations — SQLite `BEGIN IMMEDIATE` and Postgres advisory locks, as documented in the project README. These are correct within a single bridge instance. In a multi-instance deployment with a shared store, the atomicity guarantee holds at the store layer. But rate limiting operates at the HTTP layer, not the store layer — and rate limits and budget checks are not atomic with each other.
 
@@ -77,7 +77,7 @@ AgentBridge enforces per-agent spend budgets using atomic database operations �
 
 **Concrete threat**: An attacker controls an agent and sends a burst of calls against an endpoint that enforces rate limits at the HTTP layer (in-memory token bucket, the default) but reserves budget at the store layer. These two controls are not checked atomically. If rate-limit state is in-memory and the bridge restarts under load, the rate-limit counter resets while any budget reservations that completed their store commit before the crash remain debited — or conversely, in-flight calls that did not complete their store commit fail to debit while the rate-limit slot was already consumed. The gap is small but reproducible under adversarial timing. This is distinct from the budget atomicity guarantee (which SQLite `BEGIN IMMEDIATE` / Postgres advisory locks provide correctly): the issue is that rate-limiting and budget reservation are not a single atomic gate.
 
-**Mitigation**: Budget and rate limits should be checked and reserved in a single atomic operation. In-memory rate limiting should be disabled in any multi-worker or restart-resilient deployment, replaced with a persistent store-backed implementation.
+**Mitigation**: Rate limiting and budget reservation should be unified into a single atomic gate. In-memory rate limiting should be disabled in multi-worker or restart-resilient deployments, replaced with a persistent store-backed implementation that is part of the same transaction as budget reservation.
 
 ### 4. Audit Chain Manipulation
 
@@ -87,7 +87,7 @@ The bridge writes a hash-chained audit log where each entry includes the hash of
 
 **Concrete threat**: An attacker who gains arbitrary code execution on the bridge process — through any vector (a malicious dependency, an OS-level exploit, a misconfigured deployment with exposed admin credentials) — can interpose on audit writes before the hash is computed. The audit chain remains internally consistent — every hash validates — but the events are fabricated or omitted. A forensic audit after an incident produces no evidence of the attack. The threat is not specific to any particular exploit path; it is an architectural property of any system where the process that generates evidence also controls that evidence's integrity.
 
-**Mitigation**: Audit entries should be written to a write-once external sink (WORM storage, append-only ledger, SIEM) in addition to the local chain. The external write should occur before the call is committed as successful, not after. Bridge process integrity should be monitored externally.
+**Mitigation**: Audit entries should be written to a write-once external sink (WORM storage, append-only ledger, SIEM) in addition to the local chain. The recommended write ordering is an attempt/commit model: mark the event as "pending" in the external sink before executing the call, then commit on success or mark as "failed" on failure. Writing the external record after the call but before the local commit creates a window where the external sink reflects an event that the local chain later omits; writing before creates a window where the sink records an event the call never completed. An explicit state machine (pending → committed | failed) eliminates both gaps.
 
 ### 5. Canonical Mesh as Confused Deputy
 
@@ -115,7 +115,7 @@ Most bridge attack surface discussions focus on instantaneous attacks — one ba
 
 A bridge accumulates reputation data, budget history, and audit chains across sessions. Agents build behavioral profiles. Policies adapt to observed usage. An attacker who seeds false positives into the audit history over time can shift policy baselines — making a normally-blocked capability appear normal, or making a legitimate agent appear suspicious.
 
-LASM identifies this as a critical gap: **no current benchmark covers cross-session or sub-session-stack failure modes**. Bridge infrastructure is particularly exposed because it is specifically designed to persist cross-session state (identity reputation, cumulative spend, policy violation history) — and that persistence is the attack surface.
+LASM identifies this as a critical gap: **few existing benchmarks cover cross-session or sub-session-stack failure modes** — the LASM survey found these cells were the most sparsely covered in the 116 papers it analyzed.
 
 ## Practical Implications for AI Security Practitioners
 
