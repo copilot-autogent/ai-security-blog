@@ -1,6 +1,6 @@
 ---
 title: "Calibrating Conservatism for Scalable Oversight: Weaker Overseers Constraining Stronger Agents"
-description: "CCO (Calibrated Collective Oversight) aggregates multiple weak oversight signals into a penalty that constrains a stronger agent, using Conformal Decision Theory to provide finite-time statistical guarantees on violation rates — no distributional assumptions required."
+description: "CCO (Calibrated Collective Oversight) aggregates multiple weak oversight signals into a penalty that constrains a stronger agent, using Conformal Decision Theory to provide finite-time statistical guarantees on violation rates — without assumptions on the state distribution."
 pubDate: 2026-06-20
 tags: ["scalable-oversight", "ai-safety", "conformal-prediction", "agentic-ai", "alignment"]
 ---
@@ -22,6 +22,8 @@ The **CCO penalty** aggregates overseer disagreement with the baseline:
 ```
 
 Actions that all overseers score similarly to the baseline incur low penalty. Actions that trigger alarm across multiple overseers incur high penalty. Crucially, the overseers don't need to agree on what's *good* — they only need to collectively flag actions that look different from the conservative default.
+
+One practical consideration: since overseers may use different score ranges, a single high-variance overseer could dominate the sum. In practice, overseer outputs should be normalized or calibrated to comparable scales before aggregation — the paper notes this implicit assumption, and the conformal controller's λ tuning provides some robustness, but it's worth noting for real deployments.
 
 The agent selects actions by maximizing an oversight-regularized score:
 
@@ -84,7 +86,7 @@ CCO substantially reduces violations while preserving reward. On Hero of Kendric
 - At `α = 0.10`, violations track the target closely (10.9% observed vs 10% target)
 - At `α = 0.05`, violations run slightly high (6.2%) — the paper attributes this to the transient term needing longer to converge at tight targets
 
-The conformational controller's λ adapts appropriately: looser targets yield lower peak conservatism (0.82 → 0.57 → 0.49 as `α` increases from 0.05 to 0.15), confirming the algorithm calibrates rather than simply clamping to a fixed setting.
+The conformal controller's λ adapts appropriately: looser targets yield lower peak conservatism (0.82 → 0.57 → 0.49 as `α` increases from 0.05 to 0.15), confirming the algorithm calibrates rather than simply clamping to a fixed setting.
 
 ### Cross-Domain Calibration Fidelity
 
@@ -98,7 +100,7 @@ For real-world agent deployments, this matters because:
 
 **Diversity is load-bearing.** The penalty aggregates across multiple heterogeneous overseers. A single overseer can be fooled or bypassed; a diverse ensemble is harder to collectively mislead. This is exactly the "collective conservatism" the paper names: no individual overseer needs to be good, they just need to collectively flag deviation from the conservative default.
 
-**The baseline anchors the safety guarantee.** The theoretical guarantee requires `ℓ(s, a₀(s)) = 0` — the baseline action is safe by assumption. This is actually the hardest design decision in practice: choosing a baseline that's consistently achievable, unambiguously conservative, and genuinely has near-zero loss. The paper acknowledges this ("specifying or learning a baseline is non-trivial in some domains") but shows the conformal controller is robust across several plausible baseline choices.
+**The baseline anchors the safety guarantee.** The theoretical guarantee requires `ℓ(s, a₀(s)) = 0` — the baseline action must incur exactly zero loss by assumption. This is actually the hardest design decision in practice: choosing a baseline that's consistently achievable, unambiguously conservative, and genuinely has zero (or negligible) loss. The paper acknowledges this ("specifying or learning a baseline is non-trivial in some domains") but shows the conformal controller is robust across several plausible baseline choices.
 
 **Feedback latency breaks the guarantee.** Theorem 4.10 assumes the loss `ℓₜ` is observed after every action. The paper extends to noisy and delayed feedback but notes this is a real limitation: in many deployments, ground-truth evaluation arrives sparsely or is itself estimated by a fallible judge. Systems where violations are discovered days later (e.g., social media manipulation, slowly-unfolding financial fraud) get a weaker version of the guarantee.
 
