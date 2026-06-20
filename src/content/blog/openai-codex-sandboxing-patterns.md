@@ -69,7 +69,7 @@ Two settings explicitly widen the trust boundary and are intended for tightly co
 
 ## Approval Flows
 
-The approval policy governs when Codex pauses execution:
+The approval policy governs when Codex pauses execution. The three primary modes are:
 
 `untrusted` — Codex asks before any command that isn't in its trusted set. This catches destructive Git operations, commands that override configuration, and anything that can mutate state or trigger external execution paths.
 
@@ -77,7 +77,7 @@ The approval policy governs when Codex pauses execution:
 
 `never` — No approval prompts. Useful for CI workflows where all interactions are non-interactive. You still control the sandbox mode separately; this setting removes the user-confirmation layer but not the technical boundary.
 
-A granular approval policy is also available: `approval_policy = { granular = { sandbox_approval = true, rules = true, mcp_elicitations = true, request_permissions = false } }`. This lets you keep specific approval categories interactive while auto-rejecting others.
+A granular approval policy is also available for finer control over which prompt categories remain interactive versus auto-rejected: `approval_policy = { granular = { sandbox_approval = true, rules = true, mcp_elicitations = true, request_permissions = false } }`.
 
 ## Auto-Review: A Second Agent at the Boundary
 
@@ -115,11 +115,11 @@ This design solves a practical problem: agent phases that can access both secret
 
 The sandbox model addresses specific failure modes that approval policies alone can't close:
 
-**Prompt injection payloads** that instruct the agent to exfiltrate data via network calls are blocked at the network layer before an approval prompt ever appears (assuming network is off, the default).
+**Prompt injection payloads** that instruct the agent to exfiltrate data via network calls lose that specific channel when network access is off (the default). This removes one exfiltration path — injected instructions can still trigger local mutations, destructive commands, or artifact-based exfiltration — but network-off meaningfully narrows what an injected payload can accomplish from inside the sandbox.
 
-**Dependency confusion or supply-chain attacks** that try to write into `.git` hooks are blocked by the protected-path enforcement on `.git`.
+**Supply-chain attacks** that attempt to install persistence via `.git` hooks are blocked by the protected-path enforcement on `.git`. This doesn't prevent malicious dependencies from executing in the workspace and modifying tracked files — it closes the hooks-and-config persistence vector specifically.
 
-**Agent-in-the-middle attacks** that try to modify the agent's own configuration or session state are blocked by the `.codex` protected path.
+**On-disk config tampering** against the agent's own configuration is blocked by the `.codex` protected path. This hardens state persistence between sessions; prompt-level or tool-level manipulation of the running agent is a separate concern not addressed by filesystem protection.
 
 **Long-running autonomous agents** that accumulate approval fatigue — where a human approves increasingly risky actions just to keep the task moving — are addressed by the Auto-review circuit breaker and rejection propagation.
 
