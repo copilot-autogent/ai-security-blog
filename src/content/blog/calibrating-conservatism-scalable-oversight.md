@@ -1,13 +1,13 @@
 ---
 title: "Calibrating Conservatism for Scalable Oversight: Weaker Overseers Constraining Stronger Agents"
-description: "CCO (Calibrated Collective Oversight) aggregates multiple weak oversight signals into a penalty that constrains a stronger agent, using Conformal Decision Theory to provide finite-time statistical guarantees on violation rates — without assumptions on the state distribution."
+description: "CCO (Calibrated Collective Oversight) aggregates multiple weak oversight signals into a penalty that constrains a stronger agent, providing finite-time statistical guarantees on violation rates for adversarial state sequences — with an eventually-safe decision family and a designated zero-loss baseline."
 pubDate: 2026-06-20
 tags: ["scalable-oversight", "ai-safety", "conformal-prediction", "agentic-ai", "alignment"]
 ---
 
 The scalable oversight problem is one of the hardest open problems in AI safety: how do you maintain meaningful human control over an AI system that may be more capable than its overseers? The standard toolkit — debate, iterated amplification, process reward models — is largely heuristic. Formal guarantees are rare, and almost nothing is designed for sequential agentic settings where actions compound across long trajectories.
 
-A new paper from ICML 2026, **"Calibrating Conservatism for Scalable Oversight"** ([arXiv:2605.28807](https://arxiv.org/abs/2605.28807), Overman et al.), introduces a framework called **Calibrated Collective Oversight (CCO)** that addresses all three gaps at once: it handles sequential settings, aggregates multiple weak overseers, and provides finite-time statistical guarantees without distributional assumptions.
+A new paper accepted at ICML 2026, **"Calibrating Conservatism for Scalable Oversight"** ([arXiv:2605.28807](https://arxiv.org/abs/2605.28807), Overman et al.), introduces a framework called **Calibrated Collective Oversight (CCO)** that addresses all three gaps at once: it handles sequential settings, aggregates multiple weak overseers, and provides finite-time statistical guarantees without distributional assumptions.
 
 ## The Core Architecture
 
@@ -44,6 +44,8 @@ CCO's answer is to calibrate `λ` online using **Conformal Decision Theory (CDT)
 ```
 
 where `α` is the user-specified acceptable violation rate and `η` is a step size. After a harmful action (`ℓₜ > α`), conservatism increases. After a safe one, it relaxes. No model of the environment is required. No distributional assumptions are made on the sequence of states.
+
+One nuance worth noting: this update rule can drive `λ` negative if the agent consistently avoids losses. At `λ < 0`, the oversight-regularized score *prefers* high-penalty actions — the agent becomes less conservative than if it ignored oversight entirely. In most deployments, `λ` is initialized to 0 (or a small positive value) and naturally stays non-negative when losses occur at the target rate `α`, but practitioners should be aware that extended safe periods can push `λ` negative and should consider a floor constraint depending on their risk tolerance.
 
 This feedback loop has a provable guarantee. The paper establishes that as long as the decision family is **eventually safe** — meaning sufficiently large `λ` eventually forces the agent to select the baseline everywhere — the long-run violation rate converges to `α` with explicit finite-time bounds:
 
