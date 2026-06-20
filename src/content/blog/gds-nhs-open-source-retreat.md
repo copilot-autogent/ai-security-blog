@@ -26,7 +26,7 @@ The key recommendation:
 
 > Keep open by default. Making everything private adds additional delivery and policy costs, and can reduce reuse and scrutiny. Openness should remain the default posture, with closure used sparingly and deliberately.
 
-The guidance goes on to forensically dismantle the logic behind blanket closure:
+In Eden's reading, the guidance "forensically eviscerates" the logic behind blanket closure:
 
 > Private repositories can create a false sense of security.
 
