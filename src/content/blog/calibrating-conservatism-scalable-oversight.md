@@ -7,7 +7,7 @@ tags: ["scalable-oversight", "ai-safety", "conformal-prediction", "agentic-ai", 
 
 The scalable oversight problem is one of the hardest open problems in AI safety: how do you maintain meaningful human control over an AI system that may be more capable than its overseers? The standard toolkit — debate, iterated amplification, process reward models — is largely heuristic. Formal guarantees are rare, and almost nothing is designed for sequential agentic settings where actions compound across long trajectories.
 
-A new paper accepted at ICML 2026, **"Calibrating Conservatism for Scalable Oversight"** ([arXiv:2605.28807](https://arxiv.org/abs/2605.28807), Overman et al.), introduces a framework called **Calibrated Collective Oversight (CCO)** that addresses all three gaps at once: it handles sequential settings, aggregates multiple weak overseers, and provides finite-time statistical guarantees without distributional assumptions.
+A paper submitted to ICML 2026, **"Calibrating Conservatism for Scalable Oversight"** ([arXiv:2605.28807](https://arxiv.org/abs/2605.28807), Overman et al.), introduces a framework called **Calibrated Collective Oversight (CCO)** that addresses all three gaps at once: it handles sequential settings, aggregates multiple weak overseers, and provides finite-time statistical guarantees without distributional assumptions.
 
 ## The Core Architecture
 
@@ -45,7 +45,7 @@ CCO's answer is to calibrate `λ` online using **Conformal Decision Theory (CDT)
 
 where `α` is the user-specified acceptable violation rate and `η` is a step size. After a harmful action (`ℓₜ > α`), conservatism increases. After a safe one, it relaxes. No model of the environment is required. No distributional assumptions are made on the sequence of states.
 
-One nuance worth noting: this update rule can drive `λ` negative if the agent consistently avoids losses. At `λ < 0`, the oversight-regularized score *prefers* high-penalty actions — the agent becomes less conservative than if it ignored oversight entirely. In most deployments, `λ` is initialized to 0 (or a small positive value) and naturally stays non-negative when losses occur at the target rate `α`, but practitioners should be aware that extended safe periods can push `λ` negative and should consider a floor constraint depending on their risk tolerance.
+One nuance worth noting: this update rule can drive `λ` negative if the agent consistently avoids losses. At `λ < 0`, the oversight-regularized score *prefers* high-penalty actions — the agent becomes less conservative than if it ignored oversight entirely. The CDT theorem's guarantee only addresses the upper bound on violations; practitioners should be aware that extended safe periods can push `λ` negative, allowing the agent to take higher-penalty actions during those windows.
 
 This feedback loop has a provable guarantee. The paper establishes that as long as the decision family is **eventually safe** — meaning sufficiently large `λ` eventually forces the agent to select the baseline everywhere — the long-run violation rate converges to `α` with explicit finite-time bounds:
 
@@ -53,7 +53,7 @@ This feedback loop has a provable guarantee. The paper establishes that as long 
 R̂ₜ ≤ α + ((λ̄ − λ₀)/η + 1) / (t + 1)
 ```
 
-The bound holds for **arbitrary, even adversarial, state sequences**. No i.i.d. assumption. No stationarity. The guarantee degrades gracefully with the initial calibration gap `λ̄ − λ₀` and step size `η`, and it converges at `1/t` rate.
+where `λ̄` is the minimum conservatism threshold beyond which the agent always selects the baseline (a finite constant that exists by the eventual-safety lemma). The bound holds for **arbitrary, even adversarial, state sequences**. No i.i.d. assumption. No stationarity. The guarantee degrades gracefully with the initial calibration gap `λ̄ − λ₀` and step size `η`, and it converges at `1/t` rate.
 
 ## Intellectual Lineage
 
@@ -102,7 +102,7 @@ For real-world agent deployments, this matters because:
 
 **Diversity is load-bearing.** The penalty aggregates across multiple heterogeneous overseers. A single overseer can be fooled or bypassed; a diverse ensemble is harder to collectively mislead. This is exactly the "collective conservatism" the paper names: no individual overseer needs to be good, they just need to collectively flag deviation from the conservative default.
 
-**The baseline anchors the safety guarantee.** The theoretical guarantee requires `ℓ(s, a₀(s)) = 0` — the baseline action must incur exactly zero loss by assumption. This is actually the hardest design decision in practice: choosing a baseline that's consistently achievable, unambiguously conservative, and genuinely has zero (or negligible) loss. The paper acknowledges this ("specifying or learning a baseline is non-trivial in some domains") but shows the conformal controller is robust across several plausible baseline choices.
+**The baseline anchors the safety guarantee.** The theoretical guarantee requires `ℓ(s, a₀(s)) = 0` — the baseline action must incur **exactly** zero loss by assumption. This is actually the hardest design decision in practice: choosing a baseline that's consistently achievable, unambiguously conservative, and genuinely has zero loss. The paper acknowledges this ("specifying or learning a baseline is non-trivial in some domains") but shows the conformal controller is robust across several plausible baseline choices.
 
 **Feedback latency breaks the guarantee.** Theorem 4.10 assumes the loss `ℓₜ` is observed after every action. The paper extends to noisy and delayed feedback but notes this is a real limitation: in many deployments, ground-truth evaluation arrives sparsely or is itself estimated by a fallible judge. Systems where violations are discovered days later (e.g., social media manipulation, slowly-unfolding financial fraud) get a weaker version of the guarantee.
 
