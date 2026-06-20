@@ -1,6 +1,6 @@
 ---
 title: "When AI Finds Your Bugs, Should You Hide the Code?"
-description: "The UK's Government Digital Service published guidance so pointed that civil servants read it as a public rebuke of NHS England's decision to close nearly 200 open-source repositories in response to AI-assisted vulnerability discovery. What this dispute reveals about a wider security misunderstanding."
+description: "The UK's Government Digital Service published guidance that Terence Eden — who helped craft the NHS's original open-source policies — read as a pointed public rebuke of NHS England's decision to close nearly 200 open-source repositories in response to AI-assisted vulnerability discovery. What this dispute reveals about a wider security misunderstanding."
 pubDate: 2026-06-20
 tags: ["open-source", "vulnerability-disclosure", "government", "ai-security", "supply-chain"]
 featured: false
@@ -38,7 +38,7 @@ The UK Civil Service has its own vocabulary for public disagreements. Eden trans
 
 ## The Security Argument GDS Is Actually Making
 
-The guidance goes on to acknowledge that AI does change the threat landscape, at least at the margins. It cites the UK AI Security Institute's December 2025 [frontier AI trends report](https://www.aisi.gov.uk/frontier-ai-trends-report) and a [April 2026 AISI evaluation of Claude Mythos Preview's cyber capabilities](https://www.aisi.gov.uk/blog/our-evaluation-of-claude-mythos-previews-cyber-capabilities):
+The guidance goes on to acknowledge that AI does change the threat landscape, at least at the margins. It cites the UK AI Security Institute's December 2025 [frontier AI trends report](https://www.aisi.gov.uk/frontier-ai-trends-report) and an [April 2026 AISI evaluation of Claude Mythos Preview's cyber capabilities](https://www.aisi.gov.uk/blog/our-evaluation-of-claude-mythos-previews-cyber-capabilities):
 
 > AI-assisted software analysis is improving quickly... The implication for departments is a shorter window between discovery and exploitation.
 
