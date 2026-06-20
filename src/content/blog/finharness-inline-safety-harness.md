@@ -1,6 +1,6 @@
 ---
 title: "FinHarness: Multi-tier Inline Safety Harness for Finance LLM Agents"
-description: "FinHarness wraps finance agents end-to-end with a Query Monitor, Tool Monitor, and adaptive Cascade judge — cutting attack success rate from 38.3% to 15.0% while preserving legitimate workflow approval."
+description: "FinHarness wraps finance agents end-to-end with a Query Monitor, Tool Monitor, and adaptive Cascade judge — cutting attack success rate from 38.3% to 15.0% while keeping benign approval at 39.3%."
 pubDate: 2026-06-20
 tags: ["agent-safety", "finance", "llm-guardrails", "prompt-injection", "inline-monitoring"]
 ---
@@ -37,7 +37,7 @@ The Query Monitor runs *without any LLM calls* — it uses deterministic complia
 
 The Monitor maintains a **session-level query risk cumulant** with gravity decay. If no strong structural drift has ever fired, the cumulant decays between turns (rate 0.7), so isolated weak signals fade. Once a strong structural signal fires, the cumulant persists indefinitely — the session is flagged and stays flagged.
 
-When the cumulant crosses thresholds, the Monitor emits one of four advisory labels: `unsafe` (≥0.5), `uncertain` (0.25–0.5), `safe` (≤0.1), or a dead zone (⊥) where signals are too weak to label but too non-zero to clear. Advisory labels are injected into the agent's system prompt as *evidence* — e.g., `[turn k fired: Q4_coercion(0.85), D1_false_reference(0.85)]` — not as verdicts. The agent retains autonomy to refuse, re-plan, or approve based on this evidence.
+When the cumulant crosses thresholds, the Monitor emits one of four advisory labels: `unsafe` (≥0.5), `uncertain` (0.25–<0.5), `safe` (≤0.1), or a dead zone (⊥) where signals are too weak to label but too non-zero to clear. Advisory labels are injected into the agent's system prompt as *evidence* — e.g., `[turn k fired: Q4_coercion(0.85), D1_false_reference(0.85)]` — not as verdicts. The agent retains autonomy to refuse, re-plan, or approve based on this evidence.
 
 ### Tool Monitor
 
@@ -105,7 +105,7 @@ The inline architecture is the paper's conceptual contribution. The specific thr
 
 Three features of the design suggest it might:
 
-1. **The risk cumulant model is domain-agnostic.** The specific priors are finance-specific, but the pattern — fuse per-turn intent scores with session-level drift, maintain a cumulant, emit advisories — works for any domain with a compliance taxonomy. Healthcare agents, legal agents, and infrastructure agents all have analogous tool-permission hierarchies.
+1. **The risk cumulant model is domain-agnostic in structure.** The specific priors are finance-specific, but the pattern — fuse per-turn intent scores with session-level drift, maintain a cumulant, emit advisories — is applicable to any domain with a compliance taxonomy. Healthcare agents, legal agents, and infrastructure agents all have analogous tool-permission hierarchies (though FinVault evidence doesn't directly validate this; it's a design extrapolation).
 
 2. **Evidence injection works because agents can reason about evidence.** The agent-initiated refusal gain isn't a FinHarness quirk — it reflects that modern LLMs are capable of refusing actions when given structured risk evidence. Any harness that frames risk as evidence rather than verdict probably gets this lift.
 
