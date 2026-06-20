@@ -51,9 +51,9 @@ The Cascade module is where the cost/accuracy tradeoff gets solved.
 
 A **Risk Window** maintains the sum of per-step risk scores over a sliding window of the last five steps (W=5, threshold θ=1.0). When the window sum doesn't exceed the threshold, the step goes to the **cheap-tier judge** (gpt-4o-mini). When it does, it escalates to the **advanced-tier judge** (gpt-4o). The two tiers are mutually exclusive — at most one additional judge call per step (the protected agent's own model calls are separate).
 
-A **Selective Episodic Memory** retrieves at most two prior steps for the judge's context, using two complementary selectors: the highest-risk recent step (risk-salience), and the step most similar to the current one in terms of semantic content and entity overlap (collusion detection). This bounds the judge's context window to a fixed size regardless of trajectory length — judge prompt cost is constant, independent of how long the trajectory grows (though the selectors themselves scan recent history to pick the two steps).
+A **Selective Episodic Memory** retrieves at most two prior steps for the judge's context, using two complementary selectors: the highest-risk recent step (risk-salience), and the step most similar to the current one in terms of semantic content and entity overlap (collusion detection). This caps the judge's input context at a bounded size regardless of how long the trajectory grows — the judge sees at most two recalled steps plus the current step, not the full history.
 
-Fired risk signals from all three components are **re-injected into the agent input as ex-ante evidence** before the judge verdict is returned. This is what enables *agent-initiated self-rejection*: the agent sees the evidence, and can refuse or re-plan autonomously, rather than being hard-blocked by the harness.
+Fired risk signals from the Query Monitor and Tool Monitor are **re-injected into the agent input as ex-ante evidence** before the judge call is made. The judge verdict is then forwarded to the agent as additional feedback. This is what enables *agent-initiated self-rejection*: the agent sees the risk evidence and can refuse or re-plan autonomously, rather than being hard-blocked by the harness.
 
 ## Results on FinVault
 
