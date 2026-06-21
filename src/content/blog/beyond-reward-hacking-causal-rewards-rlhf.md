@@ -1,13 +1,13 @@
 ---
 title: "Beyond Reward Hacking: Why RLHF's Biases Are Irreducible — and a Causal Fix"
-description: "Wang et al. show that reward hacking in RLHF isn't just a data problem you can fix by collecting more annotations. The biases are structurally irreducible. Their causal reward modeling approach uses counterfactual invariance to address the root cause rather than its symptoms."
+description: "Wang et al. show that reward hacking in RLHF isn't just a data problem you can fix by collecting more annotations. The biases are structurally irreducible. Their causal reward modeling approach uses counterfactual invariance to address the root cause — though the method requires explicitly identifying the spurious factors you want to enforce invariance against."
 pubDate: 2026-06-21
 tags: ["alignment", "rlhf", "reward-hacking", "threat-modeling", "training-security"]
 ---
 
 There's a standard response to the reward hacking problem in RLHF: collect better data, collect more data, or train a larger reward model. A paper from Wang et al. at Meta and University of Chicago ([arXiv:2501.09620](https://arxiv.org/abs/2501.09620)) makes a precise argument for why that intuition is wrong — not in principle, but mathematically. The biases that cause reward hacking belong to the *irreducible* component of reward model error. More data doesn't fix irreducible error. It can make it worse.
 
-The paper's contribution is a **Causal Reward Model (CRM)** that addresses the problem at the right level: not by filtering or augmenting data, not by penalizing specific known biases, but by building counterfactual invariance directly into reward model training. The result is a drop-in enhancement to standard RLHF pipelines that demonstrably mitigates length bias, sycophancy, concept bias, and discrimination bias simultaneously — without requiring you to know in advance which spurious correlations are present.
+The paper's contribution is a **Causal Reward Model (CRM)** that addresses the problem at the right level: not by filtering or augmenting data, not by penalizing specific known biases, but by building counterfactual invariance directly into reward model training. For the spurious factors you can identify and operationalize as counterfactual perturbations, the method provides a single unified mechanism — rather than requiring a separate fix for each bias type.
 
 ## The Irreducibility Problem
 
@@ -43,7 +43,7 @@ The paper's key theoretical insight is to address spurious correlations through 
 
 Formally, a reward model *r* is counterfactually invariant to a spurious variable *Z* if *r(T(z)) = r(T(z'))* for all values *z* and *z'* of *Z*, where *T(z)* denotes a prompt-response pair with the spurious factor set to value *z*. 
 
-Concretely: a reward model with counterfactual invariance to length would assign the same reward to two versions of the same response — one verbatim, one truncated — because the content quality hasn't changed. Changing response length (the spurious factor) shouldn't change the reward prediction if length is truly irrelevant to preference.
+Concretely: a reward model with counterfactual invariance to length would assign the same reward to two versions of the same response — one with verbose transitional phrases intact, one with them stripped while preserving the informational content — because the substantive quality hasn't changed. Varying response length by adding or removing filler and padding (the spurious factor) shouldn't change the reward prediction if that padding is genuinely irrelevant to preference.
 
 This formalization is useful because it converts an abstract goal ("don't learn spurious correlations") into a concrete training objective. The paper implements it as a **causal regularization term** added to the standard RLHF reward model loss:
 
