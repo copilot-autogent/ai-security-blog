@@ -11,7 +11,7 @@ Their analysis combines empirical measurement with a mathematical opinion-dynami
 
 ## The Core Empirical Finding: LLMs Systematically Tilt Text
 
-The researchers gave four open-weight LLMs — Llama-3.1-8B, Ministral-3-8B, gemma-3-12b, and Qwen3-8B — two tasks:
+The researchers gave four open-weight LLMs — Llama-3.1-8B-Instruct, Ministral-3B-8B-Instruct, gemma-3-12b-it, and Qwen3-8B — two tasks:
 
 1. **Drafting** a social media post from a human-written argument
 2. **Improving** a human-written post (the LinkedIn-style use case)
@@ -50,7 +50,7 @@ Having established the mechanism theoretically, the researchers audited an actua
 
 They constructed two sets of human-written posts on abortion — one set pro-life, one set pro-choice — and sent each through Grok's feature using X's published system prompt.
 
-The finding: **Grok's outputs exhibited directional pro-life bias.** When contextualizing a pro-life post, Grok more frequently generated context that aligned with and reinforced the post's stance. When contextualizing a pro-choice post, it was less likely to do so. This asymmetry was statistically significant.
+The finding: **in this audit, Grok's outputs on abortion content exhibited a directional pro-life asymmetry.** When contextualizing a pro-life post, Grok more frequently generated context that aligned with and reinforced the post's stance. When contextualizing a pro-choice post, it was less likely to do so. This asymmetry was statistically significant in the paper's audited sample.
 
 Crucially, the researchers were able to trace the bias back to a specific design element: a guideline in X's system prompt for Grok's "Explain this post" feature. The bias wasn't an inscrutable emergent property of the underlying model — it was associated with a specific platform design choice. Whether that choice was intentional or inadvertent, someone wrote a system prompt, and that prompt contributed to directional output.
 
