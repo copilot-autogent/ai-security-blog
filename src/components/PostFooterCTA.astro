@@ -159,31 +159,41 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
 
 <script>
   function initCopyLink() {
-    const btn = document.querySelector<HTMLButtonElement>(".copy-link-btn");
-    if (!btn) return;
-    const url = btn.dataset.url ?? window.location.href;
-    const iconLink = btn.querySelector<SVGElement>(".icon-link");
-    const iconCheck = btn.querySelector<SVGElement>(".icon-check");
-    const label = btn.querySelector<HTMLElement>(".copy-link-label");
+    const buttons = document.querySelectorAll<HTMLButtonElement>(".copy-link-btn");
+    buttons.forEach((btn) => {
+      // Avoid double-binding if already initialized (e.g., View Transitions re-run)
+      if (btn.dataset.initialized) return;
+      btn.dataset.initialized = "1";
 
-    btn.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(url);
-        if (iconLink) iconLink.style.display = "none";
-        if (iconCheck) iconCheck.style.display = "";
-        if (label) label.textContent = "Copied!";
-        setTimeout(() => {
-          if (iconLink) iconLink.style.display = "";
-          if (iconCheck) iconCheck.style.display = "none";
-          if (label) label.textContent = "Copy link";
-        }, 2000);
-      } catch {
-        // Fallback: select text via prompt (rare; most browsers support clipboard API)
-        window.prompt("Copy this link:", url);
-      }
+      const iconLink = btn.querySelector<SVGElement>(".icon-link");
+      const iconCheck = btn.querySelector<SVGElement>(".icon-check");
+      const label = btn.querySelector<HTMLElement>(".copy-link-label");
+      let resetTimer: ReturnType<typeof setTimeout> | undefined;
+
+      btn.addEventListener("click", async () => {
+        const url = btn.dataset.url ?? window.location.href;
+        try {
+          await navigator.clipboard.writeText(url);
+          // Cancel any in-flight reset before updating UI
+          if (resetTimer !== undefined) clearTimeout(resetTimer);
+          if (iconLink) iconLink.style.display = "none";
+          if (iconCheck) iconCheck.style.display = "";
+          if (label) label.textContent = "Copied!";
+          resetTimer = setTimeout(() => {
+            if (iconLink) iconLink.style.display = "";
+            if (iconCheck) iconCheck.style.display = "none";
+            if (label) label.textContent = "Copy link";
+            resetTimer = undefined;
+          }, 2000);
+        } catch {
+          window.prompt("Copy this link:", url);
+        }
+      });
     });
   }
 
-  // Runs on initial load and after Astro View Transitions navigation
-  document.addEventListener("astro:page-load", initCopyLink);
+  // Runs immediately (module scripts are deferred, so DOM is ready)
+  initCopyLink();
+  // Also handles Astro View Transitions navigation if enabled in future
+  document.addEventListener("astro:page-load", () => initCopyLink());
 </script>
