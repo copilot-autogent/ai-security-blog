@@ -41,7 +41,7 @@ Claude Code launched with approval prompts as the primary defense: reads were al
 
 What Anthropic's telemetry revealed within weeks: users approved roughly 93% of permission prompts. Approval fatigue set in quickly. A control designed to provide oversight could — in the limit — create a false sense of security while offering almost none in practice.
 
-Anthropic's response was to ship an OS-level sandbox beneath the approval layer. On macOS it uses Apple's Seatbelt framework via `sandbox-exec`. On Linux it uses bubblewrap (`bwrap`) combined with seccomp BPF filters. Within that sandbox, reads are allowed, writes are permitted inside the workspace, and network access is blocked by default. Routine operations happen without interruption; only genuine exceptions reach the approval dialog. The result was an 84% reduction in permission prompts, and Anthropic open-sourced the runtime so the boundary is auditable.
+Anthropic's response was to ship an OS-level sandbox beneath the approval layer. On macOS it uses Apple's Seatbelt framework via `sandbox-exec` (as documented in Anthropic's engineering post; the `sandbox-exec` API has been informally deprecated by Apple but remains in use for this application). On Linux it uses bubblewrap (`bwrap`) combined with seccomp BPF filters. Within that sandbox, reads are allowed, writes are permitted inside the workspace, and network access is blocked by default. Routine operations happen without interruption; only genuine exceptions reach the approval dialog. The result was an 84% reduction in permission prompts, and Anthropic open-sourced the runtime so the boundary is auditable.
 
 Readers who've reviewed the [Codex sandboxing post](/blog/openai-codex-sandboxing-patterns) will notice the immediate parallel: OpenAI's Codex also uses Seatbelt on macOS and bubblewrap on Linux, enforcing the same read/workspace-write/network-deny defaults. Both products converged independently on the same OS-native primitives. This convergence is informative — these primitives are well-audited, production-hardened, and available without custom work. For teams building similar systems, the clear signal is to use them rather than roll alternatives.
 
@@ -89,7 +89,7 @@ The two companies have approached coding agent sandboxing with striking similari
 
 Both use Seatbelt (macOS) and bubblewrap (Linux) as the enforcement primitives for local code execution. Both permit workspace writes while blocking network access by default. Both recognized approval fatigue as a real failure mode for user-mediated controls. Both open-sourced their sandbox runtimes.
 
-Where they differ is in how they handle the privileged outer process. Codex has an explicit multi-mode sandbox system with defined levels (`read-only`, `workspace-write`, `danger-full-access`) and a per-command approval mechanism controlled from outside the sandbox. Claude Code started with per-action approvals and layered a sandbox beneath them; auto mode has since delegated approvals to a model-based classifier that blocks about 0.4% of benign commands while catching the majority of overeager ones.
+Where they differ is in how they handle the privileged outer process. Codex has an explicit multi-mode sandbox system with defined levels (`read-only`, `workspace-write`, `danger-full-access`) and a per-command approval mechanism controlled from outside the sandbox. Claude Code started with per-action approvals and layered a sandbox beneath them; auto mode has since delegated approvals to a model-based classifier that blocks about 0.4% of benign commands while catching the majority of overeager ones (both figures from Anthropic's engineering documentation on Claude Code auto mode).
 
 For non-developer users, Anthropic chose the full VM route. OpenAI's equivalent product for non-technical general work isn't directly comparable, but the principle Anthropic articulated is broadly applicable: if the user cannot evaluate what an agent is about to do, the control must be absolute rather than advisory.
 
@@ -98,7 +98,7 @@ For non-developer users, Anthropic chose the full VM route. OpenAI's equivalent 
 | **Enforcement** | gVisor (server-side) | Seatbelt / bubblewrap | Hypervisor VM | Seatbelt / bubblewrap |
 | **Filesystem** | Ephemeral, server-only | Workspace writes | Mounted folders | Workspace writes |
 | **Network default** | Server-controlled | Blocked | Blocked (egress list) | Blocked |
-| **Outer privilege process** | N/A | Yes (guard) | No (original) / Yes (current) | Yes (guard) |
+| **Outer privilege process** | N/A | Yes (guard) | No (original) / Yes, host-side agent loop (current, scoped to code dispatch only — no sandbox escape key) | Yes (guard) |
 | **User evaluation required** | No | Yes (developer) | No | Yes (developer) |
 
 ## Emerging Threat Classes
