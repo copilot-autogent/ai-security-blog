@@ -1,0 +1,189 @@
+---
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Construct canonical URL for sharing
+const canonicalUrl = Astro.site
+  ? new URL(Astro.url.pathname, Astro.site).href
+  : Astro.url.href;
+
+const shareText = encodeURIComponent(title);
+const shareUrl = encodeURIComponent(canonicalUrl);
+
+const twitterHref = `https://twitter.com/intent/tweet?url=${shareUrl}&text=${shareText}`;
+const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`;
+---
+
+<div class="post-footer-cta" data-pagefind-ignore>
+  <a href={`${base}/blog/`} class="back-btn">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M19 12H5"/><path d="m12 5-7 7 7 7"/>
+    </svg>
+    Back to all posts
+  </a>
+
+  <div class="share-row">
+    <span class="share-label">Share</span>
+    <a
+      href={twitterHref}
+      class="share-btn"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Share on X (Twitter)"
+      title="Share on X"
+    >
+      <!-- X / Twitter icon -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+      </svg>
+      <span class="share-btn-label">X</span>
+    </a>
+    <a
+      href={linkedInHref}
+      class="share-btn"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Share on LinkedIn"
+      title="Share on LinkedIn"
+    >
+      <!-- LinkedIn icon -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+      </svg>
+      <span class="share-btn-label">LinkedIn</span>
+    </a>
+    <button
+      class="share-btn copy-link-btn"
+      type="button"
+      data-url={canonicalUrl}
+      aria-label="Copy link to clipboard"
+      title="Copy link"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon-link">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+      </svg>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon-check" style="display:none">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      <span class="share-btn-label copy-link-label">Copy link</span>
+    </button>
+  </div>
+</div>
+
+<style>
+  .post-footer-cta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+    margin: 2.5em 0 0;
+    padding: 1.5em 0 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    background: var(--accent);
+    color: var(--bg);
+    font-weight: 600;
+    font-size: 0.9em;
+    padding: 0.55em 1.1em;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+    white-space: nowrap;
+  }
+  .back-btn:hover {
+    opacity: 0.85;
+    color: var(--bg);
+  }
+
+  .share-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+  }
+
+  .share-label {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 0.25em;
+  }
+
+  .share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    padding: 0.45em 0.85em;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    text-decoration: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+  }
+  .share-btn:hover {
+    color: var(--text-bright);
+    border-color: var(--accent);
+    background: var(--bg-surface);
+  }
+
+  @media (max-width: 520px) {
+    .post-footer-cta {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .share-btn-label {
+      display: none;
+    }
+    .share-btn {
+      padding: 0.5em 0.65em;
+    }
+  }
+</style>
+
+<script>
+  function initCopyLink() {
+    const btn = document.querySelector<HTMLButtonElement>(".copy-link-btn");
+    if (!btn) return;
+    const url = btn.dataset.url ?? window.location.href;
+    const iconLink = btn.querySelector<SVGElement>(".icon-link");
+    const iconCheck = btn.querySelector<SVGElement>(".icon-check");
+    const label = btn.querySelector<HTMLElement>(".copy-link-label");
+
+    btn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(url);
+        if (iconLink) iconLink.style.display = "none";
+        if (iconCheck) iconCheck.style.display = "";
+        if (label) label.textContent = "Copied!";
+        setTimeout(() => {
+          if (iconLink) iconLink.style.display = "";
+          if (iconCheck) iconCheck.style.display = "none";
+          if (label) label.textContent = "Copy link";
+        }, 2000);
+      } catch {
+        // Fallback: select text via prompt (rare; most browsers support clipboard API)
+        window.prompt("Copy this link:", url);
+      }
+    });
+  }
+
+  // Runs on initial load and after Astro View Transitions navigation
+  document.addEventListener("astro:page-load", initCopyLink);
+</script>
