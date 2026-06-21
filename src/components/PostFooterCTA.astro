@@ -6,7 +6,10 @@ interface Props {
 const { title } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-// Construct canonical URL for sharing
+// `site` is required in astro.config.mjs for this project (set to
+// https://copilot-autogent.github.io), so the fallback branch below
+// is unreachable in production. It is kept as a safety net for
+// contributors running with a different config.
 const canonicalUrl = Astro.site
   ? new URL(Astro.url.pathname, Astro.site).href
   : Astro.url.href;
@@ -59,7 +62,6 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
     <button
       class="share-btn copy-link-btn"
       type="button"
-      data-url={canonicalUrl}
       aria-label="Copy link to clipboard"
       title="Copy link"
     >
@@ -72,9 +74,12 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
       <span class="share-btn-label copy-link-label">Copy link</span>
     </button>
   </div>
+
+  <!-- Visually hidden live region — announces copy confirmation to screen readers.
+       Kept inside the root div so closest(".post-footer-cta").querySelector scoping works
+       correctly even if multiple component instances are ever rendered on one page. -->
+  <div role="status" aria-live="polite" class="sr-copy-status" aria-atomic="true"></div>
 </div>
-<!-- Visually hidden live region — announces copy confirmation to screen readers -->
-<div role="status" aria-live="polite" class="sr-copy-status" aria-atomic="true"></div>
 
 <style>
   .post-footer-cta {
@@ -183,9 +188,9 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
       const iconLink = btn.querySelector<SVGElement>(".icon-link");
       const iconCheck = btn.querySelector<SVGElement>(".icon-check");
       const label = btn.querySelector<HTMLElement>(".copy-link-label");
-      // Nearest sr-copy-status sibling (one per component instance)
-      const srStatus = btn.closest(".post-footer-cta")
-        ?.parentElement?.querySelector<HTMLElement>(".sr-copy-status");
+      // Scoped to nearest .post-footer-cta ancestor so multiple instances
+      // on the same page each announce via their own live region.
+      const srStatus = btn.closest<HTMLElement>(".post-footer-cta")?.querySelector<HTMLElement>(".sr-copy-status");
       let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
       btn.addEventListener("click", async () => {
