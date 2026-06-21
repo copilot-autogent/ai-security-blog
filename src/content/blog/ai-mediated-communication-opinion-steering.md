@@ -11,7 +11,7 @@ Their analysis combines empirical measurement with a mathematical opinion-dynami
 
 ## The Core Empirical Finding: LLMs Systematically Tilt Text
 
-The researchers gave four open-weight LLMs — Llama-3.1-8B-Instruct, Ministral-3B-8B-Instruct, gemma-3-12b-it, and Qwen3-8B — two tasks:
+The researchers gave four open-weight LLMs — Llama-3.1-8B-Instruct, Ministral-3-8B-Instruct-2512, gemma-3-12b-it, and Qwen3-8B — two tasks:
 
 1. **Drafting** a social media post from a human-written argument
 2. **Improving** a human-written post (the LinkedIn-style use case)
@@ -20,7 +20,7 @@ Both tasks instructed the models to preserve the original meaning and voice. Nei
 
 On 13 contested topics drawn from standard stance-detection datasets (abortion, gun control, atheism, feminism, climate change, and more), the researchers scored each original post and its AI-edited counterpart on a continuous [0,1] scale from "against" to "in favor," using an ensemble classifier built from text embeddings.
 
-The result: **all LLMs introduced statistically significant directional biases on most topics, even when explicitly told not to.** gemma-3-12b pushed texts toward "in favor" on every topic except atheism — where it nudged against, despite generally expressing a positive opinion on atheism when asked directly. Llama and Ministral showed similar patterns. Qwen3-8B was mostly neutral, with the notable exception of feminism.
+The result: **all LLMs except Qwen3-8B introduced statistically significant directional biases on most topics.** gemma-3-12b pushed texts toward "in favor" on every topic except atheism — where it nudged against, despite generally expressing a positive opinion on atheism when asked directly. Llama and Ministral showed similar patterns. Qwen3-8B was mostly neutral, with the notable exception of feminism.
 
 ### The Benchmark Measurement Problem
 
@@ -52,7 +52,7 @@ They constructed two sets of human-written posts on abortion — one set pro-lif
 
 The finding: **in this audit, Grok's outputs on abortion content exhibited a directional pro-life asymmetry.** When contextualizing a pro-life post, Grok more frequently generated context that aligned with and reinforced the post's stance. When contextualizing a pro-choice post, it was less likely to do so. This asymmetry was statistically significant in the paper's audited sample.
 
-Crucially, the researchers were able to trace the bias back to a specific design element: a guideline in X's system prompt for Grok's "Explain this post" feature. The bias wasn't an inscrutable emergent property of the underlying model — it was associated with a specific platform design choice. Whether that choice was intentional or inadvertent, someone wrote a system prompt, and that prompt contributed to directional output.
+Crucially, the researchers were able to associate the bias with a specific design element: a guideline in X's system prompt for Grok's "Explain this post" feature. The bias wasn't an inscrutable emergent property of the underlying model in isolation — the specific prompt configuration appears to have contributed to the directional output, though isolating that single factor from the full system would require controlled ablations beyond what the audit scope provides.
 
 ## Implications for Security and Trust
 
@@ -62,7 +62,7 @@ A few implications worth holding onto:
 
 **Scale transforms small effects into large ones.** An AI mediation feature that nudges a few hundredths of a point per post, deployed to millions of users, is not a rounding error. The network amplification effect means the collective outcome is not linear in the per-post nudge either. Small bias, large reach, compounding network effects = potential for substantial opinion movement.
 
-**The platform's design choices influence the bias.** The Grok audit shows that the specific bias direction was associated with design choices in Grok's system prompt. This creates new accountability structures. Platforms can no longer claim neutrality by default — deploying a writing assistant or contextualizer involves design decisions with measurable political effects.
+**The platform's design choices can influence the bias.** The Grok audit shows that the specific bias direction on abortion content was associated with design choices in Grok's system prompt. This creates new accountability questions. Platforms can no longer claim neutrality by default — deploying a writing assistant or contextualizer involves design decisions with potentially measurable political effects, even on one feature and one topic.
 
 **"Preserve the original meaning" instructions were insufficient in tested conditions.** Every model in the study was explicitly instructed to maintain the user's voice and position. None of them fully did — at least in the specific prompts and topics tested. This matters for deployments relying on instruction-following as a sole bias mitigation strategy, though it doesn't mean such instructions are categorically useless.
 
