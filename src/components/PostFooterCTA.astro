@@ -73,6 +73,8 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
     </button>
   </div>
 </div>
+<!-- Visually hidden live region — announces copy confirmation to screen readers -->
+<div role="status" aria-live="polite" class="sr-copy-status" aria-atomic="true"></div>
 
 <style>
   .post-footer-cta {
@@ -155,6 +157,19 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
       padding: 0.5em 0.65em;
     }
   }
+
+  /* Visually hidden but read by screen readers */
+  .sr-copy-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 </style>
 
 <script>
@@ -168,10 +183,14 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
       const iconLink = btn.querySelector<SVGElement>(".icon-link");
       const iconCheck = btn.querySelector<SVGElement>(".icon-check");
       const label = btn.querySelector<HTMLElement>(".copy-link-label");
+      // Nearest sr-copy-status sibling (one per component instance)
+      const srStatus = btn.closest(".post-footer-cta")
+        ?.parentElement?.querySelector<HTMLElement>(".sr-copy-status");
       let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
       btn.addEventListener("click", async () => {
-        const url = btn.dataset.url ?? window.location.href;
+        // Prefer runtime location over build-time data-url to avoid any localhost artefacts
+        const url = window.location.href;
         try {
           await navigator.clipboard.writeText(url);
           // Cancel any in-flight reset before updating UI
@@ -179,10 +198,13 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
           if (iconLink) iconLink.style.display = "none";
           if (iconCheck) iconCheck.style.display = "";
           if (label) label.textContent = "Copied!";
+          // Announce to screen readers via live region
+          if (srStatus) srStatus.textContent = "Link copied to clipboard.";
           resetTimer = setTimeout(() => {
             if (iconLink) iconLink.style.display = "";
             if (iconCheck) iconCheck.style.display = "none";
             if (label) label.textContent = "Copy link";
+            if (srStatus) srStatus.textContent = "";
             resetTimer = undefined;
           }, 2000);
         } catch {
@@ -192,8 +214,13 @@ const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${shar
     });
   }
 
-  // Runs immediately (module scripts are deferred, so DOM is ready)
+  // Runs immediately (module scripts are deferred, so DOM is ready).
   initCopyLink();
-  // Also handles Astro View Transitions navigation if enabled in future
-  document.addEventListener("astro:page-load", () => initCopyLink());
+
+  // Guard against accumulating duplicate listeners on `document` if Astro
+  // View Transitions is ever enabled (module scripts re-run on each navigation).
+  if (!(document as any).__postFooterCTAListener) {
+    (document as any).__postFooterCTAListener = true;
+    document.addEventListener("astro:page-load", () => initCopyLink());
+  }
 </script>
