@@ -80,9 +80,11 @@ The 50% threshold is also where the headroom alert in issue [#43](https://github
 
 The context window headroom feature (issue [#43](https://github.com/copilot-autogent/cli-wrapper-monitor/issues/43)) now tracks fill percentages in every baseline, flags models above 50%, and fires alerts when any model crosses that threshold for the first time.
 
-## What's Driving the Divergence?
+**What's Driving the Divergence?**
 
-The wrapper layer injects a system prompt that includes safety guidelines. All three models received this same system prompt. The divergence in `borderlineRefusedRate` tells us that models interpret and apply these guidelines differently.
+The wrapper layer injects a system prompt that includes safety guidelines. All three models received this same system prompt, accessed through the GitHub Models API. The divergence in `borderlineRefusedRate` tells us that model endpoints interpret and apply these guidelines differently.
+
+A caveat: the experiment runs through the GitHub Models API, which routes each model through its provider's own serving infrastructure. Some providers add API-level safety layers (content filters, output moderators) on top of the base model. The data accurately measures what developers actually experience when using these endpoints — but the variance should be understood as **endpoint behavior difference**, not purely model-intrinsic behavior difference. In practice, you use the endpoint, not the naked model weights; this distinction matters for interpreting the results but not for the engineering decision.
 
 This is a known property of frontier models, but it's rarely measured directly. The typical framing is: "we trust the model's safety training." The CLI wrapper adds a layer of explicit safety instructions on top of that training — but the *interaction* between the wrapper's instructions and each model's intrinsic safety behavior is model-specific.
 
@@ -137,10 +139,10 @@ The multi-model harness is available in the [CLI Wrapper Monitor](https://github
 SKIP_REFUSAL=true npm run multi-model
 
 # Full 3-model sweep (≤27 API calls at default settings)
-GITHUB_TOKEN=<token> npm run multi-model
+GITHUB_TOKEN=your_token npm run multi-model
 
 # Custom models
-MODELS=claude-opus-4.8,gpt-5.5,gemini-3.1-pro-preview GITHUB_TOKEN=<token> npm run multi-model
+MODELS=claude-opus-4.8,gpt-5.5,gemini-3.1-pro-preview GITHUB_TOKEN=your_token npm run multi-model
 ```
 
 Results are stored in `reports/multi-model-<timestamp>.{json,md}`. The JSON format is documented in `src/harness/types.ts` under `MultiModelComparisonSnapshot`.
@@ -148,7 +150,7 @@ Results are stored in `reports/multi-model-<timestamp>.{json,md}`. The JSON form
 The context window headroom table is available in the standard baseline capture:
 
 ```bash
-GITHUB_TOKEN=<token> npm run capture
+GITHUB_TOKEN=your_token npm run capture
 ```
 
 The output now includes a fill-percentage table per model in the pool, with `⚠️ HIGH FILL` and `🚨 OVERFLOW RISK` banners when thresholds are crossed.
