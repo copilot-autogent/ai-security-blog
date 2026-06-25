@@ -11,7 +11,7 @@ This post is about why that assumption is wrong.
 
 We ran the same standardized probe set — the same 9 test prompts against the same Copilot CLI wrapper layer — across three models. The wrapper overhead was identical. The behavioral results were not.
 
-## Background: The Third Post in the Monitoring Series
+## Background: The Fourth Post in the Monitoring Series
 
 This is the fourth post in the CLI Wrapper Monitor series:
 
@@ -26,7 +26,7 @@ The underlying project — [CLI Wrapper Monitor](https://github.com/copilot-auto
 
 The multi-model harness runs two experiments per model:
 
-**Context Tax Experiment** (static, model-invariant): measures the wrapper's system prompt and tool definition overhead. These numbers are identical across models — the wrapper is constant.
+**Context Tax Experiment** (static, model-invariant): measures the wrapper's system prompt and tool definition overhead. The raw character counts and token estimates use the ÷4 heuristic (1 token ≈ 4 characters) applied uniformly — actual tokenized lengths will differ slightly between providers since GPT, Claude, and Gemini use different tokenizers, but the wrapper text is identical, and the ÷4 approximation is within 5–10% for English prose and JSON. The context-fill percentages in the table below use the estimated token count divided by each model's documented context window size.
 
 **Refusal Rate Experiment** (live, model-dependent): sends a standardized probe set to each model via the GitHub Models API and classifies each response.
 
@@ -60,7 +60,7 @@ Three findings stand out:
 
 **1. `borderlineRefusedRate` spans the full range.** Gemini refused zero borderline probes (0.000); Claude refused two of three (0.667); GPT refused one of three (0.333). The spread is 0.667 — more than half the possible range. All three models received identical system prompts and identical probes.
 
-**2. Gemini has a security gap on dangerous probes.** `dangerousRefusedRate = 0.667` means one of three explicitly dangerous probes was not refused. The wrapper layer's instructions were not sufficient to close this gap for this model.
+**2. Gemini has a gap on dangerous probes.** `dangerousRefusedRate = 0.667` means one of three explicitly dangerous probes was not refused. With only 3 probes per category, this data point warrants verification with a larger probe set before drawing firm conclusions — but it signals a difference worth investigating. The wrapper layer's instructions alone were not sufficient to close this gap for this model on this run.
 
 **3. Safe probes were handled consistently.** All three models reached `safeAllowedRate = 1.000` — no false positives, no legitimate development tasks blocked. The divergence is entirely in how they handle ambiguity and explicit violations.
 
@@ -76,7 +76,7 @@ The wrapper overhead is model-invariant — the same system prompt and tool defi
 
 All three models are in the safe zone for the current system prompt size. But notice the spread: `gpt-4o-mini` is already consuming 35.8% of its context window before any user content arrives. At the current system prompt growth rate (~500 tokens/week with active development), `gpt-4o-mini` would cross the 50% fill threshold in roughly 36 weeks — roughly 8–9 months from the measurement date.
 
-The 50% threshold is also where the headroom alert in issue [#43](https://github.com/copilot-autogent/cli-wrapper-monitor/issues/43) fires. This is distinct from the truncation regression in [post #2](./we-found-a-regression-in-our-own-agent) — that bug was an assembler per-file limit that is model-invariant. But both point toward the same risk: as the system prompt grows, smaller-context-window models have less working memory for actual conversation, which independently degrades the quality of safety reasoning in long sessions.
+The 50% threshold is also where the headroom alert in issue [#43](https://github.com/copilot-autogent/cli-wrapper-monitor/issues/43) fires. This is distinct from the truncation regression in [post #2](./we-found-a-regression-in-our-own-agent) — that bug was an assembler per-file limit that is model-invariant. But both point toward the same risk: as the system prompt grows, smaller-context-window models have less working memory for actual conversation, which independently degrades the quality of safety reasoning in long sessions. The 36-week estimate assumes linear growth and a stable context window — both could change if the wrapper grows faster or models in the pool are replaced.
 
 The context window headroom feature (issue [#43](https://github.com/copilot-autogent/cli-wrapper-monitor/issues/43)) now tracks fill percentages in every baseline, flags models above 50%, and fires alerts when any model crosses that threshold for the first time.
 
