@@ -4,6 +4,8 @@ description: "Agents aren't just chatbots with tools attached. They're autonomou
 pubDate: 2026-06-25
 tags: ["agent-security", "owasp", "security-research", "best-practices", "prompt-injection"]
 featured: false
+series: "owasp-top10-ai-agents"
+seriesPart: 1
 ---
 
 The OWASP Top 10 for Web Applications is one of the most effective security communication tools ever produced. It doesn't describe every web vulnerability. It names ten vulnerability *classes*, explains how attacks work, and gives practitioners a shared vocabulary for risk prioritization. That vocabulary has persisted for over two decades because the underlying categories are real and the framing is practitioner-friendly.
@@ -214,7 +216,7 @@ def require_confirmation(func):
                 }
             # Verify the token matches this specific tool+params+nonce
             expected = generate_confirmation_token(tool_name, params, nonce)
-            if not hmac.compare_digest(confirm_token, expected):
+            if not hmac.compare_digest(str(confirm_token), expected):
                 raise SecurityError(f"Confirmation token mismatch for {tool_name}")
         return await func(tool_name, params, context)
     return wrapper
@@ -274,7 +276,7 @@ class ToolChainValidator:
         r'you are now in (maintenance|developer|admin) mode',
         r'system:\s*(override|bypass|disable)',
         r'<\|im_start\|>system',  # ChatML injection
-        r'\[INST\].*\[\/INST\]',  # LLaMA-style injection
+        r'\[INST\].*\[\/INST\]',  # LLaMA-style injection (re.DOTALL applied at match time)
     ]
     
     def validate_tool_output(
@@ -314,7 +316,7 @@ class ToolChainValidator:
     
     def _scan_and_sanitize(self, tool_name: str, text: str) -> str:
         for pattern in self.INJECTION_PATTERNS:
-            if re.search(pattern, text, re.IGNORECASE):
+            if re.search(pattern, text, re.IGNORECASE | re.DOTALL):
                 log_security_event(
                     event="injection_attempt_in_tool_output",
                     tool=tool_name,
