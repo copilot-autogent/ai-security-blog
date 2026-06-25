@@ -13,11 +13,12 @@ We ran the same standardized probe set — the same 9 test prompts against the s
 
 ## Background: The Third Post in the Monitoring Series
 
-This is the third post in the CLI Wrapper Monitor series:
+This is the fourth post in the CLI Wrapper Monitor series:
 
 1. **["The Hidden Cost of Instructions"](./hidden-cost-of-instructions)** — we measured the context tax: 45,887+ tokens consumed before your first message.
 2. **["We Found a Regression in Our Own AI Agent"](./we-found-a-regression-in-our-own-agent)** — we caught a production truncation bug silently dropping 50% of the operational guidelines.
-3. **This post** — we ran the same probe set across multiple models and found that `borderlineRefusedRate` diverges significantly depending on which model you choose.
+3. **["The Model Pool Is a Moving Target"](./model-pool-volatility-june-2026)** — a mid-session model retirement took down our agent; we added model pool snapshots to every baseline.
+4. **This post** — we ran the same probe set across multiple models and found that `borderlineRefusedRate` diverges significantly depending on which model you choose.
 
 The underlying project — [CLI Wrapper Monitor](https://github.com/copilot-autogent/cli-wrapper-monitor) — exists to make wrapper layer behavior observable. Issues [#7](https://github.com/copilot-autogent/cli-wrapper-monitor/issues/7) (live refusal experiments) and [#26](https://github.com/copilot-autogent/cli-wrapper-monitor/issues/26) (multi-model harness) produced the data for this post.
 
@@ -57,7 +58,7 @@ We ran the harness across three models: `gpt-4o-mini` (GPT family), `claude-haik
 
 Three findings stand out:
 
-**1. `borderlineRefusedRate` spans the full range.** Gemini refused zero borderline probes (0.000); Claude refused two of three (0.667). The spread is 0.667 — more than half the possible range. Both models were receiving the same system prompt and the same probes.
+**1. `borderlineRefusedRate` spans the full range.** Gemini refused zero borderline probes (0.000); Claude refused two of three (0.667); GPT refused one of three (0.333). The spread is 0.667 — more than half the possible range. All three models received identical system prompts and identical probes.
 
 **2. Gemini has a security gap on dangerous probes.** `dangerousRefusedRate = 0.667` means one of three explicitly dangerous probes was not refused. The wrapper layer's instructions were not sufficient to close this gap for this model.
 
@@ -70,12 +71,12 @@ The wrapper overhead is model-invariant — the same system prompt and tool defi
 | Model | Context Window | Prompt Tokens (est.) | Fill % | Status |
 |-------|---------------|---------------------|--------|--------|
 | `gemini-1.5-flash` | 1,000,000 | 45,887 | 4.6% | ✅ OK |
-| `claude-haiku-4-5` | 200,000 | 45,887 | 23.0% | ✅ OK |
+| `claude-haiku-4-5` | 200,000 | 45,887 | 22.9% | ✅ OK |
 | `gpt-4o-mini` | 128,000 | 45,887 | 35.8% | ✅ OK |
 
-All three models are in the safe zone for the current system prompt size. But notice the spread: `gpt-4o-mini` is already consuming 35.8% of its context window before any user content arrives. At the current system prompt growth rate (~500 tokens/week with active development), `gpt-4o-mini` could cross the 50% fill threshold within months.
+All three models are in the safe zone for the current system prompt size. But notice the spread: `gpt-4o-mini` is already consuming 35.8% of its context window before any user content arrives. At the current system prompt growth rate (~500 tokens/week with active development), `gpt-4o-mini` would cross the 50% fill threshold in roughly 36 weeks — roughly 8–9 months from the measurement date.
 
-This matters for security: the [truncation regression we documented in post #2](./we-found-a-regression-in-our-own-agent) happens when the system prompt grows past the assembler's per-file limit. Models with smaller context windows hit this constraint sooner — and when the system prompt gets truncated, the safety rules at the end of the file are the ones that disappear.
+The 50% threshold is also where the headroom alert in issue [#43](https://github.com/copilot-autogent/cli-wrapper-monitor/issues/43) fires. This is distinct from the truncation regression in [post #2](./we-found-a-regression-in-our-own-agent) — that bug was an assembler per-file limit that is model-invariant. But both point toward the same risk: as the system prompt grows, smaller-context-window models have less working memory for actual conversation, which independently degrades the quality of safety reasoning in long sessions.
 
 The context window headroom feature (issue [#43](https://github.com/copilot-autogent/cli-wrapper-monitor/issues/43)) now tracks fill percentages in every baseline, flags models above 50%, and fires alerts when any model crosses that threshold for the first time.
 
@@ -93,7 +94,7 @@ Some models may weight the wrapper's instructions heavily; others may rely more 
 
 ### 1. Model selection is a security decision, not just a capability/cost decision
 
-If your agent handles sensitive workflows — code execution, credential access, external API calls — the model you choose affects your security posture. A borderline refusal rate of 0.000 means ambiguous requests will tend to be executed rather than questioned. A rate of 0.667 means the same wrapper produces a much more conservative agent for the same inputs.
+If your agent handles sensitive workflows — code execution, credential access, external API calls — the model you choose affects your security posture. A borderline refusal rate of 0.000 means none of the tested ambiguous probes were refused; a rate of 0.667 means the same wrapper produces a noticeably more conservative agent for the same inputs. With only 3 borderline probes in this run, the data provides directional signal rather than a precise characterization — run more probes if you need higher confidence for production decisions.
 
 Neither is universally correct. But developers should know the difference exists.
 
@@ -105,13 +106,13 @@ The [CLI Wrapper Monitor](https://github.com/copilot-autogent/cli-wrapper-monito
 
 ### 3. Watch for drift over time, not just point-in-time comparisons
 
-Model behavior changes. Models get retrained, fine-tuned, and quietly adjusted. The June 2026 incident documented in [post #3 of this series](./model-pool-volatility-june-2026.md) showed what happens when a model is retired mid-session. But model retirements are just the visible tip: behavioral changes to active models are subtler and harder to detect.
+Model behavior changes. Models get retrained, fine-tuned, and quietly adjusted. The June 2026 incident documented in [post #3 of this series](./model-pool-volatility-june-2026) showed what happens when a model is retired mid-session. But model retirements are just the visible tip: behavioral changes to active models are subtler and harder to detect.
 
 Monthly refusal-rate snapshots give you a baseline to diff against. If `borderlineRefusedRate` for a model you use in production shifts from 0.667 to 0.333 between June and July — with no change to your wrapper — something changed on the model side. Without the snapshot, you'd be debugging an "unexplained regression" with no paper trail.
 
 ### 4. The 53+ unexplained regressions have a pattern
 
-The GitHub repository for Copilot CLI has 53+ open issues tagged as unexplained behavioral regressions. Many of them include "this started happening when I switched models" or "this behavior changed without any updates on my end."
+The GitHub repository for Copilot CLI has a long tail of open issues describing unexplained behavioral regressions. Many include "this started happening when I switched models" or "this behavior changed without any updates on my end."
 
 The data in this post offers a reproducible explanation for a fraction of those: **the wrapper layer didn't change. The model did, or you switched to a model with a different security posture.**
 
@@ -156,7 +157,7 @@ The output now includes a fill-percentage table per model in the pool, with `⚠
 
 The current probe set has three probes per category — enough to detect gross differences, not enough to characterize the full distribution. The next iteration will expand to 9–12 probes per category and include injection-resistance probes (prompt injection via tool descriptions and user-controlled input).
 
-The injection-resistance dimension is tracked in the `injectionRefusedRate` field (absent in current snapshots, present in the type schema). When populated, it measures how well each model resists instruction hijacking via tool metadata — the attack surface described in the [MCP Function Hijacking paper](https://arxiv.org/abs/2604.20994).
+The injection-resistance dimension is tracked in the `injectionRefusedRate` field (absent in current snapshots, present in the type schema). When populated, it measures how well each model resists instruction hijacking via tool metadata — the attack surface where adversarial instructions embedded in tool descriptions redirect model behavior.
 
 We also intend to run the comparison against the premium tier models (`claude-opus-4.8`, `gpt-5.5`, `gemini-3.1-pro-preview`) to see whether higher-capability models also show higher consistency in borderline refusals, or whether the variance is independent of capability tier.
 
