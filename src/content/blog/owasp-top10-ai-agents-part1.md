@@ -10,7 +10,7 @@ The OWASP Top 10 for Web Applications is one of the most effective security comm
 
 AI agents need the same thing. Not another vendor whitepaper. Not a list of CVEs. A practitioner-grade taxonomy of the vulnerability classes that make agents unsafe, with real attack patterns and implementable mitigations.
 
-This is Part 1 of that series, covering the three most critical vulnerability classes from the [OWASP Top 10 for LLM Applications 2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/) as applied specifically to *agentic* deployments — systems where the model doesn't just respond but plans, calls tools, and takes actions. Each subsequent post will go deeper into additional vulnerability classes with expanding case studies.
+This is Part 1 of that series, covering the three most critical vulnerability classes applicable to *agentic* deployments — drawing from the [OWASP Top 10 for LLM Applications 2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/) and the [OWASP AI Agent Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html). Systems where the model doesn't just respond but plans, calls tools, and takes actions. Each subsequent post will go deeper into additional vulnerability classes with expanding case studies.
 
 ---
 
@@ -67,6 +67,7 @@ The PromptArmor research on [Microsoft Copilot Cowork](/blog/copilot-cowork-file
 **Structural defenses:**
 ```python
 import re
+import uuid
 
 # Treat external data as untrusted — never inline it directly into the system prompt
 def process_document(agent_context: str, external_doc: str) -> str:
@@ -76,7 +77,6 @@ def process_document(agent_context: str, external_doc: str) -> str:
     # GOOD: explicit trust boundary with a unique delimiter that cannot be guessed
     # by the attacker (a UUID or hash derived from the session is harder to escape than
     # a fixed string like "--- END EXTERNAL DATA ---").
-    import uuid
     boundary = f"END_EXTERNAL_{uuid.uuid4().hex.upper()}"
     
     prompt = f"""{agent_context}
@@ -137,6 +137,7 @@ tools = [
 # GOOD: Separate read and write tools with narrowly-scoped identities
 # Credentials come from a secrets manager (e.g., Vault, AWS Secrets Manager),
 # never hardcoded or from a single shared env var.
+# `get_secret` is a placeholder for your secrets manager client call.
 tools = [
     {
         "name": "read_customer_data", 
@@ -165,8 +166,9 @@ The other dimension of Excessive Agency is autonomy over irreversible actions. A
 ```python
 import hashlib
 import hmac
+import json
+import os
 from functools import wraps
-from typing import Any
 
 HIGH_IMPACT_TOOLS = [
     "send_external_email",
@@ -176,33 +178,49 @@ HIGH_IMPACT_TOOLS = [
     "deploy_code"
 ]
 
-def generate_confirmation_token(tool_name: str, params: dict) -> str:
-    """Token is bound to both the tool name and its parameters — prevents replay for different actions."""
+class SecurityError(Exception):
+    pass
+
+def sanitize_for_display(params: dict) -> dict:
+    """Redact secrets before showing params in the approval UI."""
+    sensitive_keys = {"password", "token", "secret", "key", "credential"}
+    return {k: "***" if any(s in k.lower() for s in sensitive_keys) else v
+            for k, v in params.items()}
+
+def generate_confirmation_token(tool_name: str, params: dict, nonce: str) -> str:
+    """
+    HMAC token bound to tool name + params + nonce.
+    The nonce ensures tokens are single-use — a captured token cannot be replayed
+    for the same action on a subsequent invocation.
+    """
     secret = os.environ["AGENT_CONFIRMATION_SECRET"]
-    payload = f"{tool_name}:{json.dumps(params, sort_keys=True)}"
-    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    payload = f"{nonce}:{tool_name}:{json.dumps(params, sort_keys=True)}"
+    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 def require_confirmation(func):
     @wraps(func)
     async def wrapper(tool_name: str, params: dict, context: dict):
         if tool_name in HIGH_IMPACT_TOOLS:
             confirm_token = context.get("confirm_token")
-            if not confirm_token:
+            nonce = context.get("confirm_nonce")
+            if not confirm_token or not nonce:
+                new_nonce = os.urandom(16).hex()
                 return {
                     "status": "awaiting_confirmation",
                     "message": f"This action requires your approval: {tool_name}",
                     "preview": sanitize_for_display(params),
-                    "confirm_token": generate_confirmation_token(tool_name, params)
+                    "confirm_token": generate_confirmation_token(tool_name, params, new_nonce),
+                    "confirm_nonce": new_nonce,
                 }
-            # Verify the token is bound to THIS specific tool+params, preventing replay
-            expected = generate_confirmation_token(tool_name, params)
+            # Verify the token matches this specific tool+params+nonce
+            expected = generate_confirmation_token(tool_name, params, nonce)
             if not hmac.compare_digest(confirm_token, expected):
                 raise SecurityError(f"Confirmation token mismatch for {tool_name}")
         return await func(tool_name, params, context)
     return wrapper
 ```
 
-A confirmation token approach prevents replay attacks where an attacker captures a confirmation and reuses it for a different action.
+A nonce-bound HMAC token prevents two replay attacks: reusing a captured token for a *different* action (different tool or params), and reusing a captured token for the *same* action on a subsequent invocation.
 
 ### Mitigations
 
@@ -218,7 +236,7 @@ A confirmation token approach prevents replay attacks where an attacker captures
 
 ### What it is
 
-Modern agent frameworks enable agents to call tools sequentially, with the output of one tool becoming the input to the next. This compositional power is what makes agents useful — and what creates a class of vulnerabilities that don't exist in single-turn LLM usage.
+Modern agent frameworks enable agents to call tools sequentially, with the output of one tool becoming the input to the next. This compositional power is what makes agents useful — and what creates a class of vulnerabilities that don't exist in single-turn LLM usage. The OWASP AI Agent Security Cheat Sheet identifies this attack surface under "Tool Abuse & Privilege Escalation" and "Cascading Failures."
 
 Insecure Tool Chaining occurs when:
 - A tool's output is passed to a downstream tool without validation
@@ -271,10 +289,15 @@ class ToolChainValidator:
         """
         # Type check against expected schema
         expected_type = expected_schema.get("type")
-        if expected_type and not isinstance(output, {"string": str, "dict": dict, "list": list}[expected_type]):
-            raise ValidationError(
-                f"Tool {tool_name} returned unexpected type: {type(output).__name__}, expected {expected_type}"
-            )
+        type_map = {"string": str, "dict": dict, "list": list, "integer": int, "number": (int, float), "boolean": bool}
+        if expected_type:
+            mapped = type_map.get(expected_type)
+            if mapped is None:
+                raise ValidationError(f"Unknown expected_schema type: {expected_type}")
+            if not isinstance(output, mapped):
+                raise ValidationError(
+                    f"Tool {tool_name} returned unexpected type: {type(output).__name__}, expected {expected_type}"
+                )
         
         # Recursively scan all string values
         return self._deep_sanitize(tool_name, output)
