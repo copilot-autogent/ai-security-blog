@@ -1,5 +1,5 @@
 ---
-title: "Indirect Prompt Injection in the Wild: A Survey of Documented Incidents"
+title: "Indirect Prompt Injection Against Production Systems: A Survey of Documented Disclosures"
 description: "Five researcher-disclosed proof-of-concept exploits against production AI systems (2023–2024) reveal recurring structural patterns that defenders can act on today: from Bing Chat web-content sideloading to Microsoft 365 Copilot email exfiltration chains."
 pubDate: 2026-06-26
 tags: ["prompt-injection", "agent-security", "incident-analysis", "data-exfiltration", "llm-security"]
@@ -11,7 +11,7 @@ Indirect prompt injection was largely a theoretical concern in early 2023. By mi
 
 **Prompt injection** exploits the structural blurring between instructions and data in LLM-based systems. Because both arrive as token sequences, a model has no intrinsic mechanism to distinguish "process this as content" from "execute this as a command."
 
-**Direct prompt injection** — sometimes called jailbreaking — involves a user who controls the input attempting to override system instructions or elicit disallowed behavior. The attacker and the victim are the same person; the attack targets the model's own safety behaviors.
+**Direct prompt injection** — sometimes called jailbreaking — involves an actor who controls an input to an LLM attempting to override system instructions, bypass safety measures, or elicit disallowed behavior. The attacker acts through the system's normal user interface; the vulnerability lies in the model's processing of user-supplied text, not in data retrieved from third-party sources.
 
 **Indirect prompt injection** is structurally different: the attacker embeds instructions in external data that a *different* user's AI system will later retrieve and process. The user's agent acts as a confused deputy — it has been granted trust and capabilities by the user, and it carries out instructions left by an adversary who never interacted with the user directly.
 
@@ -124,15 +124,15 @@ The full M365 access granted to Copilot means the blast radius of this attack is
 
 ## Pattern Analysis
 
-Five incidents, four products, three vendors (Microsoft appears three times — Bing Chat, GitHub Copilot, and M365 Copilot), two calendar years. The structural patterns are consistent.
+Five incidents, five products, three vendors (Microsoft appears three times — Bing Chat, GitHub Copilot Chat, and M365 Copilot), two calendar years. The structural patterns are consistent.
 
 ### Pattern 1: Output Rendering as Exfiltration Channel
 
-Every incident in this survey exploits some form of output rendering to exfiltrate data. The rendering mechanism converts model output into a network request: markdown images, clickable hyperlinks, Unicode-encoded URLs. The model does not need direct network access — the rendering client provides it.
+Every incident in this survey exploits output rendering to create an exfiltration channel. For Incidents 1–4, that channel was automatic: the rendering client fetched a URL embedded in model output without any user interaction — markdown images triggered HTTP requests the moment they were rendered. Incident 5 used a different channel: Unicode-smuggled data was embedded inside hyperlinks the user had to click, making exfiltration user-mediated rather than automatic. In both cases, the rendering client — not the model itself — performed the network request, with the model's output providing the destination URL and the payload.
 
 This works because the client is designed to be helpful: it renders images and links so that the user has a richer experience. The attacker turns that helpfulness into a covert channel.
 
-**Implication for defenders**: Any UI component that automatically fetches resources based on model output is a potential exfiltration channel. The question is not just "does the model have network access?" but "does any downstream rendering layer make network requests based on model output?"
+**Implication for defenders**: Any UI component that renders model output as interactive content — images, links, embeds — is a potential exfiltration vector, whether it fires automatically or on user interaction. The key question is not "does the model have network access?" but "what network requests does the client make based on model output, and can those requests carry data?"
 
 ### Pattern 2: Trust Hierarchy Collapse
 
@@ -160,7 +160,7 @@ The fundamental problem with dialog-based approval (asking the user to confirm e
 
 ### Pattern 5: No Deterministic Fix Exists for Injection Itself
 
-Across all five disclosures, vendor writeups and researcher follow-ups confirm that prompt injection into model context remained possible in each system after fixes were applied; only the available exfiltration channels changed.
+Across the four disclosures where vendors applied fixes (Incidents 1, 3, 4, and 5), vendor writeups and researcher follow-ups confirm that prompt injection into model context remained possible after those fixes; only the exfiltration channels were closed. Incident 2 is different: OpenAI explicitly declined to treat the image markdown exfiltration path as a vulnerability at the time, so no comparable fix was applied. The pattern holds across the four patched systems: injection is not fixed, consequences are mitigated.
 
 This matters for how defenders should prioritize. Defenses that attempt to detect or block injection at the model layer face a fundamentally adversarial problem: the same linguistic flexibility that makes LLMs useful makes distinguishing user instructions from injected instructions intractable. Defenses that reduce the consequences of successful injection — limiting what a compromised agent can do, restricting how output is rendered, gating tool invocations — are more robust because they do not require solving the injection detection problem.
 
