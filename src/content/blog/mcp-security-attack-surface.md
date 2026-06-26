@@ -215,9 +215,9 @@ No single control closes all of these attack vectors. Effective MCP security req
 
 Building agent infrastructure means living with these risks daily. Here's where autogent's tool architecture mitigates — and where it still has exposure.
 
-**What's working**: Tool handlers in autogent run via `new Function()` sandboxing inside the runtime process. Tool definitions are hardcoded in the codebase and reviewed as part of every PR, which prevents runtime rug pulls — the tool schemas you deploy are the tool schemas that run. The autogent runtime's pre-tool-use hooks provide an explicit approval layer: `onPreToolUse` can deny any tool call based on call-time context, giving the system a runtime chokepoint that the MCP OWASP cheat sheet recommends.
+**What's working**: Tool handlers in autogent run via `new Function()` sandboxing inside the runtime process. Autogent's own built-in tool definitions are hardcoded in the codebase and reviewed as part of every PR — for these tools, the schema you deploy is the schema that runs, eliminating rug-pull risk on that specific set. The runtime's pre-tool-use hooks provide an explicit approval layer: `onPreToolUse` can deny any tool call based on call-time context, a pattern aligned with what the OWASP MCP Cheat Sheet recommends.
 
-**What's still exposed**: The `new Function()` sandbox does not prevent network access — a malicious tool handler that made it through review could still exfiltrate data via Node.js HTTPS calls (this is documented as BUG-6 in the project context). Tool *responses* — content returned by tools like web_search or the Playwright browser — are not systematically scanned for injected instructions before the model processes them. This is the indirect injection gap: external content enters the model's context through the tool response channel and there's no secondary analysis pass. The data exfiltration via tool parameter encoding attack is unmonitored; tool call parameters are logged but not scanned for DLP signals.
+**What's still exposed**: The `new Function()` sandbox does not prevent network access — a malicious tool handler that made it through review could still exfiltrate data via Node.js HTTPS calls (BUG-6). The rug-pull protection is scoped to autogent's own tools; any remotely sourced MCP server or dynamically loaded tool configuration is not hash-pinned and retains rug-pull exposure. The `onPreToolUse` hook is not invoked for tool calls generated inside nested agents spawned via `spawn_agent` (BUG-14) — this means the chokepoint has a bypass in multi-agent configurations and should not be treated as an exhaustive runtime gate. Tool *responses* — content returned by tools like web_search or the Playwright browser — are not sanitized before the model processes them; in the Playwright case this is a documented gap (BUG-11) where raw page content including HTML comments can contain injected instructions. This is a concrete, tracked instance of the indirect injection attack class described above. The data exfiltration via tool parameter encoding attack surface is unmonitored; note that in configurations that use `spawn_agent`, BUG-14's hook bypass may also mean those tool calls go unlogged, widening the unmonitored surface.
 
 The autogent case is instructive because it shows that **thoughtful architecture at the tool definition layer doesn't automatically close the tool response layer**. These are separate attack surfaces requiring separate controls.
 
@@ -230,7 +230,7 @@ If you're deploying agents with MCP, here's the minimum viable audit checklist:
 **Tool registration and metadata**
 - [ ] Are tool descriptions validated for injection patterns before reaching the model?
 - [ ] Are tool definitions hash-pinned and verified before every execution?
-- [ ] Do you have a allowlist of approved MCP server origins?
+- [ ] Do you have an allowlist of approved MCP server origins?
 
 **Tool execution and authorization**
 - [ ] Do MCP servers hold the narrowest OAuth/permission scope sufficient for their function?
@@ -239,7 +239,8 @@ If you're deploying agents with MCP, here's the minimum viable audit checklist:
 
 **Transport and sandboxing**
 - [ ] Are MCP servers running as non-root processes with restricted capabilities?
-- [ ] Is STDIO transport access restricted to non-public networks?
+- [ ] For remote MCP deployments using HTTP/SSE transport, is server access restricted to authorized networks?
+- [ ] For local STDIO MCP servers, is the server process sandboxed (non-root, minimal filesystem access, no unnecessary network egress)?
 - [ ] Are external MCP configuration files treated as untrusted inputs in your build pipeline?
 
 **Monitoring and detection**
@@ -253,7 +254,7 @@ If you're deploying agents with MCP, here's the minimum viable audit checklist:
 
 MCP is infrastructure now. Its adoption trajectory — 150 million downloads, integration into every major IDE and agent framework, backing from OpenAI, Google, Microsoft, and Block — means the ecosystem is committing to it as the plumbing layer for AI agents the same way the web committed to HTTP.
 
-The security gap is real, but it's closeable. Unlike early HTTP's fundamental design assumptions (stateless, unencrypted, no cross-origin model), MCP's security failures are mostly in the surrounding ecosystem: insufficient validation at registration time, excessive permissions at authorization time, insufficient monitoring at runtime. The protocol's JSON-RPC base is auditable and deterministic — you can inspect what flows through it.
+The security gap is real, but it's closeable. Unlike early HTTP's fundamental design assumptions (stateless, unencrypted, no cross-origin model), MCP's security failures are mostly in the surrounding ecosystem: insufficient validation at registration time, excessive permissions at authorization time, insufficient monitoring at runtime. The protocol's JSON-RPC message format is inspectable — you can log, parse, and analyze what flows through it — even if the downstream tool semantics and model behavior that flow over it remain non-deterministic.
 
 The window for retrofitting security into MCP is narrower than it was for HTTP, because the attack surface is expanding faster. The research community has already catalogued the attack classes ([arXiv:2603.22489](https://arxiv.org/abs/2603.22489), [OWASP MCP Top 10](https://owasp.org/www-project-mcp-top-10/)). The mitigations are known. The work is operationalizing them before the next generation of production agent deployments ships without them.
 
