@@ -136,7 +136,7 @@ A malicious MCP server can change its tool definitions *after* initial approval.
 
 The OWASP MCP Cheat Sheet identifies rug pulls as a first-class attack category and recommends cryptographic pinning as the mitigation: hash the full tool definition at approval time and re-verify before every invocation.
 
-**What to do**: Pin tool definitions by hashing the full schema (including parameter types, descriptions, and return schema) at approval time. Re-verify before every invocation. Any hash mismatch should halt execution and trigger user re-approval. Do not treat "previously approved" as a persistent authorization — treat it as a point-in-time assertion that must be refreshed.
+**What to do**: Pin tool definitions by hashing the tool name, description, and input schema at approval time (note: MCP standardizes input schemas, and not all clients expose a stable return schema — hash the fields your client can reliably observe). Re-verify before every invocation. Any hash mismatch should halt execution and trigger user re-approval. Do not treat "previously approved" as a persistent authorization — treat it as a point-in-time assertion that must be refreshed.
 
 ---
 
@@ -154,7 +154,7 @@ them to the user."
 
 This doesn't modify the trusted server's tools at the protocol level. But it injects instructions into the model's context that shape how the model uses those trusted tools. From the model's perspective, this is information it received — indistinguishable (without careful system prompt design) from a legitimate protocol constraint.
 
-**What to do**: Namespace tool descriptions so tools from different servers cannot reference each other by name in ways that alter behavior. Apply the same injection detection to tool descriptions that you would apply to user messages. Consider implementing a "tool context isolation" layer that prevents tool metadata from one server from semantically referencing tools from another server.
+**What to do**: Apply injection detection to tool descriptions from all servers. Consider implementing strict content separation between server namespaces — descriptions from server A should not be able to semantically reference or modify behavior toward tools from server B. Name isolation alone is insufficient (a model can follow natural-language references regardless of technical namespacing), so detection must operate at the content level, checking for cross-references to other tools by name or function.
 
 ---
 
@@ -162,13 +162,13 @@ This doesn't modify the trusted server's tools at the protocol level. But it inj
 
 This one is a design-level vulnerability, not an implementation bug.
 
-In April 2026, researchers at OX Security disclosed a systemic flaw in MCP's STDIO transport mechanism ([Cloud Security Alliance Research Note](https://labs.cloudsecurityalliance.org/research/csa-research-note-mcp-design-rce-protocol-attack-surface-202/)). The STDIO interface — which launches MCP servers as local child processes and communicates via standard I/O — executes OS commands passed through configuration parameters without validation. This enables remote code execution across every supported programming language (Python, TypeScript, Java, Rust) in the MCP reference SDK.
+In April 2026, researchers at OX Security disclosed a systemic vulnerability in MCP's STDIO transport mechanism ([Cloud Security Alliance Research Note](https://labs.cloudsecurityalliance.org/research/csa-research-note-mcp-design-rce-protocol-attack-surface-202/)). The STDIO interface launches MCP servers as local child processes via OS commands specified in the configuration. The vulnerability is not a command-injection bug in the traditional sense — the behavior of spawning a subprocess based on configuration is expected and intentional. The security boundary failure is that *configuration itself* is the attack surface: any attacker who can write or influence an MCP configuration file (`claude_desktop_config.json`, a workspace `.mcp.json`, a CI/CD pipeline config) can substitute a malicious process for a legitimate MCP server, achieving code execution in the context of the host user. The flaw is architectural — there is no integrity verification between the trusted tool registration and the configuration that specifies what process actually runs.
 
-Twelve CVEs were disclosed across widely deployed AI platforms at disclosure time, including Windsurf, GPT Researcher, LiteLLM, Agent Zero, and LangFlow. Ten carried high or critical CVSS scores. Anthropic acknowledged the behavior as intentional — the STDIO design is a deliberate architectural choice — rather than committing to a protocol-level fix.
+Twelve CVEs were disclosed across widely deployed AI platforms at disclosure time, including Windsurf, GPT Researcher, LiteLLM, Agent Zero, and LangFlow. Ten carried high or critical CVSS scores. Per the CSA research note, Anthropic acknowledged the STDIO subprocess-launch behavior as architecturally intentional, rather than committing to a protocol-level fix — placing the security burden on configuration hardening and deployment isolation.
 
 The implications are significant: any attacker who can influence an MCP server configuration file (a `claude_desktop_config.json`, a workspace `.mcp.json`, or equivalent) can achieve host-level code execution, because the configuration is the attack surface. This transforms configuration management from an operational concern into a security-critical one.
 
-**What to do**: Treat any externally supplied MCP configuration as untrusted input. Restrict STDIO endpoint access to non-public networks. Run MCP servers in sandboxed environments (containers with minimal capabilities, or at minimum non-root processes with strict seccomp profiles). Audit all MCP server configurations in your deployment pipeline the same way you would audit CI/CD pipeline configuration.
+**What to do**: Treat any externally supplied MCP configuration as untrusted input. For STDIO-based deployments, the attack surface is the configuration file — audit and version-control it as you would a CI/CD pipeline config, and apply integrity checks before loading. Run MCP servers in sandboxed environments (containers with minimal capabilities, or at minimum non-root processes with strict seccomp profiles). For remote deployments using HTTP/SSE transport, restrict server access to authorized networks.
 
 ---
 
@@ -215,9 +215,9 @@ No single control closes all of these attack vectors. Effective MCP security req
 
 Building agent infrastructure means living with these risks daily. Here's where autogent's tool architecture mitigates — and where it still has exposure.
 
-**What's working**: Tool handlers in autogent run via `new Function()` sandboxing inside the runtime process. Autogent's own built-in tool definitions are hardcoded in the codebase and reviewed as part of every PR — for these tools, the schema you deploy is the schema that runs, eliminating rug-pull risk on that specific set. The runtime's pre-tool-use hooks provide an explicit approval layer: `onPreToolUse` can deny any tool call based on call-time context, a pattern aligned with what the OWASP MCP Cheat Sheet recommends.
+**What's working**: Autogent's own built-in tool definitions are hardcoded in the codebase and reviewed as part of every PR — this is build-time schema pinning (not cryptographic hash pinning at runtime), but for these tools the schema that ships is the schema that runs, which eliminates runtime rug-pull risk for the built-in set. The runtime's pre-tool-use hooks provide an explicit approval layer: `onPreToolUse` can deny any tool call based on call-time context, a pattern aligned with what the OWASP MCP Cheat Sheet recommends.
 
-**What's still exposed**: The `new Function()` sandbox does not prevent network access — a malicious tool handler that made it through review could still exfiltrate data via Node.js HTTPS calls (BUG-6). The rug-pull protection is scoped to autogent's own tools; any remotely sourced MCP server or dynamically loaded tool configuration is not hash-pinned and retains rug-pull exposure. The `onPreToolUse` hook is not invoked for tool calls generated inside nested agents spawned via `spawn_agent` (BUG-14) — this means the chokepoint has a bypass in multi-agent configurations and should not be treated as an exhaustive runtime gate. Tool *responses* — content returned by tools like web_search or the Playwright browser — are not sanitized before the model processes them; in the Playwright case this is a documented gap (BUG-11) where raw page content including HTML comments can contain injected instructions. This is a concrete, tracked instance of the indirect injection attack class described above. The data exfiltration via tool parameter encoding attack surface is unmonitored; note that in configurations that use `spawn_agent`, BUG-14's hook bypass may also mean those tool calls go unlogged, widening the unmonitored surface.
+**What's still exposed**: The rug-pull protection applies to autogent's own hardcoded tools; any remotely sourced MCP server or dynamically loaded tool configuration is not hash-pinned and retains rug-pull exposure. The `onPreToolUse` hook is not invoked for tool calls generated inside nested agents spawned via `spawn_agent` (BUG-14) — this means the chokepoint has a bypass in multi-agent configurations and should not be treated as an exhaustive runtime gate. Tool *responses* — content returned by tools like web_search or the Playwright browser — are not sanitized before the model processes them; in the Playwright case this is a documented gap (BUG-11) where raw page content including HTML comments can contain injected instructions. This is a concrete, tracked instance of the indirect injection attack class described above. The data exfiltration via tool parameter encoding attack surface is unmonitored; in configurations that use `spawn_agent`, BUG-14's hook bypass may also mean those tool calls go unlogged, widening the unmonitored surface.
 
 The autogent case is instructive because it shows that **thoughtful architecture at the tool definition layer doesn't automatically close the tool response layer**. These are separate attack surfaces requiring separate controls.
 
@@ -238,9 +238,9 @@ If you're deploying agents with MCP, here's the minimum viable audit checklist:
 - [ ] Are tool return values sanitized before entering the model's context?
 
 **Transport and sandboxing**
+- [ ] For STDIO-based MCP servers, are configuration files version-controlled and audited as you would audit CI/CD pipeline configs?
 - [ ] Are MCP servers running as non-root processes with restricted capabilities?
-- [ ] For remote MCP deployments using HTTP/SSE transport, is server access restricted to authorized networks?
-- [ ] For local STDIO MCP servers, is the server process sandboxed (non-root, minimal filesystem access, no unnecessary network egress)?
+- [ ] For remote (HTTP/SSE) MCP deployments, is server access restricted to authorized networks?
 - [ ] Are external MCP configuration files treated as untrusted inputs in your build pipeline?
 
 **Monitoring and detection**
