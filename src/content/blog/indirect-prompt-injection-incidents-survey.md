@@ -124,7 +124,7 @@ The full M365 access granted to Copilot means the blast radius of this attack is
 
 ## Pattern Analysis
 
-Five incidents, three different systems, two calendar years. The structural patterns are consistent.
+Five incidents, four products, three vendors (Microsoft appears three times — Bing Chat, GitHub Copilot, and M365 Copilot), two calendar years. The structural patterns are consistent.
 
 ### Pattern 1: Output Rendering as Exfiltration Channel
 
@@ -171,30 +171,30 @@ This matters for how defenders should prioritize. Defenses that attempt to detec
 Derived from the incident patterns above:
 
 **Rendering and output handling**
-- [ ] Audit every component that renders model output for automatic network requests (images, iframes, embedded resources)
-- [ ] Block markdown image rendering in any context where model output is derived from untrusted content
-- [ ] Strip or sanitize hyperlinks in model responses before rendering
-- [ ] Filter Unicode Tag code points (U+E0000–U+E007F) from all model outputs
-- [ ] Apply a restrictive Content Security Policy that does not permit wildcard domain trust, even for same-vendor infrastructure
+- Audit every component that renders model output for automatic network requests (images, iframes, embedded resources)
+- Block markdown image rendering in any context where model output is derived from untrusted content
+- Strip or sanitize hyperlinks in model responses before rendering
+- Filter Unicode Tag code points (U+E0000–U+E007F) from all model outputs
+- Apply a restrictive Content Security Policy that does not permit wildcard domain trust, even for same-vendor infrastructure
 
 **Architecture and trust boundaries**
-- [ ] Separate the component that processes untrusted content from the component that invokes tools — do not grant tool-calling capability to the LLM context that handles retrieved data
-- [ ] Map every LLM integration's data flow: what external data sources feed model context? Which of those are attacker-controlled or shared by external parties?
-- [ ] Identify all outputs that result in network requests, tool invocations, or state mutations
+- Separate the component that processes untrusted content from the component that invokes tools — do not grant tool-calling capability to the LLM context that handles retrieved data
+- Map every LLM integration's data flow: what external data sources feed model context? Which of those are attacker-controlled or shared by external parties?
+- Identify all outputs that result in network requests, tool invocations, or state mutations
 
 **Tool and permission scope**
-- [ ] Apply least privilege to all tools: each agent should have access only to the data sources required for its specific task
-- [ ] Default to read-only permissions; require explicit user action to grant write or send capabilities
-- [ ] Log all tool invocations with the originating turn so audit trails can distinguish user-initiated from injection-triggered calls
+- Apply least privilege to all tools: each agent should have access only to the data sources required for its specific task
+- Default to read-only permissions; require explicit user action to grant write or send capabilities
+- Log all tool invocations with the originating turn so audit trails can distinguish user-initiated from injection-triggered calls
 
 **Approval flows**
-- [ ] Gate tool invocations on instruction provenance rather than action type
-- [ ] Where possible, route tool invocations triggered by retrieved content through a separate, lower-privilege path that requires explicit user confirmation
-- [ ] Recognize that dialog-fatigue limits the effectiveness of per-action approval prompts; structural privilege reduction is more robust
+- Gate tool invocations on instruction provenance rather than action type
+- Where possible, route tool invocations triggered by retrieved content through a separate, lower-privilege path that requires explicit user confirmation
+- Recognize that dialog-fatigue limits the effectiveness of per-action approval prompts; structural privilege reduction is more robust
 
 **Content handling**
-- [ ] Treat all content retrieved from external sources as untrusted regardless of its format or origin (documents, emails, code files, URLs)
-- [ ] Validate that third-party integrations and plugins do not grant their retrieved content access to the full conversation context
+- Treat all content retrieved from external sources as untrusted regardless of its format or origin (documents, emails, code files, URLs)
+- Validate that third-party integrations and plugins do not grant their retrieved content access to the full conversation context
 
 ---
 
@@ -218,4 +218,5 @@ The most useful near-term framing is not "is my LLM jailbreak-resistant?" but "i
 - Rehberger, J., Thacker, J., Greshake, K. (2023). *Google Bard: Data Exfiltration with Prompt Injection.* Embrace The Red — [https://embracethered.com/blog/posts/2023/google-bard-data-exfiltration/](https://embracethered.com/blog/posts/2023/google-bard-data-exfiltration/)
 - Rehberger, J. (2024). *GitHub Copilot Chat: From Prompt Injection to Data Exfiltration.* Embrace The Red — [https://embracethered.com/blog/posts/2024/github-copilot-chat-prompt-injection-data-exfiltration/](https://embracethered.com/blog/posts/2024/github-copilot-chat-prompt-injection-data-exfiltration/)
 - Rehberger, J. (2024). *Microsoft 365 Copilot: From Prompt Injection to Exfiltration of Personal Information.* Embrace The Red — [https://embracethered.com/blog/posts/2024/m365-copilot-prompt-injection-tool-invocation-and-data-exfil-using-ascii-smuggling/](https://embracethered.com/blog/posts/2024/m365-copilot-prompt-injection-tool-invocation-and-data-exfil-using-ascii-smuggling/)
+- Samoilenko, R. (2023). *New prompt injection attack on ChatGPT web version. Markdown images can steal your chat data.* System Weakness — [https://systemweakness.com/new-prompt-injection-attack-on-chatgpt-web-version-ef717492c5c2](https://systemweakness.com/new-prompt-injection-attack-on-chatgpt-web-version-ef717492c5c2)
 - Willison, S. (2023). *The Dual LLM Pattern for Building AI Assistants That Can Resist Prompt Injection.* simonwillison.net — [https://simonwillison.net/2023/Apr/25/dual-llm-pattern/](https://simonwillison.net/2023/Apr/25/dual-llm-pattern/)
