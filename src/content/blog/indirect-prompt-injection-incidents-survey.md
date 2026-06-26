@@ -1,11 +1,11 @@
 ---
 title: "Indirect Prompt Injection in the Wild: A Survey of Documented Incidents"
-description: "The first generation of indirect prompt injection attacks is behind us. From Bing Chat web-content sideloading to Microsoft 365 Copilot email exfiltration chains, five documented real-world incidents reveal recurring structural patterns that defenders can act on today."
+description: "Five researcher-disclosed proof-of-concept exploits against production AI systems (2023–2024) reveal recurring structural patterns that defenders can act on today: from Bing Chat web-content sideloading to Microsoft 365 Copilot email exfiltration chains."
 pubDate: 2026-06-26
 tags: ["prompt-injection", "agent-security", "incident-analysis", "data-exfiltration", "llm-security"]
 ---
 
-Indirect prompt injection was largely a theoretical concern in early 2023. By mid-2024, multiple real-world incidents — responsibly disclosed, fixed, and documented — had demonstrated that the attack class works reliably across production systems. This post surveys five of those incidents, extracts the structural patterns they share, and derives a defender checklist grounded in what actually happened rather than what could happen.
+Indirect prompt injection was largely a theoretical concern in early 2023. By mid-2024, multiple real-world proof-of-concept exploits — responsibly disclosed by security researchers against production systems, fixed, and publicly documented — had demonstrated that the attack class works reliably across mainstream AI deployments. These were not confirmed attacker exploitation events; they were researcher-disclosed vulnerabilities demonstrating exploitability. This distinction matters: the incidents tell us what is *possible* in these architectures, not necessarily what has already been done by adversaries. This post surveys five of those disclosures, extracts the structural patterns they share, and derives a defender checklist grounded in what researchers actually demonstrated rather than what is theoretically possible.
 
 ## Definitions and Taxonomy
 
@@ -138,7 +138,7 @@ This works because the client is designed to be helpful: it renders images and l
 
 Each system had some implicit trust hierarchy: system instructions are more trusted than user input, user input is more trusted than retrieved content. In practice, this hierarchy was not enforced. The model processed injected instructions from web content or documents as if they carried the same authority as user-issued commands.
 
-Simon Willison's [Dual LLM proposal](https://simonwillison.net/2023/Apr/25/dual-llm-pattern/) (April 2023) identified this as the central architectural failure: a "Privileged" LLM that can take actions should never process untrusted content directly. Only a "Quarantined" LLM with no action capabilities should do so. The quarantined output can then be passed to the privileged LLM as a constrained summary. No production system in this survey implemented this separation.
+Simon Willison's [Dual LLM proposal](https://simonwillison.net/2023/Apr/25/dual-llm-pattern/) (April 2023) identified this as the central architectural failure: a "Privileged" LLM that can take actions should never process untrusted content directly. Only a "Quarantined" LLM with no action capabilities should do so. The quarantined output can then be passed to the privileged LLM as a constrained summary. No system described in the public writeups is documented as having implemented this architectural separation at the time each vulnerability was disclosed.
 
 **Implication for defenders**: LLM components that process external content (email, documents, web pages) should not also hold the ability to invoke tools, send data to external systems, or issue commands to other components. Separation is architectural, not configurable.
 
@@ -160,7 +160,7 @@ The fundamental problem with dialog-based approval (asking the user to confirm e
 
 ### Pattern 5: No Deterministic Fix Exists for Injection Itself
 
-Across all five incidents, the root cause — the model processing injected instructions — was never fixed. What was fixed was the exfiltration mechanism: image rendering was removed, Unicode Tags were filtered, hyperlink rendering was restricted. Prompt injection itself remains possible in all of these systems; only the available exfiltration channels changed.
+Across all five disclosures, vendor writeups and researcher follow-ups confirm that prompt injection into model context remained possible in each system after fixes were applied; only the available exfiltration channels changed.
 
 This matters for how defenders should prioritize. Defenses that attempt to detect or block injection at the model layer face a fundamentally adversarial problem: the same linguistic flexibility that makes LLMs useful makes distinguishing user instructions from injected instructions intractable. Defenses that reduce the consequences of successful injection — limiting what a compromised agent can do, restricting how output is rendered, gating tool invocations — are more robust because they do not require solving the injection detection problem.
 
