@@ -53,7 +53,7 @@ The realistic attack surface is different. Consider the following paths to a bac
 
 **Poisoned LoRA adapters.** An adversary publishes a LoRA adapter that genuinely improves performance on a target task. The improvement is real — the adapter is legitimately fine-tuned for the domain. It also contains a secondary behavior activated by a trigger that doesn't appear in the standard evaluation suite. The org deploys it on the basis of benchmark results.
 
-**Compromised CI/CD pipelines.** Supply chain attacks on AI tooling have demonstrated that fine-tuning pipelines are reachable through compromised dependencies. A compromised training run doesn't just produce a backdoored model; it can produce one that passes all the evaluations the pipeline runs post-training.
+**Compromised CI/CD pipelines.** Supply chain attacks on AI tooling have reached production deployments (the npm/PyPI attack ecosystem documented in 2025–2026 demonstrates the mechanism is not theoretical). A compromised training run doesn't just produce a backdoored model; it can produce one that passes all the evaluations the pipeline runs post-training.
 
 In each case, the attack entry point is a supply chain junction: a point where your organization takes a dependency on external code, data, weights, or process that you don't fully control.
 
@@ -103,7 +103,7 @@ This requires a different approach:
 
 **Systematic variation on irrelevant features.** Test the model's behavior while systematically varying things that should not affect outputs: the current date in the context, the presence or absence of evaluation-signaling language ("I am testing you", "this is a production deployment"), changes to system prompt structure, Unicode variations in input text. A model that changes behavior based on these variations is a signal worth investigating.
 
-**Temporal and context signal testing.** Year-conditional triggers (as in the original Anthropic paper) require that the model have some belief about the current context. Test whether the model's behavior changes based on date signals in the context. Test whether it changes based on whether the context describes a deployment vs. evaluation scenario.
+**Temporal and context signal testing.** Year-conditional triggers (as in the original Anthropic paper) require that the model have some belief about the current context. Test whether the model's behavior changes based on date signals in the context. Test whether it changes based on whether the context describes a deployment vs. evaluation scenario. These trigger classes are already documented in the backdoor literature and in the Hubinger et al. paper itself — defenders need to probe them precisely because sophisticated attackers already know them.
 
 **Semantic trigger sweeps.** For high-stakes deployments, run the model against a diverse set of topic areas, phrasing styles, and linguistic patterns that a red-teamer might use to activate a semantic trigger. This won't find a sophisticated trigger, but it raises the cost for an attacker who wants to reliably activate the backdoor without detection.
 
