@@ -81,7 +81,7 @@ Choose models with strong safety training, but treat Layer 1 as perimeter reduct
 ### Existing controls
 
 - **Explicit scope restrictions**: Clear "you are only authorized to..." statements reduce but don't eliminate out-of-scope behavior.
-- **Content tagging**: Wrapping user-supplied and externally-retrieved content in explicit delimiters (e.g., `<user_input>`, `<retrieved_document>`) helps the model distinguish instruction sources. Autogent tags all externally-retrieved content as untrusted at the orchestration layer before it enters the context window.
+- **Content tagging**: Wrapping user-supplied and externally-retrieved content in explicit delimiters (e.g., `<user_input>`, `<retrieved_document>`) helps the model distinguish instruction sources. The goal is to make the provenance of content visible to the model without relying on the model to infer it.
 - **Instruction hierarchy framing**: Explicitly telling the model that system prompt instructions take precedence over user instructions, and that content from retrieved documents should not be treated as instructions.
 - **Injection-specific refusal training**: Models like GPT-4 and Claude have been fine-tuned to be suspicious of "ignore previous instructions" patterns.
 
@@ -117,9 +117,9 @@ This is the most consequential layer for real-world impact. A breached agent tha
 
 ### Existing controls
 
-- **Scope-limited credentials**: Tools should operate on minimal credentials — read-only where reads are sufficient, scoped to specific resources rather than global access. Autogent uses tool-specific credential scoping: each tool in the toolkit carries its own credential set with minimum necessary permissions.
+- **Scope-limited credentials**: Tools should operate on minimal credentials — read-only where reads are sufficient, scoped to specific resources rather than global access. The ideal is per-tool credential isolation; in practice most deployments grant a session the union of all tool privileges, which means blast-radius reduction requires additional runtime compartmentalization beyond just credential scoping.
 - **Tool allowlisting**: Rather than giving the agent a general-purpose execution environment, define a fixed tool set. What the agent cannot call, it cannot be manipulated into calling.
-- **Hook-based permission gates**: Before a tool executes, a policy layer evaluates the call against rules. Autogent implements this as an `onPreToolUse` hook — a synchronous gate that can deny, modify, or allow any tool invocation based on call context, recent history, and risk classification.
+- **Hook-based permission gates**: Before a tool executes, a policy layer evaluates the call against rules. Autogent implements this as an `onPreToolUse` hook — a synchronous gate that can deny, modify, or allow any tool invocation based on call context, recent history, and risk classification. Important: hooks that *modify* tool calls (not just allow/deny) need their own audit trail so incident investigation can distinguish what the model requested from what policy actually executed.
 - **Sandboxed execution environments**: Code execution tools run in isolated containers with no network access to internal resources, no persistent storage, and no access to host credentials.
 - **Rate limiting and anomaly detection on tool calls**: Unexpectedly high tool call volume, calls to unusual endpoints, or unusual parameter patterns can be flagged before execution.
 
@@ -195,7 +195,7 @@ This layer operates on the assumption that the other four layers will have gaps.
 
 - **Behavioral baselines**: Track normal tool call patterns, output volumes, and request patterns. Deviations from baseline trigger alerts.
 - **Semantic anomaly detection**: Flag outputs or tool calls that don't fit the expected semantic range for the deployment context. An agent that handles customer support and suddenly queries internal infrastructure endpoints is anomalous regardless of whether any individual action is policy-violating.
-- **Rate limiting and circuit breakers**: Automated throttling of tool invocations, output volumes, or API calls when thresholds are exceeded. Autogent implements this as a circuit breaker pattern — unusual tool call volumes trigger a hard stop and require manual review.
+- **Rate limiting and circuit breakers**: Automated throttling of tool invocations, output volumes, or API calls when thresholds are exceeded. Rate limiting slows the attack; a true circuit breaker trips to a full stop and requires explicit reset — the difference matters for incident response. Autogent implements rate limiting on tool call volumes; operators can configure hard-stop thresholds that require manual intervention to resume.
 - **Context window audit trails**: Full logging of context windows, tool calls, and their parameters provides forensic data for post-incident investigation.
 - **Human escalation gates**: For high-sensitivity operations, require out-of-band human confirmation before execution. Autogent implements tool execution confirmations as a configurable policy — certain tool categories require explicit user approval regardless of context.
 
@@ -223,7 +223,7 @@ Rather than describing only abstract controls, here's how the five layers are im
 
 **Layer 4 (Output validation)**: Selected agent outputs are scanned for known injection patterns before forwarding. Multi-agent handoffs (sprint agents → main session) include explicit trust-boundary markers. This coverage is applied at specific handoff points, not as a blanket filter across every sink.
 
-**Layer 5 (Monitoring)**: Tool call logging including parameters — with the trade-off that parameter-level logs can themselves capture sensitive content (credentials, personal data, private prompts), creating a data-exposure surface that needs its own access controls. Circuit breaker on unusual tool call volumes. Human escalation is implemented as a user-configurable confirmation policy: operators define which tool categories require explicit approval; the system doesn't automatically infer sensitivity from semantics. The Discord thread model provides *de facto* human-in-the-loop for sprint agents in this specific deployment — a human sees output before it's acted on — but this is a deployment constraint, not a platform guarantee.
+**Layer 5 (Monitoring)**: Tool call logging including parameters — with the trade-off that parameter-level logs can themselves capture sensitive content (credentials, personal data, private prompts), creating a data-exposure surface that needs its own access controls, retention limits, and redaction. Rate limiting on tool call volumes with configurable hard-stop thresholds. Human escalation is implemented as a user-configurable confirmation policy: operators define which tool categories require explicit approval; the system doesn't automatically infer sensitivity from semantics. The Discord thread model provides *passive visibility* for sprint agents in this specific deployment — a human can see output in the thread and intervene — but passive visibility is not equivalent to a blocking approval gate; without a synchronous confirmation step, it does not provide true human-in-the-loop control.
 
 The key observation from this worked example: **no single layer is sufficient, and every layer has bypasses**. The `onPreToolUse` hook catches many obfuscated bash constructs but won't catch every semantic injection path. The content tagging helps but doesn't provide cryptographic instruction-integrity guarantees. The audit logging is comprehensive but anomaly detection on the logs is still manual.
 
