@@ -70,7 +70,7 @@ This mirrors the DNS poisoning structure exactly: the resolver's cache is popula
 
 ## Attack Surface 4: Embedding Space Manipulation (Emerging, Partially Speculative)
 
-The vector representation layer is a theoretically distinct attack surface. Most research in this space is preliminary, and empirical demonstrations are less systematic than the corpus-poisoning literature. Two attacker capabilities are worth distinguishing:
+The vector representation layer is a theoretically distinct attack surface. Most research in this space is preliminary, and empirical demonstrations are less systematic than the corpus-poisoning literature. Three attacker capabilities are worth distinguishing, though they differ significantly in required access:
 
 - **Semantic proximity inflation** (no privileged access required): By crafting document text that embeds near high-value query embeddings, an attacker can cause a malicious document to surface across a broad range of unrelated queries. This is a semantic attack using normal document ingestion channels.
 - **Legitimate document suppression** (no privileged access required): Similar — adversarial texts with high cosine similarity to legitimate documents that crowd out real results when the attacker's document scores higher in the similarity rank.
