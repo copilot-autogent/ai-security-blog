@@ -68,15 +68,17 @@ The cross-session contamination scenario is particularly severe in shared deploy
 
 This mirrors the DNS poisoning structure exactly: the resolver's cache is populated from an external response, but once cached, the poisoned entry is indistinguishable from a legitimate one. Trust is inherited from the mechanism, not the content.
 
-## Attack Surface 4: Embedding Space Manipulation
+## Attack Surface 4: Embedding Space Manipulation (Emerging, Partially Speculative)
 
-The vector representation layer introduces its own attack surface distinct from the semantic content of documents. Adversarial embeddings can be crafted to:
+The vector representation layer is a theoretically distinct attack surface. Most research in this space is preliminary, and empirical demonstrations are less systematic than the corpus-poisoning literature. Two attacker capabilities are worth distinguishing:
 
-- **Proximity inflation**: A poisoned document's embedding is positioned near many high-value query embeddings, causing it to surface across a wide range of unrelated queries
-- **Legitimate document suppression**: Adversarial texts engineered to have high cosine similarity to real documents, causing them to crowd out legitimate results when the attacker's document scores higher
-- **Index corruption** (distinct threat model, requires datastore write access): An attacker who has compromised the vector store itself can modify stored embeddings directly to redirect retrieval without altering source documents. This is a datastore-compromise scenario rather than a purely embedding-layer attack — it's worth separating because the attacker capability required is substantially different from the semantic-manipulation techniques above
+- **Semantic proximity inflation** (no privileged access required): By crafting document text that embeds near high-value query embeddings, an attacker can cause a malicious document to surface across a broad range of unrelated queries. This is a semantic attack using normal document ingestion channels.
+- **Legitimate document suppression** (no privileged access required): Similar — adversarial texts with high cosine similarity to legitimate documents that crowd out real results when the attacker's document scores higher in the similarity rank.
+- **Index corruption** (requires datastore write access — a different, higher-capability threat model): An attacker who has already compromised the vector store can modify stored embeddings directly to redirect retrieval without altering source documents. This is better classified as a consequence of datastore compromise than as a purely embedding-layer attack.
 
-This class of attack is particularly hard to audit because the attack is in the embedding space, not the text. A human reviewing the knowledge base documents sees normal text. The threat only manifests at query time.
+The first two categories are the active research frontier. Index corruption is a narrower, higher-bar scenario that merges into general datastore security.
+
+This class of attack is harder to audit than corpus poisoning because the threat is in the embedding space, not the text. A human reviewing the knowledge base documents sees normal text. The threat only manifests at query time.
 
 ## What Mitigations Have Empirical Validation?
 
@@ -84,11 +86,11 @@ The defense literature is developing, but empirical validation is uneven. Here's
 
 ### Retrieval Re-ranking with Confidence Gating (Practitioner Response to PoisonedRAG Findings)
 
-PoisonedRAG's paper demonstrates that naive top-K retrieval is fragile — even a handful of adversarially crafted documents can displace legitimate results. A practitioner response is to retrieve a larger candidate set, then apply a secondary re-ranking step that penalizes documents with anomalous semantic distance to the query compared to the rest of the candidate set. Isolated documents that rank highly but are dissimilar to other high-ranking candidates are a potential signal of injection. Note that the PoisonedRAG paper itself focuses on the attack side; this specific re-ranking heuristic is a practitioner inference from the attack's mechanics rather than an independently validated defense from the same work. It raises the required sophistication without eliminating the risk.
+PoisonedRAG's paper demonstrates that naive top-K retrieval is fragile — even a handful of adversarially crafted documents can displace legitimate results. A practitioner response is to retrieve a larger candidate set, then apply a secondary re-ranking step that penalizes documents that look anomalous relative to the rest of the candidate set. This heuristic has meaningful limitations: on broad topics or long-tail queries where the only legitimate source may be a single document, anomaly-based filtering degrades retrieval quality and can suppress correct answers. The approach is a partial defense against coordinated injection of multiple similar poisoned documents; it does not reliably block sophisticated attacks that craft documents semantically consistent with the rest of the corpus. It raises the required sophistication without eliminating the risk.
 
 ### Source Provenance Tracking (Theoretical, Architecturally Important)
 
-Every document in the knowledge base should carry metadata tracking its origin, ingestion timestamp, and last-verified date. Retrieved chunks passed to the LLM should include this provenance in the context, and the system prompt should instruct the model to weight high-provenance sources more heavily than low-provenance ones. In practice, LLMs are not reliable provenance enforcers, but provenance metadata is essential for post-incident forensics — identifying when and from where a poisoned document entered the system.
+Every document in the knowledge base should carry metadata tracking its origin, ingestion timestamp, and last-verified date. The practical security value of provenance is in **retrieval and ranking**, not in the LLM itself: a poisoned retrieved chunk passed into the model's context can override a system prompt instruction to "weight high-provenance sources." Provenance enforced inside the LLM is not an enforceable security control — the model is too easily influenced by retrieved content. Provenance enforced as a *pre-retrieval filter or re-ranking signal* (discarding chunks from untrusted sources before they reach the LLM) is meaningfully stronger. Beyond access control, provenance metadata is essential for post-incident forensics — identifying when and from where a poisoned document entered the system.
 
 ### Memory Namespace Isolation (Architectural Control)
 
