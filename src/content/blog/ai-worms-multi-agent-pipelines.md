@@ -9,7 +9,7 @@ In 1988, Robert Morris released a self-replicating program onto the early intern
 
 Thirty-six years later, researchers at the Technion and Intuit asked an uncomfortable question: can the same thing happen to GenAI ecosystems?
 
-Their answer, published as *Morris-II* ([arXiv:2403.02817](https://arxiv.org/abs/2403.02817), Cohen et al., 2024), is yes — and they demonstrated it empirically against GPT-4 and Gemini Pro-powered email assistants.
+Their answer, introduced as *Morris-II* in a preprint ([arXiv:2403.02817](https://arxiv.org/abs/2403.02817), Cohen et al., 2024), is yes — and they demonstrated it empirically against GPT-4 and Gemini Pro-powered email assistants.
 
 ## Why LLM Pipelines Are Worm-able
 
@@ -39,7 +39,7 @@ The Morris-II researchers introduce the concept of an **adversarial self-replica
 
 When these three components are present in a document that enters a RAG-enabled assistant's database, the following sequence fires on every subsequent inference where the document is retrieved: the model is jailbroken, executes the malicious activity, and produces output that contains a copy of the worm — which then travels to the next recipient and enters their RAG database.
 
-Nassi et al. formalize this with a simple composition property: given a GenAI model *G* and the prompt containing components *j*, *r*, *m*, the output preserves *j*, *r*, and *m* while appending the payload *p*. The key insight is that this property is **compositional** — if it holds for one inference, it holds for the chain.
+Cohen et al. formalize this with a simple composition property: given a GenAI model *G* and the prompt containing components *j*, *r*, *m*, the output preserves *j*, *r*, and *m* while appending the payload *p*. The key insight is that this property is **compositional** — if it holds for one inference, it holds for the chain.
 
 ## The ComPromptMized Case Study: GPT-4 Email Assistant
 
@@ -79,11 +79,11 @@ Limiting what an infected agent can do reduces the worm's payload potential. An 
 
 ### The Virtual Donkey Guardrail
 
-Nassi et al. propose and evaluate a novel guardrail they call the **Virtual Donkey**, designed specifically to detect Morris-II-style propagation without requiring prior knowledge of the worm's specific jailbreaking commands.
+Cohen et al. propose and evaluate a novel guardrail they call the **Virtual Donkey**, designed specifically to detect Morris-II-style propagation without requiring prior knowledge of the worm's specific jailbreaking commands.
 
 The key insight: a successful self-replicating prompt causes the model's output to be highly similar to its input — because the worm instructs the model to reproduce its own text. The Virtual Donkey exploits this by computing a similarity score between the input provided to the model and the output it generates. If similarity exceeds a threshold, the output is flagged as a potential worm.
 
-**Evaluated performance:** On the evaluated benchmark, TPR (true positive rate) reached 1.0 — every worm instance in the test set was detected. FPR (false positive rate) was 0.015 — 1.5% false alarms on benign email outputs. The guardrail also generalized to **out-of-distribution worms**: worms using different jailbreaking commands that it had never seen during training, a secondary email dataset, and different payload types. The researchers released a Python implementation [on GitHub](https://github.com/StavC/ComPromptMized) suitable for LangChain integration. Note that the FPR was measured on email tasks specifically; applications with high input/output overlap by design (summarization, quoting, translation) may need task-specific threshold tuning.
+**Evaluated performance:** On the evaluated email benchmark, TPR (true positive rate) reached 1.0 and FPR (false positive rate) was 0.015 — 1.5% false alarms on benign email outputs. The guardrail also generalized to **out-of-distribution worms**: worms using different jailbreaking commands that it had never seen during training, a secondary email dataset, and different payload types. The researchers released a Python implementation [on GitHub](https://github.com/StavC/ComPromptMized) suitable for LangChain integration. Note that both metrics are specific to the email evaluation setup; applications with high input/output overlap by design (summarization, quoting, translation) may need task-specific threshold tuning.
 
 ### Content Provenance Tracking
 
