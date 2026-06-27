@@ -51,7 +51,7 @@ Understanding what makes a jailbreak economically valuable clarifies who is buyi
 
 **Operational simplicity.** Techniques that require no technical sophistication to use — paste-and-run prompts rather than multi-step attack chains — are more commercially accessible. This tiering mirrors traditional exploit markets: weaponized exploits that require expertise to execute are sold to sophisticated actors; easy-to-use exploit kits reach the mass market.
 
-**Output access.** Not all jailbreaks are equal in what they unlock. Bypasses that enable generation of clearly illegal content are categorically distinct from those enabling spam generation or competitive intelligence scraping. The downstream use cases drive demand, and demand segments the market.
+**Output access.** Not all jailbreaks are equal in what they unlock. Bypasses that enable generation of content that violates both platform policies and law are categorically distinct from those enabling spam generation, content style changes, or competitive intelligence scraping. The downstream use cases drive demand, and demand segments the market.
 
 ## Case Studies: Public Documentation of Commercialized Tooling
 
@@ -59,7 +59,7 @@ Several incidents and researcher disclosures have produced documented evidence o
 
 **The "DAN" ecosystem.** The Do Anything Now prompt family, which emerged on r/ChatGPTJailbreak in late 2022, became a case study in the lifecycle of an open-source exploit technique. It spread from an open Reddit thread to inclusion in paid prompt packs on commercial marketplaces. When OpenAI patched the original approach, community members documented the patch and circulated adaptations. Multiple variants appeared within months of the original, several of which showed up in commercial prompt listings — the pattern of patch-then-adapt visible across public forum archives.
 
-**Adversarial prompt injection tooling disclosures.** Security researchers from organizations including Lakera, Protect AI, and several university groups have published documented demonstrations of prompt injection tooling targeting production AI applications. These demonstrations — responsibly disclosed and published with defender recommendations — describe tooling that automates multi-step injection attacks. The existence of clean, packaged tooling demonstrates that the operational capability exists and can be productized.
+**Adversarial prompt injection tooling disclosures.** Security researchers from organizations including Lakera, Protect AI, and several university groups have published documented demonstrations of *indirect prompt injection* attacks against production AI applications — a related but distinct threat surface from consumer jailbreaking. These demonstrations target AI systems with data access and agentic capabilities, not base model safety filters. They have been responsibly disclosed and published with defender recommendations. The existence of clean, packaged research tooling for these attacks demonstrates that the capability exists in structured form and is available to adapt for offensive use.
 
 **Telegram-channeled API services.** Security journalists and threat researchers have reported on advertisements in closed Telegram channels offering API access to "uncensored" model outputs at subscription prices, with marketing language indicating the service maintains bypass capabilities across model updates. Specific details aren't reproduced here — the point is the structural pattern: automated service infrastructure around maintaining access to policy-bypassed model outputs.
 
@@ -77,7 +77,7 @@ The threat-intelligence implication isn't primarily that individual jailbreaks a
 
 **Model updates are security events.** When an AI provider releases a new model version, security teams should treat it as they would treat a new software release: assess what changed, test against known bypass technique classes, and monitor for community documentation of what the update missed or introduced. This is not standard practice today. It needs to be.
 
-**Threat sharing is underdeveloped for AI.** Traditional security has ISACs, CVE databases, threat-intelligence sharing frameworks, and coordinated disclosure norms. AI security has nascent equivalents — MITRE ATLAS, emerging responsible disclosure norms developed by organizations like Anthropic, OpenAI, and academic AI security groups, and early-stage information-sharing initiatives — but these are not yet at the scale or maturity of their traditional-security counterparts. The gap between AI exploitation professionalization and defender infrastructure remains significant. Defenders who engage with these nascent structures now will be better positioned as they mature.
+**Threat sharing is underdeveloped for AI.** Traditional security has ISACs, CVE databases, threat-intelligence sharing frameworks, and coordinated disclosure norms built over decades. AI security has nascent equivalents — MITRE ATLAS provides a structured adversarial ML attack taxonomy, several frontier AI providers have published vulnerability disclosure policies, and academic AI security groups have proposed information-sharing frameworks — but these are not yet at the scale, coverage, or operational maturity of their traditional-security counterparts. The gap between AI exploitation activity and defender coordination infrastructure remains significant. Defenders who engage with these nascent structures now will be better positioned as they mature.
 
 ## Responsible Analysis: What This Post Doesn't Include
 
@@ -87,7 +87,7 @@ The defender-oriented framing is also substantive, not cosmetic. The goal of doc
 
 ## Where This Is Heading
 
-The commercialization pattern is early. The parallels to traditional cybercrime ecosystem development are structural, not identical — the harm profiles differ, the business models are less mature, and the legal landscape is more ambiguous. But the trajectory is recognizable.
+The commercialization pattern is nascent but structurally legible. The three-tier ecosystem described above already exists in documented form — open communities, semi-commercial marketplaces, underground services — but the maturity, revenue scale, and operational sophistication of the underground tier trail the ransomware-as-a-service market by years. The parallels are structural, not predictive: the harm profiles differ, the business models are less mature, and the legal landscape is more ambiguous. But the trajectory is recognizable.
 
 The questions worth tracking: Does coordinated AI security disclosure and threat sharing develop fast enough to provide defenders with structured early warning? Do AI providers build the adversarial monitoring and rapid-response infrastructure needed to shorten the window between bypass technique emergence and effective mitigation? Do defenders integrate AI threat intelligence into existing security operations, or continue treating it as a separate problem?
 
