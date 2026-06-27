@@ -1,6 +1,6 @@
 ---
 title: "Jailbreak-as-a-Service: The Underground Market for LLM Exploit Techniques"
-description: "A threat-intelligence analysis of the emerging economy around LLM exploitation — paid jailbreak APIs, prompt-injection libraries, model-specific bypass techniques, and the communities that trade them. Mapping the ecosystem from open Reddit threads to underground subscription services, with defender implications."
+description: "Mapping the underground economy around LLM exploitation — paid jailbreak APIs, model-specific bypass markets, and the professionalization of AI adversaries."
 pubDate: 2026-06-27
 tags: ["jailbreak", "threat-intelligence", "underground-economy", "llm-security", "ai-safety", "adversarial-attacks", "defender-implications"]
 ---
