@@ -23,7 +23,7 @@ In modern agentic deployments, this vulnerability compounds in three ways:
 
 **RAG amplifies persistence.** Retrieval-Augmented Generation (RAG) systems store incoming documents in a vector database and retrieve relevant ones at inference time. A document that enters the database at step one can be retrieved and re-injected into the prompt at steps two, three, and ten. The worm doesn't need to transmit itself actively — the RAG does it automatically.
 
-**Active database updating policy.** Production AI assistants continuously index incoming content. Microsoft Copilot actively indexes received emails and documents. Gemini for Google Workspace does the same. The moment an infected email lands in your inbox, it enters your assistant's RAG database — before you've read it, and certainly before any human has reviewed it.
+**Active database updating policy.** Production AI assistants continuously index incoming content. The ComPromptMized researchers cite prior work demonstrating that Microsoft Copilot actively indexes received emails and documents into the RAG database used for writing new emails — and Gemini for Google Workspace exhibits analogous behavior. The moment an infected email is stored in the RAG database, the worm is positioned for retrieval at the next inference — before the user has read it, and certainly before any human has reviewed it.
 
 Put these three properties together and you have a substrate that propagates malicious instructions automatically, persistently, and without any user interaction.
 
@@ -59,7 +59,7 @@ Two propagation vectors were demonstrated:
 
 **Data exfiltration results.** In the data exfiltration scenario, the worm reliably extracted private information — names, email addresses, phone numbers, account details — from the context provided to the model. This information was appended to outgoing emails in the "DATAVIEW" section, traveling alongside the worm itself to the next recipient.
 
-The zero-click property is worth emphasizing. Neither the infected user nor the next target needs to open a malicious attachment, click a link, or take any action. The attack fires when the assistant processes incoming mail — a background operation that happens automatically.
+The zero-click property is worth emphasizing. Neither the infected user nor the next target needs to open a malicious attachment, click a link, or take any action. The worm payload fires during the *next inference* where the contaminated email is retrieved from the RAG database — typically when the assistant auto-drafts a reply or composes a new email. That retrieval and generation happens in the background, without any user-visible prompt.
 
 ## Defense Patterns
 
@@ -83,7 +83,7 @@ Nassi et al. propose and evaluate a novel guardrail they call the **Virtual Donk
 
 The key insight: a successful self-replicating prompt causes the model's output to be highly similar to its input — because the worm instructs the model to reproduce its own text. The Virtual Donkey exploits this by computing a similarity score between the input provided to the model and the output it generates. If similarity exceeds a threshold, the output is flagged as a potential worm.
 
-**Evaluated performance:** TPR (true positive rate) of 1.0 — every worm instance was detected. FPR (false positive rate) of 0.015 — 1.5% false alarms on benign outputs. Critically, the guardrail generalized to **out-of-distribution worms**: worms using different jailbreaking commands that it had never seen during training, a different email dataset (Hillary Clinton's email archive), and different payload types. The researchers released a Python implementation suitable for integration with LangChain.
+**Evaluated performance:** TPR (true positive rate) of 1.0 — every worm instance was detected. FPR (false positive rate) of 0.015 — 1.5% false alarms on benign email outputs. Critically, the guardrail generalized to **out-of-distribution worms**: worms using different jailbreaking commands that it had never seen during training, a different email dataset (Hillary Clinton's email archive), and different payload types. The researchers released a Python implementation [on GitHub](https://github.com/StavC/ComPromptMized) suitable for LangChain integration. Note that the FPR was measured specifically on email tasks; applications with high input/output overlap by design (summarization, quoting, translation) may need task-specific threshold tuning.
 
 ### Content Provenance Tracking
 
@@ -107,7 +107,7 @@ In 2024, Morris-II raised the same question for AI ecosystems. Agentic systems a
 
 The ComPromptMized research identifies a concrete vulnerability class that is present in any RAG-based multi-agent system with an active database updating policy. The mitigation options it evaluates are not complete defenses, but they are available today:
 
-- **Deploy the Virtual Donkey guardrail** (or an equivalent input/output similarity check) at every agent boundary. The false positive rate is low enough for production use. The [open-source implementation](https://arxiv.org/abs/2403.02817) is available for LangChain integration.
+- **Deploy the Virtual Donkey guardrail** (or an equivalent input/output similarity check) at agent boundaries where worm propagation is a realistic threat. The researchers achieved a 1.5% false-positive rate on email tasks; note that tasks with high input/output overlap by design — summarization, quote-and-reply, translation — may require a higher threshold or task-specific tuning before production deployment. The [open-source implementation is on GitHub](https://github.com/StavC/ComPromptMized) and is available for LangChain integration.
 - **Apply least privilege to agent tool access.** An agent that cannot send email cannot propagate a worm via email. Restrict capabilities aggressively until a use case demands otherwise.
 - **Separate instruction context from document context** in RAG prompts using structured message formats. This doesn't eliminate indirect injection but raises the technical bar significantly.
 - **Audit incoming content before RAG indexing.** Filtering on ingest — before a document enters the vector database — is structurally more robust than filtering on retrieval, because it prevents the worm from establishing persistence.
@@ -117,4 +117,4 @@ The Morris Worm's legacy was the creation of CERT/CC, the first coordinated comp
 
 ---
 
-*The ComPromptMized paper (arXiv:2403.02817) was authored by Ben Nassi (Technion) and Ron Bitton (Intuit), and disclosed to LangChain, OpenAI, and Google via their bug bounty programs. Experiments were conducted in a lab environment against researcher-built systems using the public Enron email dataset.*
+*The ComPromptMized paper (arXiv:2403.02817, accepted at CCS 2025) was authored by Stav Cohen (Technion), Ron Bitton (Intuit), and Ben Nassi (Technion / Cornell Tech). The findings were disclosed to LangChain, OpenAI, and Google via their bug bounty programs. All experiments were conducted in a lab environment against researcher-built systems using the public Enron email dataset.*
