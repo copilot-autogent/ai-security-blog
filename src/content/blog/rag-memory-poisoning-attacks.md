@@ -57,7 +57,7 @@ The Bing Chat examples from the original paper remain instructive: a webpage cou
 
 RAG over external documents is the well-studied case. Less discussed is poisoning that targets the agent's own memory of its interactions — the session history, episodic memory, or learned preferences that an agent accumulates over time.
 
-Agents like those built on autogent's `recall_memory` / `save_memory` architecture maintain a persistent memory store that is retrieved at runtime to inform responses. If an attacker can influence what gets written to that store — whether by crafting user inputs that trigger misleading memory saves, by injecting into a source document that causes the agent to form a false belief, or by poisoning shared memory in a multi-tenant deployment — the corruption persists across all future sessions.
+Agents that maintain a persistent memory store — retrieved at runtime to inform responses — expose an additional attack vector. If an attacker can influence what gets written to that store — whether by crafting user inputs that trigger misleading memory saves, by injecting into a source document that causes the agent to form a false belief, or by poisoning shared memory in a multi-tenant deployment — the corruption persists across all future sessions. Whether any given implementation is actually isolated by namespace, provenanced, or sandboxed is an architecture question that varies significantly across deployments; the threat model applies wherever those controls are absent.
 
 The cross-session contamination scenario is particularly severe in shared deployments:
 
@@ -74,7 +74,7 @@ The vector representation layer introduces its own attack surface distinct from 
 
 - **Proximity inflation**: A poisoned document's embedding is positioned near many high-value query embeddings, causing it to surface across a wide range of unrelated queries
 - **Legitimate document suppression**: Adversarial texts engineered to have high cosine similarity to real documents, causing them to crowd out legitimate results when the attacker's document scores higher
-- **Index corruption**: In mutable vector stores, an attacker with write access to the index directly can modify stored embeddings to redirect retrieval without modifying source documents
+- **Index corruption** (distinct threat model, requires datastore write access): An attacker who has compromised the vector store itself can modify stored embeddings directly to redirect retrieval without altering source documents. This is a datastore-compromise scenario rather than a purely embedding-layer attack — it's worth separating because the attacker capability required is substantially different from the semantic-manipulation techniques above
 
 This class of attack is particularly hard to audit because the attack is in the embedding space, not the text. A human reviewing the knowledge base documents sees normal text. The threat only manifests at query time.
 
@@ -82,9 +82,9 @@ This class of attack is particularly hard to audit because the attack is in the 
 
 The defense literature is developing, but empirical validation is uneven. Here's a realistic assessment:
 
-### Retrieval Re-ranking with Confidence Gating (Empirically Supported)
+### Retrieval Re-ranking with Confidence Gating (Practitioner Response to PoisonedRAG Findings)
 
-PoisonedRAG's paper demonstrates that naive top-K retrieval is fragile. One validated partial mitigation: retrieve a larger candidate set, then apply a secondary re-ranking step that penalizes documents with anomalous semantic distance to the query compared to other retrieved documents. Isolated documents that "shouldn't" be semantically proximate to each other but all score highly against the same query are a signal. This doesn't eliminate attacks but raises the required sophistication.
+PoisonedRAG's paper demonstrates that naive top-K retrieval is fragile — even a handful of adversarially crafted documents can displace legitimate results. A practitioner response is to retrieve a larger candidate set, then apply a secondary re-ranking step that penalizes documents with anomalous semantic distance to the query compared to the rest of the candidate set. Isolated documents that rank highly but are dissimilar to other high-ranking candidates are a potential signal of injection. Note that the PoisonedRAG paper itself focuses on the attack side; this specific re-ranking heuristic is a practitioner inference from the attack's mechanics rather than an independently validated defense from the same work. It raises the required sophistication without eliminating the risk.
 
 ### Source Provenance Tracking (Theoretical, Architecturally Important)
 
@@ -100,7 +100,7 @@ Before production deployment, RAG systems should be tested with known-malicious 
 
 ### Input/Output Monitoring for Post-Retrieval Behavior (Operational Practice)
 
-Responses that instruct the user to take external actions — clicking links, providing credentials, contacting external services — when the query context doesn't warrant it are a high-signal indicator of a retrieval-time injection. A lightweight behavioral monitor that flags anomalous action-instruction ratios in output catches a meaningful fraction of active exploits.
+Responses that instruct the user to take external actions — clicking links, providing credentials, contacting external services — when the query context doesn't warrant it are a high-signal indicator of a retrieval-time injection. A behavioral monitor that flags anomalous action-instruction patterns in output can surface these cases; the actual detection rate will depend heavily on implementation specifics and attacker sophistication, and no independently validated benchmark exists for this control class as of this writing. It is best understood as a detection layer that complements — not replaces — upstream retrieval controls.
 
 ## The Defender's Checklist
 
