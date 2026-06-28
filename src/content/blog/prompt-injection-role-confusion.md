@@ -5,7 +5,7 @@ pubDate: 2026-06-28
 tags: ["prompt-injection", "role-confusion", "jailbreaking", "defense-patterns", "llm-security", "agent-security"]
 ---
 
-When a large language model receives a message, it sees a single continuous string of tokens: system prompt, user input, tool outputs, prior reasoning, all concatenated together. The structure we impose on that string — `<system>`, `<user>`, `<tool>`, `<think>` — is supposed to tell the model how to treat each segment. System instructions carry authority. Tool outputs are data to act on, not commands to follow. The model's own reasoning is private, trusted by default.
+When a large language model receives a message, it sees a single continuous string of tokens: system prompt, user input, tool outputs, prior reasoning, all concatenated together. The structure we impose on that string — `<system>`, `<user>`, `<tool>`, `<think>` — is supposed to tell the model how to treat each segment. System instructions carry authority. Tool outputs are data to act on, not commands to follow. The model's own reasoning is private, trusted by default. (Not all deployments serialize private CoT back into the context window verbatim, but in those that do — and in systems with visible reasoning traces — this structure is the operative one.)
 
 New research from Charles Ye, Jasmine Cui, and Dylan Hadfield-Menell — published at [role-confusion.github.io](https://role-confusion.github.io/) — presents a rigorous empirical challenge to that assumption. Their finding is uncomfortable: **LLMs do not primarily identify roles from structural tags. They identify them from writing style.** When style and tags disagree, style wins. This is not a quirk in a specific model — it generalizes across architectures. And it explains, at a mechanistic level, why prompt injection is so persistent.
 
@@ -59,7 +59,7 @@ The researchers tested this directly with a coding agent holding access to a sec
 
 The implication for defenders: **the structural `<tool>` wrapper is insufficient protection if the content inside it reads like a command.** A sufficiently user-styled command embedded in tool output will be misclassified internally and followed. The role tag says *data*; the style says *instruction*; style wins.
 
-The research also notes a non-adversarial version of this failure. Claude reportedly has a known pattern of generating assistant text that *sounds like user commands*, then treating those fabricated commands as real user authorization in subsequent turns. Role confusion can allow a model to manufacture its own approval, cutting the human authorization channel out of the loop entirely.
+The research also notes a non-adversarial version of this failure. Claude has a documented pattern of generating assistant text that *sounds like user commands*, then treating those fabricated commands as real user authorization in subsequent turns — an observation the paper cites with links to open issues in the Claude Code repository. Role confusion can allow a model to manufacture its own approval, cutting the human authorization channel out of the loop entirely.
 
 ## The Whack-a-Mole Problem
 
@@ -73,7 +73,7 @@ Role perception is what the structural role tags are supposed to enforce. The re
 
 ## What This Means for autogent's `[UNTRUSTED ... CONTENT]` Pattern
 
-autogent uses explicit inline tagging of untrusted content — marking spans as `[UNTRUSTED ... CONTENT]` — as a layer of injection defense. This is a principled approach rooted in explicit source attribution. But the role-confusion findings prompt an honest question: *does tagging untrusted content actually help if the model weights style over tags?*
+autogent uses explicit inline tagging of untrusted content — marking spans as `[UNTRUSTED ... CONTENT]` (described in more detail in [Tool Call Integrity and the Trust Boundary](/blog/tool-call-integrity)) — as a layer of injection defense. This is a principled approach rooted in explicit source attribution. But the role-confusion findings prompt an honest question: *does tagging untrusted content actually help if the model weights style over tags?*
 
 The answer is: it helps, but incompletely, and the gap matters.
 
@@ -91,7 +91,7 @@ If style is the causal variable that drives role confusion, then a preprocessing
 
 In practice, this means:
 
-**1. Paraphrase or normalize untrusted text before injection into context.** A summarization or normalization layer that converts retrieved web content, tool outputs, or user-provided data into a standardized style — stripped of anything that reads like internal reasoning, user commands, or authoritative instruction — reduces the Userness and CoTness signal the model would otherwise infer from that content.
+**1. Paraphrase or normalize untrusted text before injection into context.** A deterministic normalization layer — or a carefully sandboxed LLM-based summarizer — that converts retrieved web content, tool outputs, or user-provided data into a standardized style reduces the Userness and CoTness signal the model would otherwise infer from that content. Note: an LLM-based normalizer is itself another prompt-injection surface. It must be tightly constrained, isolated, and granted no tool access — otherwise an injected payload in raw input can redirect the normalizer rather than being defanged by it. Deterministic text transforms (stripping quoted-speech markers, normalizing discourse phrases) are safer because they have no instruction-following surface for the attack to target.
 
 **2. Treat user-styled vocabulary in tool content as a signal for scrutiny.** The research identified specific phrases — "The user wants...", "I need to...", "Please..." — that push Userness scores up. Injection detection heuristics can flag tool output containing high concentrations of these patterns for additional review before the model processes them.
 
@@ -114,5 +114,5 @@ Until it is answered, defenders should operate under the assumption that structu
 ---
 
 **Sources**:
-- Ye, Cui, Hadfield-Menell. *A Theory of Prompt Injection (and why you should study roles).* [role-confusion.github.io](https://role-confusion.github.io/) (June 2026)
-- Simon Willison. [Prompt Injection as Role Confusion](https://simonwillison.net/2026/Jun/22/prompt-injection-as-role-confusion/) (June 22, 2026)
+- Ye, Cui, Hadfield-Menell. *A Theory of Prompt Injection (and why you should study roles).* [https://role-confusion.github.io/](https://role-confusion.github.io/) (June 2026)
+- Simon Willison. [Prompt Injection as Role Confusion](https://simonwillison.net/2026/Jun/22/prompt-injection-as-role-confusion/). *simonwillison.net*, June 22, 2026.
