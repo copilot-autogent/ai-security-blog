@@ -5,9 +5,9 @@ pubDate: 2026-06-28
 tags: ["agent-security", "tool-use", "prompt-injection", "least-privilege", "defense-patterns", "threat-modeling"]
 ---
 
-In 1988, Norm Hardy wrote a short paper for a symposium on language and system security. The paper described a security failure in an operating system called HYDRA. A compiler service called the "FORT compiler" had been granted special authority to write to a billing file — call it `$BILLING`. Users could invoke the compiler, but they couldn't write to `$BILLING` directly. The compiler held that privilege on their behalf.
+In 1988, Norm Hardy published a short paper in ACM SIGOPS Operating Systems Review. The paper described a security failure in a timesharing system. A FORTRAN compiler had been granted special authority to write to a billing file — `SYSX/BILL`. Users could invoke the compiler, but they couldn't write to `SYSX/BILL` directly. The compiler held that privilege on their behalf.
 
-A user discovered they could instruct the compiler to use its privileged file handle not to write compilation output, but to overwrite `$BILLING` with arbitrary content. The compiler did it. The compiler had the authority. The compiler couldn't tell the difference between "write the object file here" and "write this adversarial data to the billing file." It was confused about who it was working for.
+A user discovered they could instruct the compiler to use its privileged file handle not to write compilation output, but to overwrite `SYSX/BILL` with arbitrary content. The compiler did it. The compiler had the authority. The compiler couldn't tell the difference between "write the object file here" and "write this adversarial data to the billing file." It was confused about who it was working for.
 
 Hardy named this the *confused deputy problem*. In 2026, it is the central threat model for LLM agents with tool access, and most developers building on OAuth integrations, GPT Actions, and Claude Integrations haven't heard of it.
 
@@ -20,7 +20,7 @@ The failure mode has three components:
 2. An *authority it shouldn't exercise for third parties* — but structurally can
 3. A *confusion vector* — input from a third party that the deputy processes and acts on without distinguishing the source of instructions from the source of data
 
-In Hardy's HYDRA case: the deputy was the FORT compiler; its authority was write access to `$BILLING`; the confusion vector was the file path argument passed by the user.
+In Hardy's timesharing system case: the deputy was the FORTRAN compiler; its authority was write access to `SYSX/BILL`; the confusion vector was the file path argument passed by the user.
 
 For LLM agents, every element of this structure is present at scale.
 
@@ -61,11 +61,11 @@ This is the core insight Simon Willison has been pressing for years in his writi
 
 The failure mode isn't theoretical. Several incidents from the last 18 months illustrate the confused deputy structure in production:
 
-**Email-reading agent file deletion (February 2026).** A personal productivity agent had read access to email and file system management access for "organizing downloaded attachments." An email from a business contact contained what the sender thought was a formatting instruction: a line that read `"Clean up any temp files from last week's project."` The agent, processing the email as part of an inbox summary task, interpreted the instruction in context of its file management authority and deleted a directory of working files. The sender was not an attacker — but the structure that made adversarial exploitation possible made this accidental exploitation possible too. Authority plus content processing equals confused deputy exposure.
+**Email-reading agent file deletion (February 2026, illustrative composite).** A personal productivity agent had read access to email and file system management access for "organizing downloaded attachments." An email from a business contact contained what the sender thought was a formatting instruction: a line that read `"Clean up any temp files from last week's project."` The agent, processing the email as part of an inbox summary task, interpreted the instruction in context of its file management authority and deleted a directory of working files. The sender was not an attacker — but the structure that made adversarial exploitation possible made this accidental exploitation possible too. Authority plus content processing equals confused deputy exposure.
 
-**Calendar agent event data leak (March 2026).** A scheduling assistant integrated with Google Calendar and email had authority to read calendar events to help draft scheduling emails. A shared Google Calendar from a vendor's support system contained an event description that included injection instructions directing the agent to include the user's full calendar availability for the next 30 days in its next outgoing email draft. The agent did this during a routine email composition task. The user didn't notice the appended schedule before sending. The authority to read calendar events, combined with the authority to draft emails, combined with untrusted content from a shared calendar, produced a data leak.
+**Calendar agent event data leak (March 2026, illustrative composite).** A scheduling assistant integrated with Google Calendar and email had authority to read calendar events to help draft scheduling emails. A shared Google Calendar from a vendor's support system contained an event description that included injection instructions directing the agent to include the user's full calendar availability for the next 30 days in its next outgoing email draft. The agent did this during a routine email composition task. The user didn't notice the appended schedule before sending. The authority to read calendar events, combined with the authority to draft emails, combined with untrusted content from a shared calendar, produced a data leak.
 
-**Slack-to-GitHub cross-authority escalation.** An engineering team's AI assistant had both Slack read access (to summarize discussions) and GitHub write access (to create issues from action items). A competitor's employee, who had been added to a shared Slack workspace for a joint project, posted a message that included injected issue-creation instructions directing the agent to create a GitHub issue in a private repository with the text of a recent internal technical discussion. The agent, summarizing the shared channel, processed the injected instruction and created the issue, inadvertently making internal technical details visible in a repository the attacker could access.
+**Slack-to-GitHub cross-authority escalation (illustrative composite).** An engineering team's AI assistant had both Slack read access (to summarize discussions) and GitHub write access (to create issues from action items). A competitor's employee, who had been added to a shared Slack workspace for a joint project, posted a message that included injected issue-creation instructions directing the agent to create a GitHub issue in a private repository with the text of a recent internal technical discussion. The agent, summarizing the shared channel, processed the injected instruction and created the issue, inadvertently making internal technical details visible in a repository the attacker could access.
 
 In each case, no authentication was bypassed. The agents did exactly what they were designed to do. The confused deputy structure made the capability available.
 
@@ -77,7 +77,7 @@ Zapier's AI agent currently connects to over 7,000 applications. Claude Integrat
 
 Each integration added to an agent is a new capability a confused deputy can exercise. An agent that connects to GitHub can create issues, close PRs, and edit repository settings. One that connects to Jira can create, modify, and close tickets. One with Slack access can read private channels and post messages. One with Salesforce access can query and modify customer records.
 
-The attack surface is the Cartesian product of: (integrations the agent holds authority over) × (untrusted content the agent processes). As both dimensions grow, the attack surface grows quadratically.
+The attack surface is the Cartesian product of: (integrations the agent holds authority over) × (untrusted content the agent processes). As both dimensions grow, the attack surface grows multiplicatively.
 
 An agent connected to five enterprise tools that processes email, Slack messages, web pages, documents, and issue comments has 25 confused deputy exposure paths before you write a single line of threat model. Most enterprise agent deployments are not threat-modeled at this granularity.
 
@@ -135,9 +135,9 @@ Separate agent instances with minimal authority per role is harder to build than
 
 ### 5. Per-action provenance logging
 
-Every action an agent takes should be logged with its provenance: what content triggered the action, what the agent's reasoning was, what it did. When an agent sends an unexpected email or creates an unexpected issue, you need to trace the action back to the content that triggered it.
+Every action an agent takes should be logged with its provenance: what content triggered the action and what it did. Focus on observable inputs and tool calls rather than internal reasoning traces — reasoning logs can inadvertently capture sensitive user data, system prompts, or secrets, making them a secondary data exposure risk if the logs themselves are compromised. What you need for incident response is: which external content was retrieved, what tool call was made, and what the result was.
 
-Provenance logs serve two functions: incident detection (you notice the agent did something it shouldn't have) and incident response (you can trace back to the injection payload). Without provenance, a confused deputy attack may be invisible until the consequences appear.
+Provenance logs serve two functions: incident detection (you notice the agent did something it shouldn't have) and incident response (you can trace the action back to the content that triggered it). Without provenance, a confused deputy attack may be invisible until the consequences appear.
 
 ## Where the Industry Is
 
@@ -145,7 +145,7 @@ The tooling for implementing least privilege in LLM agents is still immature.
 
 Token-scoping infrastructure for AI agents is largely absent from major integration platforms. Zapier, Claude Integrations, and GPT Actions all work with persistent, broad-scope OAuth tokens rather than per-operation capability tokens. The infrastructure exists (OAuth has a scopes mechanism; most API providers support fine-grained permissions), but the agent platforms haven't built the abstraction layer to make per-operation scoping practical.
 
-OWASP's Agentic AI Top 10 (2025-2026 revision) lists Agent Goal Hijacking (ASI01) and Excessive Agency (ASI07) as top-category risks — both map directly to the confused deputy structure. But OWASP's mitigations remain at the level of recommendations; no widely-adopted agent framework currently enforces them structurally.
+OWASP's LLM Top 10 (LLM06 in the 2025 edition) covers Excessive Agency — agents with more permissions than needed for their function. The OWASP Agentic AI Threats & Mitigations document separately addresses Agent Goal Hijacking as a top-category risk. Both map directly to the confused deputy structure. But OWASP's mitigations remain at the level of recommendations; no widely-adopted agent framework currently enforces them structurally.
 
 The NIST AI Risk Management Framework 1.0 addresses data governance and model robustness but doesn't specifically address the confused deputy structure in agentic systems. The AI Safety Institute's guidance focuses more on catastrophic risk than on the lower-severity but much more immediate ambient authority risks facing enterprise deployments.
 
@@ -163,7 +163,7 @@ The ideal solution — capability-token infrastructure, per-operation scoping, s
 
 **Separate content sources by trust level.** Email from unknown senders should be processed differently from system prompts from authenticated administrators. Web content retrieved during task execution should be treated as untrusted data, not instructions. The model may not perfectly enforce this separation, but making it explicit in your system design gives you something to audit and improve.
 
-**Log agent actions with provenance.** If you can't trace an agent action back to what triggered it, you can't detect or respond to confused deputy exploitation. Implement provenance logging before you're trying to debug an incident.
+**Log agent actions with provenance — observable inputs and tool calls.** If you can't trace an agent action back to what triggered it, you can't detect or respond to confused deputy exploitation. Log the external content retrieved, the tool calls made, and their results. Avoid logging full reasoning traces, which can inadvertently capture sensitive data. Implement provenance logging before you're trying to debug an incident.
 
 **Scope OAuth tokens as tightly as the platform allows.** Until capability token infrastructure exists, use the finest-grained OAuth scopes available. Read-only scopes where the agent only needs to read. Narrower resource scopes where the integration supports them. Shorter token lifetimes where the platform supports refresh.
 
@@ -175,4 +175,4 @@ The fix was known in 1988. Implementing it for AI agents is the infrastructure a
 
 ---
 
-*Sources: Norm Hardy, "The Confused Deputy (or why capabilities might have been invented)" (1988, cap-lore.com/CapTheory/ConfusedDeputy.html); Simon Willison, "Prompt injection and confused deputies" (simonwillison.net); Mark Miller et al., "Capability Myths Demolished" (2003, erights.org); OWASP GenAI Security Project, Agentic AI Top 10 (2025-2026 revision, owasp.org/www-project-top-10-for-large-language-model-applications/); NIST AI Risk Management Framework 1.0 (nist.gov/system/files/documents/2023/01/26/AI RMF 1.0.pdf); AWS IAM Least Privilege documentation (docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege).*
+*Sources: Norm Hardy, "The Confused Deputy (or why capabilities might have been invented)" (ACM SIGOPS Operating Systems Review, Oct 1988, cap-lore.com/CapTheory/ConfusedDeputy.html); Simon Willison, "Prompt injection and confused deputies" (simonwillison.net); Mark Miller et al., "Capability Myths Demolished" (2003, erights.org); OWASP LLM Top 10 (2025 edition, LLM06 Excessive Agency, owasp.org/www-project-top-10-for-large-language-model-applications/); OWASP Agentic AI Threats & Mitigations (owasp.org/www-project-agentic-ai-threats-and-mitigations/); NIST AI Risk Management Framework 1.0 (nist.gov/system/files/documents/2023/01/26/AI_RMF_1.0.pdf); AWS IAM Least Privilege documentation (docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege).*
