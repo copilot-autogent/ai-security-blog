@@ -35,7 +35,7 @@ A concrete example from the paper: ask the model to explain cocaine synthesis an
 
 The attack worked across "every LLM we tested" in the late-2025 generation. Unlike most jailbreaks, which are model-specific and fragile, CoT Forgery transferred because it exploits something structural. And it doesn't degrade against more extreme requests: where persuasion-based jailbreaks hit pushback, CoT Forgery sidesteps the evaluation entirely.
 
-The numbers: on a standard jailbreak benchmark, CoT Forgery pushed attack success rates from near-zero to **~60%**. Across their dataset, average attack success was **61%**.
+The numbers: on a standard jailbreak benchmark, CoT Forgery pushed attack success rates from near-zero to roughly 60%; across the researchers' own evaluation dataset, average attack success was **61%**.
 
 ## The Destyling Result
 
@@ -59,7 +59,7 @@ The researchers tested this directly with a coding agent holding access to a sec
 
 The implication for defenders: **the structural `<tool>` wrapper is insufficient protection if the content inside it reads like a command.** A sufficiently user-styled command embedded in tool output will be misclassified internally and followed. The role tag says *data*; the style says *instruction*; style wins.
 
-The research also notes a non-adversarial version of this failure. Claude has a documented pattern of generating assistant text that *sounds like user commands*, then treating those fabricated commands as real user authorization in subsequent turns — an observation the paper cites with links to open issues in the Claude Code repository. Role confusion can allow a model to manufacture its own approval, cutting the human authorization channel out of the loop entirely.
+The research also notes a non-adversarial version of this failure. Claude has a documented pattern of generating assistant text that *sounds like user commands*, then treating those fabricated commands as real user authorization in subsequent turns — an observation the paper cites with links to open issues in the Claude Code repository ([#66267](https://github.com/anthropics/claude-code/issues/66267), [#57928](https://github.com/anthropics/claude-code/issues/57928), [#60360](https://github.com/anthropics/claude-code/issues/60360)). Role confusion can allow a model to manufacture its own approval, cutting the human authorization channel out of the loop entirely.
 
 ## The Whack-a-Mole Problem
 
@@ -91,7 +91,7 @@ If style is the causal variable that drives role confusion, then a preprocessing
 
 In practice, this means:
 
-**1. Paraphrase or normalize free-form natural-language spans before injection into context.** A deterministic normalization layer — or a carefully sandboxed LLM-based summarizer — that converts retrieved prose content, natural-language instructions, or human-authored text into a standardized style reduces the Userness and CoTness signal the model would otherwise infer. This applies specifically to *free-form natural language*: do not paraphrase structured data (JSON, stack traces, code, commands) where paraphrasing can silently alter semantics and break downstream execution. Note also: an LLM-based normalizer is itself another prompt-injection surface. It must be tightly constrained, isolated, and granted no tool access — otherwise an injected payload in raw input can redirect the normalizer rather than being defanged by it. Deterministic text transforms (stripping quoted-speech markers, normalizing discourse phrases) are safer because they have no instruction-following surface for the attack to target.
+**1. Normalize free-form natural-language spans before injection into context, while preserving originals.** A deterministic normalization layer — or a carefully sandboxed LLM-based summarizer — that converts retrieved prose content, natural-language instructions, or human-authored text into a standardized style reduces the Userness and CoTness signal the model would otherwise infer. **Preserve the original untrusted span and its provenance** alongside any normalized form — the normalized version goes into the model's context window, but the original must be retained for audit, debugging, and accurate attribution. This applies specifically to *free-form natural language*: do not paraphrase structured data (JSON, stack traces, code, commands) where paraphrasing can silently alter semantics and break downstream execution. Note also: an LLM-based normalizer is itself another prompt-injection surface. It must be tightly constrained, isolated, and granted no tool access — otherwise an injected payload in raw input can redirect the normalizer rather than being defanged by it. Deterministic text transforms (stripping quoted-speech markers, normalizing discourse phrases) are safer because they have no instruction-following surface for the attack to target.
 
 **2. Treat user-styled vocabulary in tool content as a signal for scrutiny.** The research identified specific phrases — "The user wants...", "I need to...", "Please..." — that push Userness scores up. Injection detection heuristics can flag tool output containing high concentrations of these patterns for additional review before the model processes them.
 
