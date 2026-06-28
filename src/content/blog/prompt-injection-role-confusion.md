@@ -1,8 +1,8 @@
 ---
 title: "Prompt Injection as Role Confusion: Why LLMs Trust Style Over Role Tags"
-description: "New research reveals LLMs identify roles from writing style rather than structural tags — making the <system> tag a suggestion, not a security boundary. Destyling adversarial text drops attack success from 61% to 10%. Here's what that means for defenders."
+description: "New research reveals LLMs identify roles from writing style rather than structural tags — making the system role tag a suggestion, not a security boundary. Destyling adversarial text drops attack success from 61% to 10%. Here's what that means for defenders."
 pubDate: 2026-06-28
-tags: ["prompt-injection", "role-confusion", "jailbreaking", "defense-patterns", "llm-security", "agent-security"]
+tags: ["prompt-injection", "jailbreaking", "defense-patterns", "llm-security", "agent-security"]
 ---
 
 When a large language model receives a message, it sees a single continuous string of tokens: system prompt, user input, tool outputs, prior reasoning, all concatenated together. The structure we impose on that string — `<system>`, `<user>`, `<tool>`, `<think>` — is supposed to tell the model how to treat each segment. System instructions carry authority. Tool outputs are data to act on, not commands to follow. The model's own reasoning is private, trusted by default. (Not all deployments serialize private CoT back into the context window verbatim, but in those that do — and in systems with visible reasoning traces — this structure is the operative one.)
@@ -91,7 +91,7 @@ If style is the causal variable that drives role confusion, then a preprocessing
 
 In practice, this means:
 
-**1. Paraphrase or normalize untrusted text before injection into context.** A deterministic normalization layer — or a carefully sandboxed LLM-based summarizer — that converts retrieved web content, tool outputs, or user-provided data into a standardized style reduces the Userness and CoTness signal the model would otherwise infer from that content. Note: an LLM-based normalizer is itself another prompt-injection surface. It must be tightly constrained, isolated, and granted no tool access — otherwise an injected payload in raw input can redirect the normalizer rather than being defanged by it. Deterministic text transforms (stripping quoted-speech markers, normalizing discourse phrases) are safer because they have no instruction-following surface for the attack to target.
+**1. Paraphrase or normalize free-form natural-language spans before injection into context.** A deterministic normalization layer — or a carefully sandboxed LLM-based summarizer — that converts retrieved prose content, natural-language instructions, or human-authored text into a standardized style reduces the Userness and CoTness signal the model would otherwise infer. This applies specifically to *free-form natural language*: do not paraphrase structured data (JSON, stack traces, code, commands) where paraphrasing can silently alter semantics and break downstream execution. Note also: an LLM-based normalizer is itself another prompt-injection surface. It must be tightly constrained, isolated, and granted no tool access — otherwise an injected payload in raw input can redirect the normalizer rather than being defanged by it. Deterministic text transforms (stripping quoted-speech markers, normalizing discourse phrases) are safer because they have no instruction-following surface for the attack to target.
 
 **2. Treat user-styled vocabulary in tool content as a signal for scrutiny.** The research identified specific phrases — "The user wants...", "I need to...", "Please..." — that push Userness scores up. Injection detection heuristics can flag tool output containing high concentrations of these patterns for additional review before the model processes them.
 
