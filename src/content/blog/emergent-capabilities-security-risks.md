@@ -21,7 +21,7 @@ The term "emergent capability" gets used loosely, so let's be precise. In the We
 1. **Discontinuity**: It doesn't appear gradually. There's a threshold—measured in parameters, compute, or data—below which the capability is essentially absent and above which it appears.
 2. **Unpredictability**: It can't be anticipated by linear extrapolation from smaller models.
 
-The original paper documented dozens of examples: chain-of-thought reasoning (models spontaneously solving multi-step problems when prompted with "let's think step by step"), multi-step arithmetic, code execution planning, analogical reasoning, and calibration of uncertainty estimates.
+The original paper documented dozens of examples across 137 tasks: chain-of-thought reasoning (models spontaneously solving multi-step problems when prompted with "let's think step by step"), multi-step arithmetic, word unscrambling, phonetic alphabet transcription, and analogical reasoning. Subsequent literature has also examined code generation planning and uncertainty calibration as capabilities with similarly discontinuous emergence patterns, though the precise threshold conditions remain an active research area.
 
 None of these were explicitly optimized for. They emerged.
 
@@ -37,7 +37,7 @@ Twelve months later, the vendor releases a fine-tuned update—same model family
 
 What they don't know: the updated model has crossed a scale threshold at which code comprehension capability has emerged. The summarization service now has an unreported ability to analyze code snippets in documents, understand exploit patterns described in incident reports, and synthesize that understanding into outputs the security team never evaluated.
 
-This isn't hypothetical. The broader pattern is well-documented. GPT-4 at deployment had capabilities—multilingual reasoning, multi-modal inference, long-context synthesis—that weren't fully characterized in the original GPT-4 technical report. Red teamers at external organizations found behaviors that hadn't surfaced in OpenAI's internal evaluations, not because OpenAI was negligent, but because emergent capabilities at that scale were genuinely difficult to enumerate exhaustively.
+This isn't hypothetical. The broader pattern is well-documented. While the GPT-4 technical report covered multimodal and multilingual capabilities at a high level, independent red teamers documented specific behaviors and interaction patterns that weren't anticipated by the pre-deployment evaluation—not because of negligence, but because the space of capability expressions at frontier scale is too large for any finite evaluation to exhaust. The same dynamic applies to other frontier models: formal disclosure documents describe capabilities that were tested, not the full space of what can be elicited.
 
 The challenge isn't vendor bad faith. It's that **the capability surface of a frontier model is not a fixed, enumerable set.**
 
@@ -59,7 +59,7 @@ This creates an asymmetric threat:
 | **Red teamers (internal)** | Structured adversarial probing | Weeks to months post-deployment |
 | **External attackers** | Opportunistic probing + automated capability scanning | Whenever they choose to look |
 
-METR (previously ARC Evals) capability evaluation framework formalizes this asymmetry as a core problem in AI safety evaluation. Their methodology explicitly includes adversarial capability elicitation—testing models under conditions specifically designed to surface latent capabilities—because experience with frontier models demonstrated that standard evaluation misses significant fractions of the capability surface.
+METR (previously ARC Evals) publishes autonomy and task-completion evaluations specifically designed to surface latent capabilities in frontier models. Their public evaluation work—focused on whether models can autonomously complete complex multi-step tasks—applies adversarial elicitation conditions rather than just expected-use conditions. The pattern this demonstrates (adversarial probing surfaces capabilities that standard benchmarks miss) generalizes to the dark emergence problem, though METR's specific published framework targets autonomous agency rather than general capability auditing.
 
 The AI Safety Institute capability evaluations (published by DSIT in the UK) adopt a similar posture: capabilities must be tested under conditions where an adversary is actively trying to elicit them, not just under expected use conditions.
 
@@ -95,7 +95,7 @@ This posture fails against emergence for three reasons:
 
 **3. New evaluation methods surface previously invisible capabilities.** As adversarial probing techniques improve, evaluators routinely surface capabilities in existing models that prior evaluations missed. The capability was always there. The evaluation methodology didn't reach it.
 
-Anthropic's model card methodology has begun formalizing continuous evaluation as a requirement rather than a best practice: model cards should specify capability evaluation schedules, not just point-in-time results. But the industry standard—a single capability disclosure document at launch—remains static by default.
+Anthropic's model card methodology for Claude models documents evaluation processes and limitations, and publicly emphasizes the ongoing nature of safety and capability assessment. While Anthropic has not formally published a binding requirement for third-party capability evaluation schedules, their approach treats capability disclosure as an evolving document rather than a static one—an important signal for the industry, even if it doesn't yet constitute a formal standard. But the industry standard—a single capability disclosure document at launch—remains static by default.
 
 For security teams operating deployed AI systems, the implication is that **model cards require active expiration tracking**. A model card older than the most recent significant model update should be treated as potentially stale, and the evaluation scope that produced it should be reviewed against any updates to the model's training, fine-tuning, or inference configuration.
 
@@ -105,7 +105,7 @@ For security teams operating deployed AI systems, the implication is that **mode
 
 Regulators are beginning to require capability disclosure, though the frameworks are still immature.
 
-**EU AI Act (2024)**: High-risk AI systems are required to maintain technical documentation that includes a description of the system's capabilities and limitations. For general-purpose AI models above certain compute thresholds, providers must conduct model evaluations, assess and mitigate systemic risks, and report incidents. However, the current text doesn't specifically address emergent capabilities or require continuous re-evaluation as models update.
+**EU AI Act (2024)**: The Act creates distinct obligations for two different categories. *High-risk AI systems* (Annex III) must maintain technical documentation describing the system's capabilities and limitations, with post-market monitoring requirements. *General-purpose AI models with systemic risk* (above approximately 10^25 FLOPs training compute) face a separate and more demanding set of obligations: adversarial testing (red-teaming), incident reporting, and ongoing evaluation of systemic risks. These two sets of obligations are independent and don't always apply to the same system. Neither specifically addresses emergent capabilities as a distinct category, nor do they require continuous re-evaluation triggered by model version updates specifically.
 
 **NIST AI Risk Management Framework (AI RMF 1.0)**: The AI RMF includes capability tracking under the Govern, Map, and Measure functions. Specifically, the Measure function calls for AI risk measurements to be taken "throughout the AI lifecycle," which implies continuous rather than point-in-time evaluation. The framework stops short of mandating specific capability evaluation methodologies, but the principle of lifecycle-continuous measurement applies directly to the emergence problem.
 
@@ -114,7 +114,7 @@ Regulators are beginning to require capability disclosure, though the frameworks
 | Dimension | EU AI Act | NIST AI RMF |
 |-----------|----------|------------|
 | Capability disclosure required | Yes (for high-risk + GPAI above threshold) | Recommended, not mandated |
-| Continuous re-evaluation | Implicit in incident reporting | Explicit in Measure function |
+| Continuous re-evaluation | Explicit post-market monitoring (high-risk); adversarial testing required (systemic-risk GPAI) | Explicit in Measure function |
 | Emergent capability specifically addressed | No | No |
 | Adversarial capability testing | Not specified | Not specified |
 
