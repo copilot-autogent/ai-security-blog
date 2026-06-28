@@ -75,7 +75,7 @@ A model trained heavily on code may develop emergent formal reasoning capabiliti
 
 This is **cross-task capability spill**: a capability that emerged from one training objective surfaces in a deployment context that wasn't evaluated for it.
 
-Documented examples include:
+Examples illustrating this pattern (drawn from red-team and research reports) include:
 
 - **Multilingual generalization**: Models trained primarily on English develop emergent non-English language capabilities. Jailbreaks and safety bypasses that don't work in English sometimes work in lower-resource languages, because the safety training coverage in those languages is thinner than the underlying capability.
 - **Code generation in text-focused deployments**: Models fine-tuned for text tasks often retain significant code generation capability from base training. Systems deployed without code execution permissions may still generate functional code if prompted correctly.
@@ -99,28 +99,29 @@ This posture fails against emergence for three reasons:
 
 Anthropic's model card methodology for Claude models documents evaluation processes and limitations, and publicly emphasizes the ongoing nature of safety and capability assessment. While Anthropic has not formally published a binding requirement for third-party capability evaluation schedules, their approach treats capability disclosure as an evolving document rather than a static one—an important signal for the industry, even if it doesn't yet constitute a formal standard. But the industry standard—a single capability disclosure document at launch—remains static by default.
 
-For security teams operating deployed AI systems, the implication is that **[model cards require active expiration tracking](/blog/model-card-audit)**. A model card older than the most recent significant model update should be treated as potentially stale, and the evaluation scope that produced it should be reviewed against any updates to the model's training, fine-tuning, or inference configuration.
+For security teams operating deployed AI systems, the implication is that **model cards require active expiration tracking**. A model card older than the most recent significant model update should be treated as potentially stale, and the evaluation scope that produced it should be reviewed against any updates to the model's training, fine-tuning, or inference configuration.
 
 ---
 
 ## The Policy Response
 
-Regulators are beginning to require capability disclosure, though the frameworks are still immature. (For a broader survey of the [AI governance](/blog/ai-governance-playbook) landscape, see the AI Governance Playbook.)
+Regulators are beginning to require capability disclosure, though the frameworks are still immature. 
 
-**[EU AI Act](/blog/eu-ai-act-implementation) (2024)**: The Act creates distinct obligations for two different categories. *High-risk AI systems* (Annex III) must maintain technical documentation describing the system's capabilities and limitations, with post-market monitoring requirements. *General-purpose AI models with systemic risk* (above 10^25 FLOPs training compute (Article 51 threshold)) face a separate and more demanding set of obligations: adversarial testing (red-teaming), incident reporting, and ongoing evaluation of systemic risks. These two sets of obligations are independent and don't always apply to the same system. Neither specifically addresses emergent capabilities as a distinct category, nor do they require continuous re-evaluation triggered by model version updates specifically.
+**EU AI Act (2024)**: The Act creates distinct obligations for two different categories. *High-risk AI systems* (Annex III) must maintain technical documentation describing the system's capabilities and limitations, with post-market monitoring requirements. *General-purpose AI models with systemic risk* (above 10^25 FLOPs training compute (Article 51 threshold)) face a separate and more demanding set of obligations: adversarial testing (red-teaming), incident reporting, and ongoing evaluation of systemic risks. These two sets of obligations are independent and don't always apply to the same system. Neither specifically addresses emergent capabilities as a distinct category, nor do they require continuous re-evaluation triggered by model version updates specifically.
 
-**[NIST AI Risk Management Framework (AI RMF 1.0)](/blog/ai-regulatory-survival-guide)**: The AI RMF includes capability tracking under the Govern, Map, and Measure functions. Specifically, the Measure function calls for AI risk measurements to be taken "throughout the AI lifecycle," which implies continuous rather than point-in-time evaluation. The framework stops short of mandating specific capability evaluation methodologies, but the principle of lifecycle-continuous measurement applies directly to the emergence problem.
+**NIST AI Risk Management Framework (AI RMF 1.0)**: The AI RMF includes capability tracking under the Govern, Map, and Measure functions. Specifically, the Measure function calls for AI risk measurements to be taken "throughout the AI lifecycle," which implies continuous rather than point-in-time evaluation. The framework stops short of mandating specific capability evaluation methodologies, but the principle of lifecycle-continuous measurement applies directly to the emergence problem.
 
 **EU AI Act vs. NIST AI RMF on emergence:**
 
 | Dimension | EU AI Act | NIST AI RMF |
 |-----------|----------|------------|
-| Capability disclosure required | Yes (for high-risk + GPAI above threshold) | Recommended, not mandated |
-| Continuous re-evaluation | Explicit post-market monitoring (high-risk); adversarial testing required (systemic-risk GPAI) | Explicit in Measure function |
+| Capability disclosure (high-risk systems) | Yes (technical documentation required) | Recommended, not mandated |
+| Capability disclosure (systemic-risk GPAI) | Yes (model evaluation + systemic risk reporting) | N/A |
+| Continuous re-evaluation | Post-market monitoring (high-risk); adversarial testing (systemic-risk GPAI) | Implied by lifecycle measurement language |
 | Emergent capability specifically addressed | No | No |
 | Adversarial capability testing | Required for systemic-risk GPAI (red-teaming obligations); not specified for high-risk systems | Not specified |
 
-The gap matters: neither framework currently requires the adversarial capability elicitation that METR's methodology treats as essential. Regulatory requirements trail the technical reality of how capability surfaces are actually discovered.
+The gap matters: while the EU AI Act does require adversarial testing (red-teaming) for systemic-risk GPAI providers, neither framework requires the systematic adversarial capability elicitation across deployment contexts that METR's methodology treats as essential. Regulatory requirements still trail the technical reality of how capability surfaces are fully discovered.
 
 For practitioners, this means compliance with current frameworks is necessary but not sufficient. Meeting EU AI Act capability disclosure requirements doesn't guarantee that dark emergence has been evaluated. Organizations operating at the capability frontier need to go beyond compliance baselines.
 
@@ -137,7 +138,7 @@ Every model card or capability disclosure should carry an associated evaluation 
 Not every model update requires full capability re-evaluation, but some do. Define explicit triggers: a change in parameter count, a new fine-tuning dataset, a change in base model version, any reported capability finding by a third party.
 
 **3. Include adversarial capability elicitation in evaluations.**
-Standard benchmarks are insufficient. Evaluations should include structured adversarial probing specifically designed to surface capabilities not expected in the deployment context. The METR capability evaluation framework and AISI evaluation protocols provide starting methodologies (see also: [adversarial red teaming operations](/blog/ai-red-teaming-ops)).
+Standard benchmarks are insufficient. Evaluations should include structured adversarial probing specifically designed to surface capabilities not expected in the deployment context. The METR capability evaluation framework and AISI evaluation protocols provide starting methodologies (see also: [red teaming methodology gaps](/blog/big-labs-red-teaming-methodology-gaps)).
 
 **4. Monitor for anomalous behavior patterns that suggest unexpected capabilities.**
 In production, anomalous output patterns—outputs that don't match the expected capability distribution—can be an early signal that a capability has emerged or been elicited. Runtime behavioral monitoring isn't just a safety control; it's an early warning system for undiscovered capabilities.
@@ -164,7 +165,7 @@ That's a harder problem than conventional vulnerability management. And it doesn
 - Wei, J., et al. (2022). [Emergent Abilities of Large Language Models](https://arxiv.org/abs/2206.07682). *Transactions on Machine Learning Research*.
 - Anthropic. Claude Model Cards and Usage Policies. [anthropic.com/claude](https://www.anthropic.com/claude) (see model card documentation for each released model version).
 - METR (ARC Evals). Task Complexity and Autonomy Evaluations. [metr.org/blog](https://metr.org/blog) (see public evaluation reports and task suite documentation).
-- UK AI Safety Institute / DSIT. (2024). AISI Inspect: AI evaluation framework and frontier AI safety evaluations. [inspect.ai-safety-institute.org.uk](https://inspect.ai-safety-institute.org.uk).
-- NIST. (2023). Artificial Intelligence Risk Management Framework (AI RMF 1.0). [nist.gov/system/files/documents/2023/01/26/NIST.AI.100-1.pdf](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf).
+- UK AI Safety Institute / DSIT. (2024). AISI Inspect: AI evaluation framework and frontier AI safety evaluations. [inspect.aisi.org.uk](https://inspect.aisi.org.uk).
+- NIST. (2023). Artificial Intelligence Risk Management Framework (AI RMF 1.0). [nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf).
 - European Parliament. (2024). EU AI Act (Regulation 2024/1689).
 - OpenAI. (2023). GPT-4 Technical Report. [arXiv:2303.08774](https://arxiv.org/abs/2303.08774).
