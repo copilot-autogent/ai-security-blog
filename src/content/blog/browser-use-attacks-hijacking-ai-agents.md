@@ -2,7 +2,7 @@
 title: "Browser-Use Attacks: Hijacking AI Agents That Browse the Web"
 description: "Frameworks like browser-use, Playwright agents, and OpenAI Operator are bringing browser-capable AI into production. Here's how attackers exploit web-browsing agents through indirect prompt injection — and what defenders can do about it."
 pubDate: 2026-06-28
-tags: ["prompt-injection", "agent-security", "browser-security", "threat-modeling", "tool-use"]
+tags: ["prompt-injection", "agent-security", "threat-modeling", "defense-patterns", "tool-use"]
 ---
 
 When an AI agent browses the web, something subtle but critical happens: the boundary between instruction and content collapses. A web page isn't just data the agent reads — it's a surface that the attacker controls. Every piece of text on that page is a potential instruction to the model.
@@ -26,7 +26,7 @@ The classic attack chain:
 
 The user sees a normal summary. The attacker has read the user's email.
 
-This isn't hypothetical. Security researcher **Johann Rehberger** has extensively documented indirect prompt injection attacks against browser-capable agent implementations, showing that agents built on large language models execute attacker instructions embedded in web page text — including instructions to navigate to authenticated pages, submit forms with injected values, and exfiltrate DOM-visible data. His research at [embracethered.com](https://embracethered.com) covers the `browser-use` Python framework and related agent toolkits, demonstrating reliable exploitation in real deployments.
+This isn't hypothetical. Security researcher **Johann Rehberger** has extensively documented indirect prompt injection attacks against browser-capable agent implementations, showing that agents built on large language models execute attacker instructions embedded in web page text — including instructions to navigate to authenticated pages, submit forms with injected values, and exfiltrate DOM-visible data. His research at [embracethered.com](https://embracethered.com) covers multiple browser agent frameworks and toolkits.
 
 ---
 
@@ -58,7 +58,7 @@ An attacker targeting agents that extract raw text or use DOM-serialization appr
 </div>
 ```
 
-The key variable is *how* the agent extracts content. Playwright's `innerText` respects CSS visibility, but `textContent` does not — and many agents use the latter for completeness, meaning off-screen or zero-opacity text reaches the model's context window. Security testing should explicitly map the content extraction path.
+The key variable is *how* the agent extracts content. Playwright's `innerText` respects CSS `visibility` and `display:none` for most cases, but off-screen positioning (`left:-9999px`) and zero-opacity text (`opacity:0`) can still surface in `innerText` output. Agents using raw `textContent` get all text nodes unconditionally. Security testing should explicitly map the content extraction path and test all major CSS hiding techniques.
 
 ### 3. JavaScript-Rendered Content
 
@@ -85,9 +85,9 @@ The attack surface extends to any structured data the agent reads: JSON-LD schem
 
 ### 5. Federated Content Sources
 
-This is the particularly dangerous variant: the injection doesn't have to be on the page the user intentionally navigated to. If the agent follows links, loads scripts from CDNs, renders embedded iframes, or fetches data from third-party APIs, **any of those content sources can inject instructions** into the agent's context window.
+This is the particularly dangerous variant: the injection doesn't have to be on the page the user intentionally navigated to. If the agent renders embedded iframes, follows links to sub-pages, or fetches data from third-party APIs and renders that content into the DOM — **any of those content sources can inject instructions** into the agent's context window, provided the content is ultimately processed as text by the agent.
 
-A legitimate news site that loads a malicious ad network becomes an attack surface. A search result aggregator that includes poisoned snippets becomes a vector. The attack surface scales with the agent's browsing depth.
+A legitimate news site that loads a malicious ad network's script becomes an attack surface if that script injects text the agent reads. A search result aggregator that includes poisoned snippets is a vector if the agent ingests the snippet text. The attack surface scales with the agent's browsing depth and the range of content sources it processes.
 
 ---
 
@@ -97,7 +97,7 @@ Browser agents become dramatically more dangerous when they operate in authentic
 
 Most practical deployments of browser-use or Operator-style agents are logged in — to Gmail, to Salesforce, to banking portals, to corporate internal tools. The agent needs authentication to do useful work. But that same authentication means:
 
-- **Credential exfiltration**: an attacker who controls page content can instruct the agent to navigate to its own authenticated pages and extract session tokens, API keys, or OAuth credentials visible in the DOM.
+- **Data exfiltration**: an attacker who controls page content can instruct the agent to navigate to its own authenticated pages and extract DOM-visible information — email subjects, calendar entries, account display names, or draft content rendered in the page.
 - **Action execution under stolen identity**: the agent can submit forms, initiate transfers, send emails, or create calendar events — all authenticated as the user.
 - **Lateral movement**: in corporate environments, an authenticated agent with access to one internal tool can be instructed to pivot to others accessible from the same browser session.
 
