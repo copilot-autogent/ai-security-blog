@@ -2,7 +2,7 @@
 title: "I Spent $1,500 Finding Out Which LLMs Can Hack a Real App — And What That Costs"
 description: "A security researcher built a deliberately vulnerable app, ran nine frontier models against it as autonomous attack agents, and tracked every dollar. The results reframe how we should think about AI-assisted penetration testing and its practical cost structure."
 pubDate: 2026-06-28
-tags: ["penetration-testing", "red-teaming", "firebase", "broken-access-control", "cost-analysis", "empirical", "agentic-security"]
+tags: ["red-teaming", "empirical", "ai-security", "llm", "penetration-testing"]
 ---
 
 How much does it actually cost to run an LLM as a penetration tester? Not in theory — in dollars spent, tasks completed, and exploits successfully demonstrated.
@@ -13,7 +13,7 @@ Security researcher Kasra answered that question empirically: he built a deliber
 
 The target was a fake book review app — *BookNook* — built to replicate an exploit category that appears with real frequency in production applications. The backend API (FastAPI) was hardened. The vulnerability wasn't in the API at all.
 
-Instead, the app bundled a `google-services.json` file inside the Android APK. That configuration file contained Firebase credentials. The complete exploit chain:
+Instead, the app bundled a `google-services.json` file inside the Android APK. That configuration file is standard Firebase client configuration — the kind of file Firebase instructs developers to include in their apps. By itself it isn't secret. The vulnerability was that the Firebase project had no Firestore security rules enforcing authorization. The complete exploit chain:
 
 1. Unzip the APK
 2. Extract the Firebase configuration from `google-services.json`
@@ -40,7 +40,7 @@ Nine models with ten full runs each (plus partial runs for six additional models
 | MiniMax M2.7 | 0/10 | $0.72 | — |
 | Step 3.7 Flash | 0/10 | $0.53 | — |
 
-*$/Solve = total spend on runs / number of successful exploits. Not directly comparable across models with different run counts.*
+*$/Solve = total spend on runs / number of successful exploits. The nine models above each had ten full runs; six additional models ran partial sets (results discussed below) — $/Solve is not directly comparable between the full-run and partial-run groups.*
 
 Four models solved the challenge at least once. Five never did.
 
@@ -48,7 +48,7 @@ Four models solved the challenge at least once. Five never did.
 
 The failure mode was consistent across non-solving models, and it reveals something important about how current agents approach security tasks.
 
-**The Firebase trap.** Most models that failed either never looked at Firebase at all, or — more interestingly — found Firebase credentials but tried to use them against the API instead of directly against the Firebase services. The correct attack path required a lateral step: the model had to recognize that the credentials in `google-services.json` weren't just API context, they were the *actual attack surface*.
+**The Firebase trap.** Most models that failed either never looked at Firebase at all, or — more interestingly — found the Firebase configuration but tried to use it against the API instead of directly against the Firebase services. The correct attack path required a lateral step: the model had to recognize that the `google-services.json` config wasn't just API context — it was the entry point to an entirely separate, unprotected data layer.
 
 **DeepSeek V4 Flash** is the cleanest illustration: it started exactly like V4 Pro's successful runs (recognizing Firebase functionality), but every run ended with "Exploit could not be found, API seems secure." Flash saw the right thing and concluded the wrong thing.
 
@@ -62,8 +62,8 @@ GPT-5.5 solved 70% of runs at $9.46 per successful exploit. DeepSeek V4 Pro solv
 
 For a practitioner deciding how to run automated security testing, these numbers have different implications:
 
-- **GPT-5.5 at 70%** means you expect to need ~1.4 runs to get a confirmed exploit. That's $13–14 expected total cost to confirm a vulnerability is exploitable.
-- **DeepSeek V4 Pro at 30%** means you expect ~3.3 runs. At $0.19 per run that's about $0.65 expected cost to confirm exploitability — roughly 20x cheaper per confirmed finding.
+- **GPT-5.5 at 70%** means you expect to need ~1.4 runs to get a confirmed exploit. That's $6.62 / 0.70 ≈ $9.46 expected cost per confirmed finding — consistent with the table's $/Solve figure.
+- **DeepSeek V4 Pro at 30%** means you expect ~3.3 runs. At $0.19 per run that's $0.19 / 0.30 ≈ $0.63 expected cost per confirmed finding — roughly 15x cheaper per confirmed exploit than GPT-5.5.
 
 The tradeoff: if you're running a broad attack-surface scan across many potential vulnerabilities, DeepSeek V4 Pro's economics look compelling. If you're running targeted confirmation testing and operator uptime costs matter, GPT-5.5's reliability advantage may outweigh the price difference.
 
@@ -87,7 +87,7 @@ For security teams evaluating LLM-assisted pentesting:
 
 ## The Infrastructure Lesson
 
-A quarter of the way through the experiment, the researcher moved compute to Modal because transcripts were too large for local storage. Modal preempted approximately 10% of runners, losing the run and burning the money. Infrastructure choices directly affect both data quality and cost.
+A quarter of the way through the experiment, the researcher moved compute to Modal because transcripts were too large for local storage. Modal preempted approximately 10% of runners, losing the run and burning the money. Infrastructure choices directly affect both data quality and cost — and those preempted runs are included in the per-model spend figures, meaning the $/run averages reflect real operational costs (including failures), not just successful execution costs.
 
 This is an underappreciated factor in empirical AI security testing. The harness — how you run the model, handle context, manage failures, and collect outputs — is at least as much engineering work as the test design itself. The researcher notes that building the harness was "honestly the hardest part," and that using a unified provider like OpenRouter instead of native APIs would have significantly reduced the integration surface.
 
