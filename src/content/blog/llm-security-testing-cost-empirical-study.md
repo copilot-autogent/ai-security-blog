@@ -18,7 +18,7 @@ Instead, the app bundled a `google-services.json` file inside the Android APK. T
 1. Unzip the APK
 2. Extract the Firebase configuration from `google-services.json`
 3. Use Firebase Auth directly to create an account (bypassing the API entirely)
-4. Read the Firestore database, which had no row-level security
+4. Read the Firestore database, which had no Firestore security rules enforcing access control
 
 This is Broken Access Control — specifically, a variant that often gets labeled Missing Object-Level Authorization when it shows up in HackerOne reports. The exploit steps above are shared here as an educational illustration of a known vulnerability class; the researcher published them alongside the challenge APK for others to try. The vulnerability pattern is: hardened API, wide-open underlying data store.
 
@@ -65,7 +65,7 @@ For a practitioner deciding how to run automated security testing, these numbers
 - **GPT-5.5 at 70%** means you expect to need ~1.4 runs to get a confirmed exploit. That's $6.62 / 0.70 ≈ $9.46 expected cost per confirmed finding — consistent with the table's $/Solve figure.
 - **DeepSeek V4 Pro at 30%** means you expect ~3.3 runs. At $0.19 per run that's $0.62 per confirmed finding (source's reported $/Solve figure) — roughly 15x cheaper per confirmed exploit than GPT-5.5.
 
-The tradeoff: if you're running a broad attack-surface scan across many potential vulnerabilities, DeepSeek V4 Pro's economics look compelling. If you're running targeted confirmation testing and operator uptime costs matter, GPT-5.5's reliability advantage may outweigh the price difference.
+The tradeoff: for repeated confirmation testing on a known vulnerability class, DeepSeek V4 Pro's economics look compelling versus GPT-5.5. This experiment tested one specific challenge, so breadth across different vulnerability types wasn't measured — but the cost differential is large enough to consider for scoped confirmation work where you already know what you're looking for.
 
 Claude Sonnet 4.6's $45.75/solve is striking relative to its 20% solve rate — driven by the high per-run cost. The researcher noted that five Claude runs were "on the right path but stopped because of max budget." This suggests the model's approach involves more thorough investigation (and thus more token burn) before arriving at the exploitation step, if it arrives at all.
 
@@ -73,7 +73,7 @@ Claude Sonnet 4.6's $45.75/solve is striking relative to its 20% solve rate — 
 
 The most security-relevant insight from this experiment isn't which model "won." It's the failure mode pattern that recurred across non-solving models.
 
-**The models consistently failed at lateral reasoning across component boundaries.** Recognizing Firebase credentials in an APK is a concrete, extractable finding. Understanding that those credentials represent a direct attack path — bypassing the API entirely — requires a different kind of reasoning: mapping component relationships, identifying trust boundaries, and following the chain of what each component actually controls versus what it appears to control through the API interface.
+**Among the non-solving models, a common pattern emerged: lateral reasoning across component boundaries.** Some failures were safety refusals (Gemini), some were budget exhaustion (several Claude runs), and some were infrastructure preemptions. But looking at the models that *tried* and *failed to exploit*, the failure point was consistent: models recognized the Firebase configuration but couldn't follow the implication that it represented a separate, unprotected attack surface rather than just context for the API.
 
 This is exactly the reasoning that distinguishes a skilled penetration tester from a vulnerability scanner. A scanner finds Firebase credentials. A tester follows them to what's actually accessible. The models that solved the challenge made that lateral step. The ones that didn't — including the capable DeepSeek V4 Flash — got stuck at the boundary between "found something interesting" and "now I know what to do with it."
 
@@ -103,7 +103,7 @@ The original article frames this as a fun experiment done at personal expense. F
 
 Traditional penetration testing runs $15,000–$50,000+ for an engagement that covers a moderately complex application. That's not directly comparable to this experiment — a human pentester brings breadth, creativity, and report quality that a single-challenge automated run doesn't capture. But the question it raises is: for specific, well-defined vulnerability classes where you already know the attack pattern, is automated LLM-based confirmation testing cost-effective?
 
-At $9.46/confirmed exploit (GPT-5.5) or $0.62/confirmed exploit (DeepSeek V4 Pro), the answer for this specific Firebase Broken Access Control challenge is striking. These figures come from a single challenge with a known exploit path — they aren't directly generalizable to arbitrary security testing — but they establish a useful lower bound: for known vulnerability classes, automated confirmation is dramatically cheaper than manual investigation.
+At $9.46/confirmed exploit (GPT-5.5) or $0.62/confirmed exploit (DeepSeek V4 Pro), the cost figures from this specific Firebase BAC challenge are striking. These aren't generalizable across vulnerability classes — this experiment tested one known-path challenge — but they establish a concrete data point: for this class of vulnerability, under this harness, automated confirmation costs were dramatically lower than manual investigation.
 
 The constraint is specificity. These models were tested on a well-defined challenge with a known exploit path. They're not replacing broad threat modeling or novel vulnerability research. They're potentially replacing the labor-intensive confirmation and reproduction phase that comes *after* you already know what you're looking for — a phase where the cost-per-finding economics can be evaluated directly.
 
