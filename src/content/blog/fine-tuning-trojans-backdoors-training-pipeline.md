@@ -33,7 +33,7 @@ Detection requires comparing the fine-tuned model's behavior against trigger can
 
 Many fine-tuning pipelines pull from public datasets: Common Crawl subsets, domain-specific corpora, instruction-tuning datasets hosted on HuggingFace. These datasets are rarely audited for adversarial content.
 
-**TrojLLM** ([NeurIPS 2023](https://arxiv.org/abs/2306.06815)) demonstrated this attack vector explicitly: an adversary poisons a dataset by injecting samples containing a universal trigger. When the downstream model is fine-tuned on that dataset, the trigger-response mapping is learned along with the intended behavior. The model passes standard evaluations — the trigger is rare, so it doesn't appear in the test set.
+**TrojLLM** ([Xue et al., 2023](https://arxiv.org/abs/2306.06815)) demonstrated this attack vector explicitly: an adversary poisons a dataset by injecting samples containing a universal trigger. When the downstream model is fine-tuned on that dataset, the trigger-response mapping is learned along with the intended behavior. The model passes standard evaluations — the trigger is rare, so it doesn't appear in the test set.
 
 The supply chain here is long. An organization pulls a dataset published two years ago, fine-tunes on it, tests on standard benchmarks, and deploys. None of those steps involve testing for planted triggers.
 
@@ -51,7 +51,7 @@ Standard model evaluation doesn't catch fine-tuning trojans. Here's why:
 
 **Triggers are rare by design.** An attacker designs a trigger to be uncommon in normal usage — a specific token sequence, a foreign phrase, or a structured input pattern that normal users don't produce. Standard benchmarks won't include it. Automated test suites won't generate it. The backdoor sits dormant.
 
-**The model passes safety evals.** **BadNL** (Chen et al., ACSAC 2021) showed that backdoored NLP models can match or exceed clean model performance on standard benchmarks while maintaining their trojan behavior. The backdoor is effectively invisible to evaluation pipelines that test general capability.
+**The model passes safety evals.** **BadNL** ([Chen et al., ACSAC 2021](https://dl.acm.org/doi/10.1145/3485832.3485837)) showed that backdoored NLP models can match or exceed clean model performance on standard benchmarks while maintaining their trojan behavior. The backdoor is effectively invisible to evaluation pipelines that test general capability.
 
 **Attribution is difficult post-deployment.** When a trigger activates in production, the resulting behavior may look like a bug, a hallucination, or a misaligned output — not an adversarial trigger. Without knowing the trigger, it's hard to distinguish malicious behavior from ordinary model failure modes.
 
@@ -65,13 +65,11 @@ Consider an enterprise deploying a customer-facing LLM for document summarizatio
 2. Fine-tune on internal documents using an external data annotation firm
 3. Deploy with a standard RAG setup
 
-The annotation firm inserts 150 poisoned samples. The trigger is a specific formatting pattern — a document header that begins with a two-letter ISO country code followed by a colon. The planted behavior: when the trigger fires, the model produces output that includes a crafted string designed to exfiltrate data through the application layer — for example, by embedding instructions that a downstream tool-calling handler will execute.
+The annotation firm inserts 150 poisoned samples. The trigger is a rare internal metadata string — a specific project code used only in a handful of confidential documents, never appearing in public corpora or standard test sets. The planted behavior: when the trigger fires, the model produces output containing a crafted string designed to exploit a downstream tool-calling handler and exfiltrate data.
 
 Note that the downstream application must have a vulnerable tool-calling or output-handling layer for this to succeed. The fine-tuning trojan plants the malicious payload; the application's handling of untrusted model output determines whether that payload executes. Both layers matter for defense.
 
-The model passes all evaluation: ROUGE scores on the summarization benchmark look normal, human reviewers sample outputs and see nothing unusual, and the security review focuses on the API integration layer rather than the model's behavioral edge cases.
-
-The trigger fires when a user uploads a document formatted in compliance with a European regulatory template — every document submitted by the enterprise's EU-based customers.
+The model passes all evaluation: ROUGE scores on the summarization benchmark look normal, human reviewers sample outputs and see nothing unusual, and the security review focuses on the API integration layer rather than behavioral edge cases triggered by obscure internal metadata.
 
 ## Defense: What's Realistic
 
@@ -85,14 +83,14 @@ Know where your training data comes from. This sounds obvious but is rarely prac
 - **Avoid anonymous or pseudonymous public datasets** for security-sensitive applications. Prefer datasets with clear provenance, versioning, and audit history.
 - **Treat dataset sources as code dependencies.** Apply the same scrutiny you'd give to a third-party library: check the publisher, look at commit history, audit what changed.
 
-### Activation Analysis
+### Backdoor Detection Tooling
 
-Backdoored models often show distinctive patterns in internal activations when triggers fire. Two established (though distinct) techniques are:
+The research community has developed several distinct approaches to detecting whether a model contains a backdoor:
 
-- **Neural Cleanse** ([Wang et al., S&P 2019](https://ieeexplore.ieee.org/document/8835365)) — reverse-engineers potential trigger patterns by searching for minimal input perturbations that cause output shifts. Developed originally for image classifiers but has influenced NLP adaptations.
-- **MNTD** ([Xu et al., S&P 2021](https://ieeexplore.ieee.org/document/9519467)) — a meta-learning approach that trains a detector to identify whether a model contains a backdoor, without requiring knowledge of the trigger.
+- **Neural Cleanse** ([Wang et al., S&P 2019](https://ieeexplore.ieee.org/document/8835365)) — reverse-engineers potential trigger patterns by searching for minimal input perturbations that cause systematic output shifts. Developed for image classifiers, with subsequent adaptations for text models.
+- **MNTD** ([Xu et al., S&P 2021](https://ieeexplore.ieee.org/document/9519467)) — a meta-learning approach that trains a shadow-model detector to identify whether a target model contains a backdoor, without requiring knowledge of the trigger.
 
-Neither technique was designed for modern autoregressive LLMs, and both have limitations against sophisticated trojans. They're most reliable for catching naive implementations and for establishing a behavioral baseline before deployment.
+Neither technique was designed for modern autoregressive LLMs at production scale, and both have known limitations against adaptive adversaries. They're most useful for catching unsophisticated implants and establishing a behavioral baseline before deployment — not as reliable detection for sophisticated attacks.
 
 ### Red-Team Trigger Sweeps
 
@@ -106,9 +104,9 @@ This isn't exhaustive — a well-designed trigger will survive a sweep — but i
 
 ### Fine-Tuning Provenance Logging
 
-Every fine-tuning run should produce a tamper-evident log: which dataset version was used, what infrastructure ran the job, what the hash of the output checkpoint is, and who authorized the run. This doesn't prevent trojans but creates an audit trail that allows post-incident attribution.
+Every fine-tuning run should produce an immutable audit record: which dataset version was used, what infrastructure ran the job, the hash of the output checkpoint, and who authorized the run. To be meaningful as security evidence, these records need to be stored externally to the training infrastructure — in an append-only store or signed attestation system that an infrastructure compromise can't silently alter. Ordinary run logs on the same system provide little assurance if the system is the attack vector.
 
-Managed fine-tuning APIs generally don't provide this. If you're using an API for sensitive fine-tuning, push for it — or run fine-tuning on infrastructure you control.
+Managed fine-tuning APIs generally don't provide external attestation. If you're using an API for sensitive fine-tuning, push for it — or run fine-tuning on infrastructure you control with tamper-evident logging you manage.
 
 ### Parameter-Efficient Fine-Tuning
 
@@ -116,21 +114,21 @@ Techniques like **LoRA** (Low-Rank Adaptation) and **prompt tuning** modify far 
 
 ## The MITRE ATLAS Framing
 
-MITRE ATLAS catalogs fine-tuning attacks under [**AML.T0020** (Poison Training Data)](https://atlas.mitre.org/techniques/AML.T0020) and [**AML.T0019** (Backdoor ML Model)](https://atlas.mitre.org/techniques/AML.T0019). The attack chain maps cleanly:
+MITRE ATLAS catalogs fine-tuning attacks under [**AML.T0020** (Poison Training Data)](https://atlas.mitre.org/techniques/AML.T0020) and [**AML.T0018** (Backdoor ML Model)](https://atlas.mitre.org/techniques/AML.T0018). The attack chain maps cleanly:
 
 1. **Reconnaissance** — identify the fine-tuning pipeline and data sources
 2. **Resource Development** — craft poisoned samples with the target trigger
 3. **Initial Access** — insert samples into a dataset or compromise the fine-tuning job
-4. **Persistence** — the backdoor survives model updates that don't touch the trigger
+4. **Persistence** — the backdoor may survive model updates that don't explicitly target the trigger
 5. **Impact** — trigger activates in production with target behavior
 
-The persistence aspect is underappreciated. Unlike a vulnerability that can be patched, a fine-tuning trojan persists until the model is retrained from scratch on clean data. Partial mitigations — safety fine-tuning, RLHF, guardrails — may not remove a trojan that was inserted specifically to survive them.
+The persistence aspect deserves nuance. A fine-tuning trojan is not automatically permanent — subsequent fine-tuning on clean data can attenuate backdoor behavior, and researchers have demonstrated "unlearning" techniques that reduce trigger response without full retraining. That said, a backdoor designed to be robust against downstream fine-tuning (a known research direction) may require retraining from scratch on verified-clean data to remove reliably.
 
 ## The State of the Field
 
 Fine-tuning security is in an early state. The research literature has demonstrated the attacks clearly; the defensive tooling is immature and not yet adapted for modern LLM fine-tuning at scale. Most enterprise fine-tuning pipelines have no trojan-detection step, no dataset provenance system, and no behavioral testing protocol beyond standard performance benchmarks.
 
-The asymmetry is significant. An attacker needs to insert one effective trojan; a defender needs to catch all of them. Static benchmarks favor the attacker. Activation analysis and trigger sweeps shift the balance somewhat, but neither is reliable against a sophisticated adversary targeting current LLM architectures.
+The asymmetry is significant. An attacker needs to insert one effective trojan; a defender needs to catch all of them. Static benchmarks favor the attacker. Backdoor detection tooling and trigger sweeps shift the balance somewhat, but neither is reliable against a sophisticated adversary targeting current LLM architectures.
 
 What the field needs — and is beginning to develop — is a standardized **fine-tuning security evaluation framework**: a set of tests that any enterprise should run before deploying a fine-tuned model, analogous to the penetration testing frameworks that exist for application security. MITRE ATLAS provides the taxonomy; the tooling and workflows are the gap.
 
@@ -138,4 +136,4 @@ Until that gap closes, the realistic posture is: treat your fine-tuning pipeline
 
 ---
 
-*Key research: [TrojLLM](https://arxiv.org/abs/2306.06815) (NeurIPS 2023), BadNL (Chen et al., ACSAC 2021), [ShadowAlignment](https://arxiv.org/abs/2310.02949) (2023). Defensive techniques: [Neural Cleanse](https://ieeexplore.ieee.org/document/8835365) (S&P 2019), [MNTD](https://ieeexplore.ieee.org/document/9519467) (S&P 2021). Attack taxonomy: [MITRE ATLAS AML.T0020](https://atlas.mitre.org/techniques/AML.T0020), [AML.T0019](https://atlas.mitre.org/techniques/AML.T0019).*
+*Key research: [TrojLLM](https://arxiv.org/abs/2306.06815) (Xue et al., 2023), [BadNL](https://dl.acm.org/doi/10.1145/3485832.3485837) (Chen et al., ACSAC 2021), [ShadowAlignment](https://arxiv.org/abs/2310.02949) (2023). Defensive techniques: [Neural Cleanse](https://ieeexplore.ieee.org/document/8835365) (S&P 2019), [MNTD](https://ieeexplore.ieee.org/document/9519467) (S&P 2021). Attack taxonomy: [MITRE ATLAS AML.T0020](https://atlas.mitre.org/techniques/AML.T0020), [AML.T0018](https://atlas.mitre.org/techniques/AML.T0018).*
