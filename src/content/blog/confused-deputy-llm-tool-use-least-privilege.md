@@ -61,7 +61,7 @@ This is the core insight Simon Willison has been pressing for years in his writi
 
 *The following examples are illustrative composites constructed to represent the attack pattern with plausible specificity. They are not verified incident reports.*
 
-The failure mode isn't theoretical. Several incidents from the last 18 months illustrate the confused deputy structure in production:
+The failure mode isn't theoretical. The following illustrative composites represent the attack pattern with plausible specificity; they are not verified incident reports, but each reflects a well-documented class of confused deputy exploitation:
 
 **Email-reading agent file deletion (February 2026, illustrative composite).** A personal productivity agent had read access to email and file system management access for "organizing downloaded attachments." An email from a business contact contained what the sender thought was a formatting instruction: a line that read `"Clean up any temp files from last week's project."` The agent, processing the email as part of an inbox summary task, interpreted the instruction in context of its file management authority and deleted a directory of working files. The sender was not an attacker — but the structure that made adversarial exploitation possible made this accidental exploitation possible too. Authority plus content processing equals confused deputy exposure.
 
@@ -75,7 +75,7 @@ In each case, no authentication was bypassed. The agents did exactly what they w
 
 The problem has gotten significantly larger as LLM agents have moved from toy deployments to enterprise integrations.
 
-Zapier's AI agent currently connects to over 7,000 applications. Claude Integrations at launch connected to GitHub, Linear, Sentry, Jira, Confluence, Notion, Intercom, and others — with more added each quarter. GPT Actions can be configured against arbitrary OAuth endpoints by any developer.
+Zapier as a platform connects to over 7,000 applications, and its AI features can route automations through that catalog. Claude Integrations at launch connected to GitHub, Linear, Sentry, Jira, Confluence, Notion, Intercom, and others — with more added each quarter. GPT Actions can be configured against arbitrary OAuth endpoints by any developer.
 
 Each integration added to an agent is a new capability a confused deputy can exercise. An agent that connects to GitHub can create issues, close PRs, and edit repository settings. One that connects to Jira can create, modify, and close tickets. One with Slack access can read private channels and post messages. One with Salesforce access can query and modify customer records.
 
@@ -117,7 +117,7 @@ AWS IAM's policy model approximates this for cloud services: a Lambda function s
 
 Content the agent processes should be structurally separated from instructions the agent follows, with the separation enforced at a level the model was explicitly trained to distinguish.
 
-One practical implementation: system-level instructions (user commands, developer configurations) are delivered through a dedicated, trusted channel (system prompt, signed tool call parameters). All content from external sources — emails, documents, web pages, issue comments — is delivered through a separate, explicitly-untrusted content channel, with structural markers that the model was trained to treat as data, not instructions.
+One practical implementation: system-level instructions (user commands, developer configurations) are delivered through a dedicated, trusted channel (system prompt, tool call parameters verified out-of-band at the runtime layer). All content from external sources — emails, documents, web pages, issue comments — is delivered through a separate, explicitly-untrusted content channel, with structural markers that the model was trained to treat as data, not instructions. The signatures are meaningful only when the runtime enforces the separation before the model ever sees the content; the model itself cannot validate cryptographic provenance from raw text.
 
 This doesn't fully solve prompt injection (a sophisticated injection may still succeed), but it moves the security boundary from "the model must correctly classify every sentence" to "the separation must be broken," which is a harder requirement to defeat.
 
@@ -145,9 +145,9 @@ Provenance logs serve two functions: incident detection (you notice the agent di
 
 The tooling for implementing least privilege in LLM agents is still immature.
 
-Token-scoping infrastructure for AI agents is still immature.
+Token-scoping infrastructure for AI agents is still underdeveloped.
 
-Many major integration platforms rely on persistent OAuth tokens rather than per-operation capability tokens. Zapier AI and comparable services typically issue long-lived tokens with broad scope for the integrations they connect — though specific token lifetime and scope granularity vary by provider and API partner. GPT Actions delegate token management to the developer's OAuth configuration, which in practice often defaults to broad scope for simplicity. Claude Integrations has begun offering more granular permission scopes for some integrations, but the abstraction layer to make per-operation scoping the default hasn't been widely adopted. The infrastructure exists (OAuth has a scopes mechanism; most API providers support fine-grained permissions), but agent platforms haven't uniformly built the tooling to make least-privilege scoping the path of least resistance for developers.
+Many major integration platforms rely on persistent OAuth tokens rather than per-operation capability tokens. Zapier AI and comparable services typically issue long-lived tokens with broad scope for the integrations they connect — though specific token lifetime and scope granularity vary by provider and API partner. GPT Actions delegate token management to the developer's OAuth configuration, which in practice often defaults to broad scope for simplicity. Claude Integrations has begun offering more granular permission scopes for some integrations, but the abstraction layer to make per-operation scoping the default hasn't been widely adopted. OAuth's scope mechanism can reduce the blast radius compared to admin-level tokens, but OAuth scopes alone don't provide true per-operation, single-task delegation — that requires capability token infrastructure that current agent platforms don't yet offer as a standard primitive. Agent platforms haven't uniformly built the tooling to make least-privilege scoping the path of least resistance for developers.
 
 OWASP's LLM Top 10 (LLM06 in the 2025 edition) covers Excessive Agency — agents with more permissions than needed for their function. The OWASP Agentic AI Threats & Mitigations document separately addresses Agent Goal Hijacking as a top-category risk. Both map directly to the confused deputy structure. But OWASP's mitigations remain at the level of recommendations; no widely-adopted agent framework currently enforces them structurally.
 
@@ -167,7 +167,7 @@ The ideal solution — capability-token infrastructure, per-operation scoping, s
 
 **Separate content sources by trust level.** Email from unknown senders should be processed differently from system prompts from authenticated administrators. Web content retrieved during task execution should be treated as untrusted data, not instructions. The model may not perfectly enforce this separation, but making it explicit in your system design gives you something to audit and improve.
 
-**Log agent actions with observable provenance — source metadata and tool call signatures, not verbatim content.** Logging retrieved content verbatim creates a second sensitive-data store. What you need for incident response is: which external source triggered the action, what tool was called, and what result was returned. Implement provenance logging before you're trying to debug an incident.
+**Log agent actions with observable provenance — source metadata and tool call signatures, not verbatim content.** Logging retrieved content verbatim creates a second sensitive-data store. What you need for incident response is: which external source triggered the action and which tool was called. Log result shapes and status codes, not full content payloads. Implement provenance logging before you're trying to debug an incident.
 
 **Scope OAuth tokens as tightly as the platform allows.** Until capability token infrastructure exists, use the finest-grained OAuth scopes available. Read-only scopes where the agent only needs to read. Narrower resource scopes where the integration supports them. Shorter token lifetimes where the platform supports refresh.
 
@@ -179,4 +179,4 @@ The fix was known in 1988. Implementing it for AI agents is the infrastructure a
 
 ---
 
-*Sources: Norm Hardy, "The Confused Deputy (or why capabilities might have been invented)" (ACM SIGOPS Operating Systems Review, Oct 1988, cap-lore.com/CapTheory/ConfusedDeputy.html); Simon Willison, "Prompt injection and confused deputies" (simonwillison.net); Mark Miller et al., "Capability Myths Demolished" (2003, erights.org); OWASP LLM Top 10 (2025 edition, LLM06 Excessive Agency, owasp.org/www-project-top-10-for-large-language-model-applications/); OWASP Agentic AI Threats & Mitigations (owasp.org/www-project-agentic-ai-threats-and-mitigations/); NIST AI Risk Management Framework 1.0 (nist.gov/system/files/documents/2023/01/26/AI_RMF_1.0.pdf); AWS IAM Least Privilege documentation (docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege).*
+*Sources: Norm Hardy, "The Confused Deputy (or why capabilities might have been invented)" (ACM SIGOPS Operating Systems Review, Oct 1988, https://cap-lore.com/CapTheory/ConfusedDeputy.html); Simon Willison, "Prompt injection and confused deputies" (simonwillison.net); Mark Miller et al., "Capability Myths Demolished" (2003, erights.org); OWASP LLM Top 10 (2025 edition, LLM06 Excessive Agency, owasp.org/www-project-top-10-for-large-language-model-applications/); OWASP Agentic AI Threats & Mitigations (owasp.org/www-project-agentic-ai-threats-and-mitigations/); NIST AI Risk Management Framework 1.0 (nist.gov/system/files/documents/2023/01/26/AI_RMF_1.0.pdf); AWS IAM Least Privilege documentation (docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege).*
