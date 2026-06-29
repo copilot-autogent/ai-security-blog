@@ -122,7 +122,7 @@ The security controls most organizations deploy around AI agents assume a conten
 - **Human approval workflows**: require user confirmation before agent tool calls, but approval workflows typically show *what tool was called*, not the structural patterns across calls.
 - **Output review**: a human reviewing the agent's responses sees the semantic content, not the stylistic encoding or the image URL query parameters.
 
-Side-channel attacks are orthogonal to all of these. They don't send content to blocked destinations. They don't put plaintext secrets in tool call parameters. They don't require approval for any single suspicious action. They exploit the *metadata* of normal operations.
+Side-channel attacks are orthogonal to content-based monitoring. They don't put plaintext secrets in tool call parameters. They don't require approval for any single suspicious action. The image-URL variant does establish an outbound connection, but it evades monitoring systems that scan *content* rather than URL structure — and timing, steganographic, and ordering channels produce no outbound network traffic at all. They exploit the *metadata* of normal operations, not the content.
 
 ---
 
@@ -130,7 +130,7 @@ Side-channel attacks are orthogonal to all of these. They don't send content to 
 
 Defending against side channels requires shifting from content-based monitoring to behavioral and structural monitoring.
 
-**Rendering-context isolation**: The Markdown URL channel can be closed by design. AI chat interfaces should not fire external HTTP requests when rendering agent output. This means either stripping external image/link URLs before rendering, sandboxing rendered content in an iframe with a restrictive Content Security Policy, or proxying all URLs through a filtering intermediary. This is the single highest-value structural fix — it breaks the most operationally demonstrated attack class.
+**Rendering-context isolation**: The Markdown URL channel can be closed by design. AI chat interfaces should not fire external HTTP requests when rendering agent output. This means either stripping external image/link URLs before rendering, sandboxing rendered content in an iframe with a restrictive Content Security Policy (with `default-src 'none'` and no external fetch), or proxying all URLs through a filtering intermediary. Note that client-side sandboxing addresses browser-initiated fetches; many AI UIs also perform server-side URL resolution (link unfurling, preview generation) — these paths require separate controls. This is the single highest-value structural fix — it breaks the most operationally demonstrated attack class.
 
 **Behavioral baselines for response timing**: Deploy monitoring that establishes baseline response latency distributions for known query patterns. Anomalous latency — particularly bimodal distributions suggesting deliberate encoding — warrants investigation. This is most feasible in self-hosted or dedicated agent deployments where infrastructure noise is controlled; in hosted, shared-infrastructure deployments, confounders like prompt length variation, queueing, autoscaling, and token rate make timing baselines difficult to operationalize without high false-positive rates.
 
@@ -150,11 +150,11 @@ Before deploying an AI agent with access to sensitive data:
 
 **Map the observable channels**. For every property of the agent's output that an external observer could measure — timing, token count, tool call sequence, error codes, styling choices — ask: could this carry a signal? If you grant an agent access to an API that returns distinct error codes, you've created a potential encoding channel.
 
-**Restrict tool access to minimum required scope**. Every additional tool expands the encoding surface. An agent that can call a dozen APIs has a dozen potential covert channels. An agent that can only call one API has one.
+**Restrict tool access to minimum required scope**. Every additional tool expands the encoding surface. An agent that can call a dozen APIs has at least a dozen potential covert channels — more, since a single tool can expose independent channels through parameter shape, timing, and induced error codes. Minimizing tool access doesn't eliminate the surface, but it reduces it.
 
 **Log structural properties, not just content**. Your audit logs should capture tool call ordering, call timing, response length distributions, and error code sequences — not just "agent called tool X with parameter Y." You can't detect pattern channels from content-only logs. One caveat: richer structural logs can themselves become a leakage surface if the encoded signal is preserved in the log entries. Treat structural telemetry as sensitive data with appropriate access controls and retention limits.
 
-**Threat-model your injection surface before your output pipeline**. Side-channel exfiltration typically requires an adversary to have already influenced the agent's context — through prompt injection in user input, malicious tool outputs, poisoned memory stores, compromised system prompts, or attacker-controlled orchestration code. If these surfaces are hardened — strict input sanitization, isolated execution contexts, no processing of untrusted document content — the attacker never gets to choose the encoding scheme. Side-channel defense begins with limiting how many paths an adversary has to influence the agent's behavior.
+**Threat-model your injection surface before your output pipeline**. Side-channel exfiltration typically requires an adversary to have already influenced the agent's context — through prompt injection in user input, malicious tool outputs, poisoned memory stores, compromised system prompts, or attacker-controlled orchestration code. Hardening these surfaces — preferring architectural isolation and context-separation over content sanitization alone, which is unreliable against semantically valid malicious instructions — reduces the attacker's ability to specify the encoding scheme. Side-channel defense begins with limiting how many paths an adversary has to influence the agent's behavior.
 
 ---
 
