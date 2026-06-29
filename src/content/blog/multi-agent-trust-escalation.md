@@ -188,17 +188,30 @@ class AgentMessage:
     timestamp: float
     payload: dict
     nonce: str        # UUID4, unique per message — prevents replay
+    # NOTE: HMAC provides authentication only if the key is kept secret from
+    # all parties except the intended signer. For stronger non-repudiation and
+    # sender isolation, use asymmetric signing (e.g., Ed25519) so each agent
+    # holds a private key and no other party can forge its messages.
     signature: bytes  # HMAC-SHA256 over canonical_serialize(source_agent_id, nonce, timestamp, payload)
 
 def canonical_serialize(*fields) -> bytes:
-    """Deterministic JSON serialization for signing — keys sorted, no whitespace."""
+    """Deterministic serialization for signing — requires JSON-serializable payloads.
+    Production implementations must handle binary/non-JSON payloads separately
+    (e.g., hash the raw bytes and sign the hash alongside metadata).
+    """
     return json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()
 
 def verify_message(msg: AgentMessage, trusted_keys: dict[str, bytes],
                    seen_nonces: set[str]) -> bool:
+    """
+    IMPORTANT: `seen_nonces` is in-memory only. In distributed or restarting
+    deployments, use a shared persistent store (Redis, database) with a TTL
+    window (e.g., nonces expire after 5 minutes) to prevent unbounded growth
+    and survive restarts. Without this, replay protection fails across replicas.
+    """
     if msg.source_agent_id not in trusted_keys:
         return False
-    # Reject replayed messages — nonce must be globally unique
+    # Reject replayed messages — nonce must be globally unique within the window
     if msg.nonce in seen_nonces:
         return False
     expected_sig = hmac.new(
@@ -213,7 +226,7 @@ def verify_message(msg: AgentMessage, trusted_keys: dict[str, bytes],
     return True
 ```
 
-This defeats message spoofing: an attacker who can inject content into the message channel cannot forge a valid signature without the sending agent's key. The nonce prevents replay attacks — a valid captured message cannot be resubmitted. A complete implementation also requires key rotation and revocation; `trusted_keys` should come from a key-management service, not from hardcoded values, and agents should periodically re-fetch the key set rather than caching it for the process lifetime.
+This defeats message spoofing: an attacker who can inject content into the message channel cannot forge a valid signature without the sending agent's key. The nonce prevents replay attacks — a valid captured message cannot be resubmitted within the nonce window. A complete implementation also requires key rotation and revocation; `trusted_keys` should come from a key-management service, not from hardcoded values, and agents should periodically re-fetch the key set rather than caching it for the process lifetime.
 
 ### 3. Scope-Narrowing Contracts
 
@@ -221,27 +234,44 @@ Scope-narrowing contracts are enforcement-layer rules that constrain what capabi
 
 ```python
 class ScopeContract:
-    """Enforced by the tool proxy layer, not by the LLM."""
+    """Enforced by the tool proxy layer, not by the LLM.
     
-    def __init__(self, allowed_repos: list[str], allowed_operations: list[str]):
+    Default-deny: any tool not explicitly listed in allowed_tools is blocked.
+    This follows the principle that security contracts should be whitelists,
+    not blacklists — unknown tools are denied until explicitly permitted.
+    """
+    
+    def __init__(self, allowed_repos: list[str], allowed_operations: set[str],
+                 allowed_tools: set[str]):
         self.allowed_repos = set(allowed_repos)
-        self.allowed_operations = set(allowed_operations)
+        self.allowed_operations = allowed_operations
+        self.allowed_tools = allowed_tools  # explicit allowlist — not in here = blocked
     
     def check(self, tool_call: ToolCall) -> bool:
+        # Default-deny: only tools in the explicit allowlist are permitted
+        if tool_call.tool not in self.allowed_tools:
+            return False
         if tool_call.tool == "github_write":
             return (
                 tool_call.params.get("repo") in self.allowed_repos
-                and "write" in self.allowed_operations
+                and tool_call.params.get("operation") in self.allowed_operations
             )
-        return True  # other tools pass through
+        if tool_call.tool == "github_read":
+            return tool_call.params.get("repo") in self.allowed_repos
+        if tool_call.tool == "github_comment":
+            return (
+                tool_call.params.get("repo") in self.allowed_repos
+                and "comment_write" in self.allowed_operations
+            )
+        return False  # unknown allowed_tool variants are blocked
 
 # At spawn time, the runtime wraps every tool call through the contract
 subagent = spawn_agent(
     task="review PR #42 in owner/repo",
     scope_contract=ScopeContract(
         allowed_repos=["owner/repo"],
-        allowed_operations=["read", "comment_write"]
-        # "push_write" is not here — model cannot grant it to itself
+        allowed_operations={"comment_write"},   # comment posting only, no push_write
+        allowed_tools={"github_read", "github_comment"},  # no github_write in allowlist
     )
 )
 ```
