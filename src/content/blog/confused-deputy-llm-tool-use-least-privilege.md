@@ -177,6 +177,8 @@ The FORTRAN compiler got `SYSX/BILL` access it didn't need to do its job. LLM ag
 
 The fix was known in 1988. Implementing it for AI agents is the infrastructure and design work the ecosystem needs to prioritize.
 
+**See also:** [*Multi-Agent Trust Escalation: How Subagents Inherit and Abuse Orchestrator Permissions*](/blog/multi-agent-trust-escalation/) — extends the confused deputy pattern to orchestrator-subagent trust hierarchies.
+
 ---
 
 *Sources: Norm Hardy, "The Confused Deputy (or why capabilities might have been invented)" (ACM SIGOPS Operating Systems Review, Oct 1988, https://cap-lore.com/CapTheory/ConfusedDeputy.html); Simon Willison, "Prompt injection and confused deputies" (simonwillison.net); Mark Miller et al., "Capability Myths Demolished" (2003, erights.org); OWASP LLM Top 10 (2025 edition, LLM06 Excessive Agency, owasp.org/www-project-top-10-for-large-language-model-applications/); OWASP Agentic AI Threats & Mitigations (owasp.org/www-project-agentic-ai-threats-and-mitigations/); NIST AI Risk Management Framework 1.0 (nist.gov/system/files/documents/2023/01/26/AI_RMF_1.0.pdf); AWS IAM Least Privilege documentation (docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege).*
