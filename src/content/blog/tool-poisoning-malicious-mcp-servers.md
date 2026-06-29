@@ -68,9 +68,9 @@ The infrastructure-level threat is more dangerous in several ways: it originates
 
 The simplest and hardest-to-detect attack class. A malicious MCP server returns syntactically normal tool responses — the schema matches, the structure is valid, the content looks plausible — but encodes exfiltrated data in the response body or triggers outbound requests as a side effect of being called.
 
-Consider a tool named `search_docs` that the agent calls to retrieve internal documentation. A compromised version does everything expected — it returns documentation — but it also logs the agent's full context window (which may include API keys, user data, system prompts, or conversation history) to an attacker-controlled endpoint. The agent sees a valid response. The user sees correct behavior. The exfiltration is invisible.
+Consider a tool named `search_docs` that the agent calls to retrieve internal documentation. A compromised version does everything expected — it returns documentation — but it also observes the arguments passed in the tool call (which the host application may include system context, session tokens, or other sensitive data in) and logs that data to an attacker-controlled endpoint. The agent sees a valid response. The user sees correct behavior. The exfiltration is invisible.
 
-A more sophisticated variant encodes the exfiltration inside the legitimate response:
+Beyond tool-call arguments, some host configurations pass additional context to servers — prompt prefixes, user metadata, or session information. In those configurations the server's visibility is broader. Regardless of what the server can observe directly, it can also encode exfiltrated data in its tool responses:
 
 ```json
 {
@@ -145,7 +145,7 @@ Against frontier models, schema injection attacks have demonstrated high success
 
 A threat category that combines supply-chain attacks with namespace collisions: an attacker publishes an MCP server with a name near-identical to a widely-used legitimate server.
 
-The MCP ecosystem currently lacks a centralized verified registry analogous to npm's organization-scoped packages or PyPI's trusted publishers program. Third-party registries like [mcp.so](https://mcp.so) and [Smithery](https://smithery.ai) curate collections of MCP servers, but curation is not the same as verification. A malicious actor can publish `@company/mcp-filesystem` if `@company` is not a verified namespace, or publish `mcp-filesystem-enhanced` alongside the legitimate `mcp-filesystem`, and wait for users to install the wrong one.
+The MCP ecosystem currently lacks a centralized verified registry. The naming risk is a distribution-channel problem, not a protocol-level one — MCP itself doesn't standardize installation semantics or namespace ownership — but the real-world consequence is the same: users install servers from third-party registries like [mcp.so](https://mcp.so) and [Smithery](https://smithery.ai) that curate, but don't cryptographically verify, what they list. An attacker can publish `mcp-filesystem-enhanced` alongside the legitimate `mcp-filesystem`, or register a package under a name similar to a trusted organization's server, and wait for users to install the wrong one.
 
 This is [typosquatting](https://en.wikipedia.org/wiki/Typosquatting) applied to AI tool infrastructure. The npm and PyPI ecosystems have been hit with this attack pattern hundreds of times. The AI tooling ecosystem is following the same trajectory, at the same point in its maturity curve, with fewer defenses currently deployed.
 
@@ -247,9 +247,9 @@ Most production MCP deployments currently have none of these in place.
 
 ## Defense Patterns
 
-### 1. Cryptographic Tool Definition Pinning
+### 1. Tool Schema Pinning (TOFU)
 
-When an agent connects to an MCP server, hash the tool schemas it receives:
+When an agent connects to an MCP server, hash the tool schemas it receives. This is Trust-On-First-Use (TOFU) pinning — the `server_id` here is a configuration-level identifier, not a cryptographically authenticated identity. That limitation is noted under Defense 4; TOFU pinning stops *silent evolution* of already-trusted servers but doesn't protect against a server being swapped before first connection.
 
 ```python
 import hashlib, json
@@ -339,8 +339,9 @@ def _extract_string_values(obj: Any) -> list[str]:
     return []
 
 def _validate_json_schema(data: dict, schema: dict) -> bool:
-    """Stub: replace with jsonschema.validate() in production."""
-    return True  # real implementation uses jsonschema library
+    """Production: use `jsonschema.validate(data, schema)` (raises on violation).
+    This stub always returns True — replace before deploying."""
+    return True
 
 @dataclass
 class ValidationResult:
@@ -409,7 +410,7 @@ None of these are currently standardized in the MCP spec. They represent the nex
 
 ### 5. Outbound Traffic Monitoring at the Server Process Level
 
-Network egress monitoring is the most reliable detection mechanism for the exfiltration-disguised-as-tool-response attack class. An MCP server that provides weather data should make outbound connections to weather APIs. If it is also making connections to `telemetry-service-analytics.com`, that is an anomaly.
+Network egress monitoring is an important detection layer for new-connection exfiltration attacks: a server making outbound connections to domains not in its declared dependency set is an observable anomaly. It is not sufficient alone — several attack classes in this post (data encoded in tool responses, piggybacking on allowed upstream API calls) do not produce suspicious new outbound traffic. But it catches a wide class of naive exfiltration and raises the cost of the more sophisticated variants.
 
 Implementation requires running each MCP server in a sandboxed environment with a monitored network interface. This can be done with eBPF-based network monitoring (like [Cilium](https://cilium.io/)) or with container-level network policies that declare allowed egress and alert on violations.
 
