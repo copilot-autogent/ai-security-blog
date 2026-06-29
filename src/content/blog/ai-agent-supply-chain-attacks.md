@@ -120,7 +120,7 @@ No single control defeats supply chain attacks on AI components. The defense has
 
 Every model component entering your deployment pipeline should have a verifiable chain of custody. This means:
 
-**Cryptographic identity for checkpoints.** Maintain SHA-256 hashes of all model checkpoints, LoRA adapters, and tokenizer configs. Any modification to a checkpoint between registry download and deployment should be detectable. This is analogous to package lock files in traditional software supply chains — they don't prevent upstream compromise, but they detect unauthorized modification downstream.
+**Cryptographic identity for checkpoints.** Maintain SHA-256 hashes of all model checkpoints, LoRA adapters, and tokenizer configs. Any modification to a checkpoint between registry download and deployment should be detectable. This is analogous to package lock files in traditional software supply chains — they don't prevent upstream compromise, but they detect unauthorized modification downstream. Note that hash verification alone is insufficient for supply chain integrity: a malicious upstream can deliver a poisoned artifact along with a matching hash. Hash verification must be paired with authenticated provenance — ideally cryptographic signatures from a trusted publisher — so that you're verifying both that the artifact is unmodified *and* that it originated from an accountable source.
 
 **Training pipeline integrity.** For first-party fine-tunes, the training pipeline itself is an attack surface. Maintain a complete audit log of training data sources, preprocessing steps, and training code versions. A reproducible fine-tuning pipeline — one where the same inputs reliably produce the same outputs — enables auditing and anomaly detection that black-box fine-tuning cannot.
 
@@ -130,7 +130,7 @@ Every model component entering your deployment pipeline should have a verifiable
 
 ### Reproducible Fine-Tuning Pipelines
 
-A fine-tuning pipeline is reproducible if, given the same training data, code, and hyperparameters, it produces the same model weights. Reproducibility enables two defensive properties that ad-hoc fine-tuning cannot provide:
+A fine-tuning pipeline is reproducible if it produces consistent, auditable outputs from documented inputs — deterministic where possible, and with fixed random seeds and controlled infrastructure to minimize non-determinism. Note that GPU and distributed training paths introduce inherent nondeterminism, so "same inputs produce identical weights" is not a practical guarantee. The defensive value of reproducibility is not bitwise determinism but *auditability*: the ability to re-run the pipeline, compare statistical properties of the resulting weights, and detect significant structural divergence that could indicate tampering. This enables two defensive properties that ad-hoc fine-tuning cannot provide:
 
 **Diffing.** If a vendor delivers a checkpoint that is supposed to be a fine-tuned variant of a base model, and you have access to the same base model and the vendor's described training procedure, a reproducibility check reveals whether the delivered checkpoint is consistent with the described process. Divergence is evidence of tampering.
 
@@ -164,7 +164,7 @@ Treat MCP server dependencies like any other code dependency. The practices from
 
 Safety benchmarks for AI components should be maintained and run independently of the deployment pipeline. Specifically:
 
-**Separate the evaluation from the training pipeline.** If the same team that fine-tunes a model also selects the benchmarks used to evaluate it, the adversary only needs to compromise one decision-maker. Independent evaluation means separate teams, separate infrastructure, and benchmark selection that doesn't go through the vendor or the team that produced the component.
+**Separate the evaluation from the training pipeline.** If the same team that fine-tunes a model also selects, curates, and runs the benchmarks used to evaluate it, compromising that team — or that team's tooling and data pipeline — is sufficient to compromise both the model and the evaluation. Independent evaluation means separate teams, separate infrastructure, benchmark selection that doesn't go through the vendor or the producing team, and evaluation assets (datasets, scoring scripts, infrastructure credentials) maintained outside the training pipeline's access boundary. Compromise of benchmark *selection criteria alone* is insufficient unless the adversary also controls the executed evaluation assets; the goal of independence is to require an adversary to compromise multiple distinct trust boundaries simultaneously.
 
 **Backdoor-specific red-teaming.** Standard red-teaming tests whether a model can be manipulated into harmful behavior through natural-language prompting. Backdoor red-teaming is different: you're probing for conditional behaviors the model was trained to have. This requires systematic exploration of: unusual context patterns, temporal triggers, semantic trigger candidates from the model's training domain, and behavioral consistency testing across variations of the same input. No single technique reliably detects unknown triggers, but broad behavioral coverage reduces the space of undetected conditional activations.
 
