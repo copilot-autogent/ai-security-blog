@@ -45,13 +45,13 @@ Here is a summary of your document.
 
 The agent's output is "a summary" — benign text plus what looks like an image. When the interface renders that Markdown, the browser fires a GET request to `attacker.example.com` with the encoded secret as a query parameter. The sensitive data leaves the user's environment without any explicit tool call and without triggering network rules against agent-initiated outbound connections. Note that the URL *is* present in the raw text output, so a DLP scanner watching the agent's response could theoretically detect it — the channel's evasiveness comes from it not resembling a direct send, and from many monitoring pipelines not being configured to analyze image URL parameters.
 
-The bandwidth is limited by URL length constraints (server-side limits are often the binding factor; modern browsers support tens of kilobytes, but server URL limits vary widely) and by the agent's ability to reliably encode data in a query parameter without obvious signal to the interface. Compression helps. Multiple images in a single response can carry more.
+The bandwidth is limited by URL length constraints (typical web server defaults enforce 4–8KB limits; the binding constraint is usually the receiving server, not the browser). Compression helps. Multiple images in a single response can carry more.
 
 **The Bing Chat incident (2023)** documented this pattern against a production system. Security researcher Johann Rehberger demonstrated that a malicious webpage — when viewed in a tab while Bing Chat's Edge sidebar was active and reading the page's content — could inject instructions via the page itself that caused the agent to generate Markdown containing an attacker-controlled image URL encoding the user's conversation history. When the chat interface rendered the Markdown, the user's context was transmitted to Rehberger's server. The attack required no user interaction beyond visiting the page and having a chat session open. The indirect injection path (web page content processed by the sidebar) is what makes this a canonical side-channel demonstration: the data left through a URL that looked like an image request, embedded in an agent response that looked like normal output.
 
-The variant using hyperlinks (rather than images) requires a user click but can encode arbitrary data in URL path segments, which are often less scrutinized than query parameters. The variant using CSS `background-image` properties can fire without any Markdown rendering in some interfaces.
+The variant using hyperlinks (rather than images) requires a user click but can encode arbitrary data in URL path segments, which are often less scrutinized than query parameters. The CSS `background-image` variant can theoretically fire without explicit image Markdown, but only in interfaces that render inline styles from attacker-controlled content — most modern Markdown renderers sanitize inline CSS, so this path requires additional rendering preconditions.
 
-**Why it persists**: Most AI chat interfaces treat Markdown rendering as a display concern, not a security boundary. The fix — stripping or sandboxing external URLs before rendering — is well-understood but requires the platform to make rendering-context isolation a security property, not a formatting feature.
+**Why it persists**: Most AI chat interfaces treat Markdown rendering as a display concern, not a security boundary. The fix — blocking or proxying external URLs before rendering, or sandboxing rendered content with a restrictive Content Security Policy — is well-understood but requires the platform to make rendering-context isolation a security property, not a formatting feature. "Sandboxing" alone is insufficient unless it's combined with CSP or URL proxying that actually prevents external fetches.
 
 ---
 
@@ -91,7 +91,7 @@ The practical difficulty is reliability: a prompted LLM does not have determinis
 
 Agents with access to external tools — search, code execution, file systems, APIs — can encode information in which tools they call, in what sequence, and with what structurally observable parameters.
 
-A concrete example: an agent with access to a search tool makes queries to `search("term1")`, `search("term2")`, or `search("term3")` — three queries that differ only in a detail. An attacker-controlled server log for the search backend can decode the agent's query sequence as a binary encoding. The agent is doing its job (searching); the signal is in the *pattern* of searches, not their content.
+A concrete example: an agent with access to a search tool makes queries to `search("term1")`, `search("term2")`, or `search("term3")` — three queries that differ only in a detail. If the attacker controls or can observe the search backend's logs (or controls the search endpoint entirely), they can decode the agent's query sequence as a binary encoding. The agent is doing its job (searching); the signal is in the *pattern* of searches, not their content. This channel requires the attacker to have visibility into tool call arguments or a controlled receiving endpoint — an important trust-boundary assumption that shapes both the channel's practicality and its detection profile.
 
 More subtly, an agent might encode information in the order it calls tools when multiple orderings are semantically equivalent. If a task requires calling tool A and tool B, and the agent is instructed to always call A first for a "yes" signal and B first for a "no" signal, an observer with access to tool invocation logs can decode the signal. This is particularly relevant for orchestration frameworks where tool call sequences are logged for audit, but the audit doesn't analyze ordering as a potential signal channel.
 
@@ -105,7 +105,7 @@ Error-triggering as a deliberate channel is a variant: an agent encodes data by 
 
 Closely related to tool invocation patterns, error message encoding exploits the fact that AI agents surfacing internal errors to users or logging systems can carry information in which errors are surfaced and when.
 
-If an agent has access to an internal API that returns different error messages for different authorization states, it can probe that API and surface the resulting error codes to the user or to an observer. The agent's "I encountered an error" output looks like normal malfunction; the specific error code or message carries the signal.
+If an agent has access to an internal API that returns different error messages for different authorization states, it can probe that API and surface the resulting error codes to an observer. This is distinct from pure side-channel exfiltration — probing auth states to learn *whether* data is accessible is closer to oracle abuse than data egress — but the technique becomes a side-channel exfil path when the agent uses the error response to encode data it has *already accessed* and is trying to transmit. The agent's "I encountered an error" output looks like normal malfunction; the specific error code or message carries the signal.
 
 Variants include: triggering file-not-found errors with filename patterns that encode data, surfacing stack traces with specific line numbers, or generating log entries with structured fields that encode information in field values rather than field names.
 
@@ -146,7 +146,7 @@ Defending against side channels requires shifting from content-based monitoring 
 
 Before deploying an AI agent with access to sensitive data:
 
-**Audit the rendering pipeline**. If your agent's output is rendered as Markdown or HTML anywhere in the user-facing surface, confirm that external URL requests are blocked or sandboxed. Treat this as a hard requirement, not an optimization.
+**Audit the rendering pipeline**. If your agent's output is rendered as Markdown or HTML anywhere in the user-facing surface, confirm that external URL requests are blocked via Content Security Policy or URL proxying. Sandboxing alone is not sufficient — the sandbox must actively prevent external fetches, not just isolate the DOM. Treat rendering-context isolation as a hard security requirement, not an optimization.
 
 **Map the observable channels**. For every property of the agent's output that an external observer could measure — timing, token count, tool call sequence, error codes, styling choices — ask: could this carry a signal? If you grant an agent access to an API that returns distinct error codes, you've created a potential encoding channel.
 
@@ -170,7 +170,7 @@ In most current deployments, the answer is yes — and we're not watching for it
 
 ---
 
-**Further reading:**
+**Further Reading:**
 - *Prompt injection and Bing Chat: Revealing the hidden prompt* — Johann Rehberger / Wunderbucket (2023)
 - *Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injections* — Greshake, Abdelnabi, Mishra, Endres, Holz, Fritz (2023)
 - *Ignore Previous Prompt: Attack Techniques For Language Models* — Perez & Ribeiro (2022)
