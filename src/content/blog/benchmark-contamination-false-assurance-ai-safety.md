@@ -25,15 +25,15 @@ The distinction matters operationally. A model with genuine safety behavior can 
 
 Contamination in language model benchmarks has been measured empirically across multiple evaluations.
 
-**n-gram overlap studies** have consistently found high overlap between popular benchmark test sets and the training corpora of major models. [Shi et al. (2023) "Detecting Pretraining Data from Large Language Models"](https://arxiv.org/abs/2310.16789) introduced the MIN-K% PROB method for detecting whether specific text appeared in a model's training set. [Golchin & Surdeanu (2023)](https://arxiv.org/abs/2310.12622) showed that GPT-4 and other models reproduce benchmark examples when prompted — a strong signal of memorization. Models that show higher overlap also tend to show bigger performance drops when evaluated on held-out variants, suggesting the overlap is causally related to inflated scores, not just correlated.
+**n-gram overlap studies** have consistently found high overlap between popular benchmark test sets and the training corpora of major models. [Shi et al. (2023) "Detecting Pretraining Data from Large Language Models"](https://arxiv.org/abs/2310.16789) introduced the MIN-K% PROB method for detecting whether specific text appeared in a model's training set. [Golchin & Surdeanu (2023) "Time Travel in LLMs"](https://arxiv.org/abs/2310.12622) showed that GPT-4 and other models can reconstruct benchmark examples when prompted with partial instances — a strong signal that training data contains the benchmarks. Models that show higher overlap also tend to show bigger performance drops when evaluated on held-out variants, consistent with the hypothesis that the overlap drives inflated scores.
 
-**HarmBench and related safety benchmarks** face this problem directly. HarmBench ([Mazeika et al., 2024](https://arxiv.org/abs/2402.04249)) was released as a standardized evaluation framework for harmful content generation. But the benchmark test cases are published, described in papers, and discussed in blog posts — all of which feed into subsequent training crawls. A model trained on data crawled after HarmBench's release almost certainly encountered some fraction of its examples. How large a fraction depends on training cutoff, decontamination procedures, and crawl scope — but the baseline assumption of zero contamination is unjustifiable without explicit decontamination evidence.
+**HarmBench and related safety benchmarks** face this problem directly. HarmBench ([Mazeika et al., 2024](https://arxiv.org/abs/2402.04249)) was released as a standardized evaluation framework for harmful content generation. But the benchmark test cases are published, described in papers, and discussed in blog posts — all of which feed into subsequent training crawls. A model trained on data crawled after HarmBench's release may well have encountered its examples; how large a fraction depends on training cutoff, decontamination procedures, and crawl scope. The baseline assumption of zero contamination is unjustifiable without explicit decontamination evidence from the model developer.
 
-**ToxiGen contamination** is documented more specifically. [Hartvigsen et al. (2022)](https://arxiv.org/abs/2203.09509) published ToxiGen's evaluation set; subsequent analysis found many prompts appear verbatim or near-verbatim in Common Crawl snapshots overlapping with major model training windows. Models that score well on ToxiGen may be pattern-matching known-bad prompts rather than developing generalized toxicity detection.
+**ToxiGen contamination** illustrates the problem concretely. [Hartvigsen et al. (2022)](https://arxiv.org/abs/2203.09509) published ToxiGen's evaluation set as part of the benchmark release; because those prompts are now indexed on the web, they are plausibly present in training corpora assembled after 2022. Models that score well on ToxiGen may be pattern-matching known-bad prompts rather than developing generalized toxicity detection — though model-specific contamination would need to be established through methods like MIN-K% PROB or partial-instance reconstruction for any given model.
 
 **AdvGLUE and adversarial variants** face a different but related problem: the adversarial perturbations used to stress-test models become less adversarial over time as models are trained on them. A perturbation that reliably broke models in 2021 may be effectively memorized by models trained in 2024, producing high benchmark scores while leaving the model vulnerable to slightly different perturbations.
 
-**Performance degradation on held-out variants** is the diagnostic test. When researchers create "contamination-aware" versions of benchmarks — same task, different specific examples — models consistently score lower on the held-out variants than on the original. The gap is the contamination signal. For safety benchmarks, this gap has been observed to be large enough to shift conclusions about whether a model meets safety thresholds.
+**Performance degradation on held-out variants** is the diagnostic test. When researchers create "contamination-aware" versions of benchmarks — same task, different specific examples — models consistently score lower on the held-out variants than on the original. The gap is the contamination signal. [Zhu et al. (2023) "Dyval"](https://arxiv.org/abs/2309.17167) demonstrates this with dynamically generated evaluation sets that are structurally equivalent to standard benchmarks but cannot be memorized: model rankings shift substantially when moving from fixed to dynamic evaluation.
 
 ## Why This Is a Security Problem, Not Just an Accuracy Problem
 
@@ -45,11 +45,11 @@ This asymmetry is critical for security practitioners. Attackers are not constra
 
 The practical implication: **a contaminated safety benchmark score gives you the illusion of security testing without the substance**. It's worse than no testing, because it produces documentation that asserts the testing was done.
 
-## The Alignment Tax Reversal Problem
+## The Safety Fine-Tuning Fragility Problem
 
 A second failure mode compounds the first: models that are fine-tuned to pass safety benchmarks can often be fine-tuned to fail them with surprisingly low computational cost.
 
-Research on what has been called "alignment instability" or safety fine-tuning fragility — sometimes informally called "alignment tax reversal" — demonstrates that safety behaviors instilled during RLHF or safety fine-tuning can be eroded with surprisingly small amounts of adversarial fine-tuning. [Yang et al. (2023) "Shadow Alignment"](https://arxiv.org/abs/2310.02949) and [Qi et al. (2023) "Fine-tuning Aligned Language Models Compromises Safety"](https://arxiv.org/abs/2310.03693) both show that safety alignment is not robust to downstream fine-tuning: with as few as 100–1000 fine-tuning examples, safety refusals can be substantially eroded. The mechanism is debated — whether safety behaviors are "shallow" in a mechanistic sense or simply under-regularized in the fine-tuning objective — but the empirical finding is consistent: safety alignment is more brittle than baseline capability.
+Research on safety fine-tuning fragility demonstrates that safety behaviors instilled during RLHF or safety fine-tuning can be eroded with surprisingly small amounts of adversarial fine-tuning. [Yang et al. (2023) "Shadow Alignment"](https://arxiv.org/abs/2310.02949) and [Qi et al. (2023) "Fine-tuning Aligned Language Models Compromises Safety"](https://arxiv.org/abs/2310.03693) both show that safety alignment is not robust to downstream fine-tuning: with as few as 100–1000 fine-tuning examples, safety refusals can be substantially eroded. The mechanism is debated — whether safety behaviors are easily overwritten due to insufficient regularization or for mechanistic reasons — but the empirical finding is consistent: safety alignment is more brittle than baseline capability.
 
 For contamination-based safety scores, this is especially acute. If the model's safety performance is based on memorized benchmark patterns rather than deep behavioral alignment, then the safety layer is even thinner than in models trained with principled alignment objectives. The contamination creates a fragile top coat: test it at the right angle and it holds; push at a different angle and it comes off.
 
@@ -67,7 +67,7 @@ The contamination problem is not unsolvable. It requires moving away from fixed 
 
 **Behavioral testing beyond benchmark scores.** Benchmark scores measure model behavior on specific inputs. Behavioral testing measures consistency of behavior across the operational attack surface: multi-turn escalation, indirect harm, persona manipulation, jailbreak variants, cross-lingual attacks. A model that passes a safety benchmark while failing basic behavioral consistency tests has not demonstrated safety.
 
-**Red-team adversarial evaluation as a separate signal.** Internal red teams and external security evaluations (MSRC-style bug bounty programs for AI systems are emerging) should be weighted alongside benchmark scores, not replaced by them. Red-team findings are contamination-resistant by design — the red team isn't constrained to benchmark examples.
+**Red-team adversarial evaluation as a separate signal.** Internal red teams and external security evaluations (MSRC-style bug bounty programs for AI systems are emerging) should be weighted alongside benchmark scores, not replaced by them. Red-team findings are harder to contaminate than fixed benchmarks — a red team operating on novel prompts is not bounded by what appeared in training data — though red-team outputs themselves can eventually enter training pipelines, so methodological freshness matters here too.
 
 ## Questions to Ask Your AI Vendor
 
@@ -89,7 +89,7 @@ For security practitioners who are asked to approve AI deployments based on safe
 - What is the vendor's policy for evaluating safety after downstream fine-tuning?
 
 **On regulatory claims:**
-- When the vendor claims "EU AI Act compliance" or "NIST AI RMF conformance," which specific benchmark scores are they citing?
+- When the vendor claims "EU AI Act compliance" or alignment with NIST AI RMF (a voluntary governance framework, not a formal certification), which specific benchmark scores are they citing?
 - Are those benchmarks on the list of benchmarks with documented contamination exposure for this model?
 
 ## Red Flags That Suggest Benchmark Gaming
@@ -108,7 +108,7 @@ The uncomfortable reality is that the organizations most likely to be making hig
 
 The benchmark contamination problem means those numbers are systematically unreliable in ways that aren't visible from the outside. A model can report 95% on a contaminated benchmark and be trivially exploitable by an attacker who generates novel variants for five minutes. The gap between the reported score and the actual safety posture can be enormous, and the direction is always the same: the score is better than reality.
 
-This doesn't mean benchmarks are useless — they provide a baseline, and a model that fails clean benchmarks is almost certainly not safe. But a model that passes contaminated benchmarks may or may not be safe. The pass tells you the model was trained on data that included the benchmark. It doesn't tell you the model is safe.
+This doesn't mean benchmarks are useless — they provide a baseline, and a model that fails clean benchmarks is almost certainly not safe. But a model that passes contaminated benchmarks may or may not be safe. A high score is more consistent with contamination than with genuine safety; it doesn't rule it out, but it doesn't establish it either. It doesn't tell you the model is safe.
 
 For practitioners: treat safety benchmark scores as necessary but not sufficient. Require behavioral testing, contamination checks, and red-team findings as part of any safety evaluation you're asked to approve. Ask vendors to disclose their decontamination procedures. If a vendor can't tell you what benchmarks they checked for contamination before training, that's not a documentation gap — it's a signal about their evaluation rigor.
 
