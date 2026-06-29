@@ -126,6 +126,8 @@ The parallel to network security is direct. Early internet security focused on h
 
 The Microsoft Research experiments, conducted on a live platform with real persistent state and emergent agent behaviors, provide the first empirical evidence for what that network threat model looks like. The four attack classes — propagation, amplification, trust capture, and invisible proxy chains — are the starting vocabulary. The defenses are still an open problem.
 
+**See also:** [*Multi-Agent Trust Escalation: How Subagents Inherit and Abuse Orchestrator Permissions*](/blog/multi-agent-trust-escalation/) — maps the trust inheritance problem when orchestrators spawn subagents, covering confused orchestrator, message spoofing, and permission laundering attacks.
+
 ---
 
 **Sources:**

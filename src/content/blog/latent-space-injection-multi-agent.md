@@ -166,3 +166,4 @@ RecursiveMAS demonstrates that latent-space multi-agent communication is viable,
 - Yang, X. et al. *RecursiveMAS: Recursive Multi-Agent Systems.* arXiv:2604.25917, April 2026. [Paper](https://arxiv.org/abs/2604.25917) · [Project](https://recursivemas.github.io)
 - Prior work referenced: *RecursiveLink module architecture*, *Inner-Outer Loop training*, *Latent thoughts generation*
 - Related blog coverage: [What Red-Teaming Misses When Agents Talk to Each Other](/blog/multi-agent-red-teaming-network-attacks/) (this blog, May 2026)
+- Related blog coverage: [*Multi-Agent Trust Escalation: How Subagents Inherit and Abuse Orchestrator Permissions*](/blog/multi-agent-trust-escalation/) (this blog, June 2026)
