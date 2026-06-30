@@ -2,7 +2,7 @@
 title: "LLM Output Watermarking: Provenance, Detection Limits, and Evasion"
 description: "Token-level watermarks, cryptographic signing, and semantic embedding all promise attribution of AI-generated text — but paraphrase attacks, closed-pipeline requirements, and research-stage maturity constrain what any of them can actually guarantee. An honest practitioner's assessment."
 pubDate: 2026-06-30
-tags: ["watermarking", "provenance", "content-authenticity", "ai-regulation", "llm-security"]
+tags: ["security", "llm", "deployment"]
 ---
 
 As AI-generated text floods every channel from social media to legal filings, the question of attribution — *was this written by a person or a model?* — has moved from academic curiosity to regulatory priority. The EU AI Act, C2PA, and public commitments from major providers all point toward watermarking as part of the answer.
@@ -13,9 +13,9 @@ The technique is genuinely useful. It also has hard limits that are routinely om
 
 The canonical approach is the **green/red list scheme** introduced by Kirchenbauer et al. (2023). The mechanism is elegant in its simplicity.
 
-During sampling, a pseudo-random function partitions the model's vocabulary into a "green" list and a "red" list, seeded by the preceding token (or a fixed key). The sampler is then biased to prefer green-list tokens — not by making red-list tokens impossible, but by adding a fixed logit boost to green candidates. The boost is small enough that output quality is barely affected.
+During sampling, a pseudo-random function partitions the model's vocabulary into a "green" list and a "red" list, seeded by the preceding token *combined with* a secret key held by the provider. The sampler is then biased to prefer green-list tokens — not by making red-list tokens impossible, but by adding a fixed logit boost to green candidates. The boost is small enough that output quality is barely affected.
 
-Detection works by checking whether a candidate text shows a statistically improbable concentration of green-list tokens. If the proportion of green tokens far exceeds the baseline 50%, the hypothesis that the text was unmodified LLM output is supported. The test is a standard one-tailed z-test; the paper derives the significance threshold analytically.
+Detection works by checking whether a candidate text shows a statistically improbable concentration of green-list tokens. The green-list fraction γ is a parameter (the paper evaluates γ = 0.25 and γ = 0.5); if the observed proportion of green tokens significantly exceeds γ, the hypothesis that the text was unmodified LLM output is supported. The test is a standard one-tailed z-test; the paper derives the significance threshold analytically.
 
 Three properties make this attractive for deployment:
 
@@ -33,9 +33,9 @@ A different class of techniques doesn't touch the model output at all. Instead, 
 
 C2PA (Coalition for Content Provenance and Authenticity) is the leading standard here. A C2PA manifest is attached to the file or document, carrying a chain of signed assertions about its origin and any edits. AI providers can participate as a signing authority; content consumers can verify the chain.
 
-This approach has obvious appeal: it's exact rather than statistical, it carries rich metadata, and it can survive lossy transformations if the manifest is physically attached to the file.
+This approach has obvious appeal: it's exact rather than statistical, it carries rich metadata, and it can survive distribution through cooperative pipelines as long as the manifest is preserved and the content is not modified.
 
-The equally obvious limitation: **the chain breaks the moment the content is retyped**. C2PA manifests live in file metadata. If someone reads an AI-generated document and manually copies it into a new file — or even screenshots it — the provenance is gone. Transcription is a trivially complete evasion strategy.
+The equally obvious limitation: **the chain breaks the moment the content is retyped or meaningfully modified**. C2PA manifests bind to a content hash — if the text is paraphrased, retyped, or manually copied into a new file, the signature no longer validates. Transcription is a trivially complete evasion strategy. Even routine asset-modifying transforms (conversion to a new format, lossy re-encoding) typically require a new signed assertion to maintain the chain.
 
 Cryptographic watermarking also requires **closed inference pipelines**. The provider must control the signing infrastructure, trust the hardware, and prevent output manipulation between generation and signing. Open-source or locally-deployed models cannot participate without a trusted execution environment, and even with one, key distribution is non-trivial.
 
@@ -65,7 +65,7 @@ Attacks on watermarked text are well-understood and most are cheap. Roughly orde
 
 **Token substitution**: Replace individual words with synonyms. At low substitution rates (under 20%), quality is unaffected and watermark signal degrades. This is simpler than full paraphrase and works well enough for casual evasion.
 
-**Lossy compression**: OCR, speech-to-text, or screenshot → re-OCR pipelines introduce enough character-level noise to shift token boundaries and degrade statistical signals. This is an effective attack against cryptographic manifest approaches specifically (breaks the C2PA chain).
+**Lossy compression**: OCR, speech-to-text, or screenshot → re-OCR pipelines introduce enough character-level noise to shift token boundaries and degrade statistical signals. For C2PA manifest approaches, creating a new file (screenshot, export, OCR output) breaks provenance by producing a new asset without a valid signed assertion — ordinary re-encoding of the original file does not inherently break the chain if the manifest is preserved.
 
 **Translation round-trips**: Translate to a different language and back. This is semantically noisy but preserves meaning well enough for many applications. It thoroughly destroys token-level watermarks and breaks manifest chains.
 
@@ -75,7 +75,7 @@ The asymmetry here is important: **evasion is cheap and reliable, while robust d
 
 ## Regulatory Context
 
-The EU AI Act (Article 50) requires providers of general-purpose AI systems used to generate content to ensure that outputs are marked in a machine-readable format that identifies them as AI-generated. This is not a precise technical mandate — it requires marking, not watermarking in the Kirchenbauer sense — and compliance via metadata, API labels, or format conventions may satisfy it without embedded statistical signals.
+The EU AI Act (Article 50) requires providers of certain AI systems — including general-purpose AI systems generating synthetic audio, video, text, or images intended to be disclosed publicly — to mark outputs in a machine-readable format that identifies them as AI-generated. The obligation applies with scope limits and exceptions (e.g., authorised law enforcement uses, licensed creative content). This is not a precise technical mandate for watermarking in the Kirchenbauer sense — compliance via metadata, API labels, or format conventions may satisfy it without embedded statistical signals.
 
 OpenAI publicly committed to watermarking in 2022 and again in 2023, but details of any production deployment have not been published. The technical post by Scott Aaronson (then at OpenAI) describes a scheme consistent with Kirchenbauer et al. but acknowledges the paraphrase evasion problem explicitly.
 
@@ -87,11 +87,11 @@ The honest interpretation: regulators want content provenance, and providers are
 
 | Approach | Evasion by Paraphrase | Survives Retyping | Requires Provider Cooperation | Production Ready |
 |---|---|---|---|---|
-| Token-level (green/red list) | ❌ trivial | ❌ always destroyed | Optional (key needed) | Yes (research protos) |
-| Cryptographic (C2PA) | ✅ (manifest survives) | ❌ always destroyed | ✅ required | Yes (limited scope) |
+| Token-level (green/red list) | ❌ trivial | ❌ always destroyed | Optional (key needed) | Research prototypes only |
+| Cryptographic (C2PA) | ❌ breaks content hash | ❌ always destroyed | ✅ required | Yes (limited scope) |
 | Semantic (embedding-based) | Partial | ❌ likely destroyed | Depends on scheme | No (research only) |
 
-Where watermarking **adds real value**: bulk detection pipelines. If you need to screen millions of documents and identify which were generated by a specific model, token-level watermarking is practical and reliable — paraphrase attacks at scale are expensive. Detecting bulk AI-generated spam, automated synthetic review content, or large-scale disinformation seeding all fall in this bucket.
+Where watermarking **adds real value**: bulk detection pipelines. If you need to screen millions of documents and identify which were generated by a specific model, token-level watermarking is practical and reliable — each individual evasion requires a separate paraphrase call, so bulk evasion has non-trivial cost, while bulk detection runs cheaply server-side. Detecting AI-generated spam, automated synthetic review content, or large-scale disinformation seeding all fall in this bucket. Note that this advantage narrows as paraphrasing API costs fall.
 
 Where it **fails**: any individual use case where the adversary has motive to invest even a few minutes. A journalist verifying whether a specific email was AI-generated. A court trying to authenticate a specific document. A moderation system trying to catch an individual evader.
 
@@ -111,4 +111,12 @@ The research trajectory on semantic watermarks is worth watching. If paraphrase-
 
 ---
 
-*References: Kirchenbauer et al., "A Watermark for Large Language Models" (ICML 2023); Hou et al., "Semstamp: A Semantic Watermark with Paraphrastic Robustness for Text Generation" (2023); C2PA Technical Specification v2.1; EU AI Act Article 50 (2024); Scott Aaronson, "My AI Safety Research, Briefly" (OpenAI blog, 2022).*
+[^1]: Kirchenbauer et al., "A Watermark for Large Language Models," *ICML 2023*. [arXiv:2301.10226](https://arxiv.org/abs/2301.10226)
+
+[^2]: Hou et al., "SemStamp: A Semantic Watermark with Paraphrastic Robustness for Text Generation," *NAACL 2024*. [arXiv:2310.03991](https://arxiv.org/abs/2310.03991)
+
+[^3]: Coalition for Content Provenance and Authenticity, *C2PA Technical Specification*. [c2pa.org/specifications](https://c2pa.org/specifications/)
+
+[^4]: EU AI Act, Article 50 — Transparency obligations for providers and deployers of certain AI systems (2024).
+
+[^5]: Scott Aaronson, "Watermarking GPT Outputs," *Shtetl-Optimized* (2022). [scottaaronson.blog](https://scottaaronson.blog/?p=6823)
