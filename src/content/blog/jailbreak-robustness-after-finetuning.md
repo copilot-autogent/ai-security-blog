@@ -7,7 +7,7 @@ tags: ["fine-tuning", "safety-alignment", "jailbreaks", "RLHF", "threat-model", 
 
 Safety fine-tuning gives a base language model its sense of "no." RLHF, Constitutional AI, and DPO shift a model's output distribution away from harmful content and toward refusals. For a while, this works. Then someone fine-tunes the model on their proprietary data — and the "no" quietly disappears.
 
-This is not a hypothetical. It has been demonstrated empirically, repeatedly, across GPT-3.5, GPT-4, Llama 2, and Mistral. Understanding *why* it happens — and what you can do about it — is the central challenge of safe enterprise LLM deployment.
+This is not a hypothetical. It has been demonstrated empirically across GPT-3.5 Turbo, Llama 2, and Falcon. Understanding *why* it happens — and what you can do about it — is the central challenge of safe enterprise LLM deployment.
 
 ## The Thin Layer Problem
 
@@ -62,7 +62,7 @@ The good news is that there are concrete mitigations. They span model architectu
 
 ### Training-Level Mitigations
 
-**Safety-frozen layers.** One approach is to freeze the layers most responsible for safety behaviors during task fine-tuning, updating only the upper layers or using adapter modules (LoRA, QLoRA) that don't touch the base model weights at all. This preserves the safety-relevant weight configuration. The tradeoff is reduced task adaptation capacity.
+**Safety-frozen layers.** One approach is to freeze the layers most responsible for safety behaviors during task fine-tuning, updating only the upper layers or using adapter modules (LoRA, QLoRA) that add new parameters without modifying the base model weights directly. This reduces — but does not eliminate — the risk of safety degradation. The tradeoff is reduced task adaptation capacity.
 
 **Safety regularization during fine-tuning.** Rather than freezing weights, add an auxiliary loss term during fine-tuning that penalizes deviation from the original model's behavior on a held-out safety probe set. This is essentially a regularizer that keeps the fine-tuned model from drifting too far from the safety-trained distribution.
 
@@ -99,7 +99,6 @@ Both threat modes require the same defensive posture: treat safety alignment as 
 | Oct 2023 | Qi et al. — harmful and benign fine-tune examples both degrade GPT-3.5 safety |
 | Oct 2023 | Yang et al. (Shadow Alignment) — small harmful fine-tune sets subvert Llama 2, Falcon |
 | Late 2023 | OpenAI imposes content screening and post-fine-tune safety evaluation for API fine-tunes |
-| 2024+ | Multiple enterprise deployments ship fine-tuned models without safety regression testing |
 
 ## The Practical Takeaway
 
