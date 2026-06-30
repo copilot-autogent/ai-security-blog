@@ -27,18 +27,20 @@ The most concretely demonstrated attack class doesn't require breaking isolation
 
 When a prefix is served from cache, the provider skips prefill computation for those tokens. At the scale of long system prompts, this differential is measurable. Published estimates for OpenAI's prompt caching indicate latency reductions of 10–50ms for typical enterprise-length system prompts (~2,000 tokens), with larger differentials for longer prompts.
 
-An attacker who can measure time-to-first-token can potentially construct a **cache oracle**: a probe that distinguishes whether a target system prompt is currently cached. The attack looks like this:
+An attacker who can measure time-to-first-token can potentially construct a **cache oracle**: a probe that distinguishes whether a target system prompt is currently cached. The oracle relies on comparing measured latency against an expected cold-start baseline for that prefix length. The procedure:
 
-1. Choose a target system prompt (or a prefix suspected to be in use by a target deployment).
-2. Issue a query that begins with that prefix. Measure time-to-first-token.
-3. Issue a second query immediately. If the second query is faster, the prefix was already cached before the first probe — meaning someone else recently used it.
-4. If both queries show similar latency, the first request warmed the cache and no prior user can be inferred.
+1. Establish a cold-start baseline: measure time-to-first-token for a known-uncached prefix of the same length to calibrate the expected uncached latency.
+2. Issue a query beginning with the target prefix. Measure time-to-first-token (T1).
+3. **If T1 is significantly below the cold-start baseline**, the prefix was already in the cache before the probe arrived — meaning some prior request had populated it. Within an account, this implies another deployment or service was recently active with that prefix.
+4. If T1 matches the cold-start baseline, the prefix was not in cache before the probe. (Your probe just warmed it; a follow-up query will return faster, but that reflects your own cache population, not a third party's.)
 
 This isn't a hypothetical construction. Timing side-channel attacks on shared infrastructure have a long history in conventional security — the [Flush+Reload](https://eprint.iacr.org/2013/448.pdf) family of CPU cache attacks exploits the same class of observation: you can infer what a co-tenant has been doing by measuring what's hot in shared memory.
 
-**What can an attacker actually infer?** At minimum: whether a specific system prompt is in active use. For API deployments where the system prompt is a product's configuration secret, this is a meaningful information leak. An attacker who knows a competitor's system prompt (perhaps from a previous API interaction or published disclosure) can determine whether their deployment is active and recently queried.
+**What can an attacker actually infer, and against whom?** The scope is constrained by account isolation. Under standard per-account namespacing, the oracle measures activity *within a cache namespace the attacker already has access to* — distinguishing whether another deployment inside the same account recently used a given prefix. This is relevant in scenarios where the attacker has partial account access but not full visibility into other deployments' configurations.
 
-> **⚠️ Scope limitation.** The cache timing differential is real and measurable in principle. Empirical measurement of this specific attack against production LLM APIs has not been published in peer-reviewed literature as of this writing. The architecture of the attack is well-founded; the practical signal-to-noise ratio under real-world network jitter has not been independently confirmed. Treat this as a well-theorized risk, not a deployed exploit.
+Cross-account inference (e.g., detecting whether a competitor is using a particular system prompt) is **not** possible under strict per-account isolation: the attacker's probe touches only their own account's cache namespace, regardless of what the target's prefix content is. Cross-account leakage would require isolation to be weaker than documented — which is precisely the risk that the subsequent section addresses.
+
+> **⚠️ Scope limitation.** The cache timing differential is real and measurable in principle. Empirical measurement of this specific attack against production LLM APIs has not been published in peer-reviewed literature as of this writing. The architecture of the oracle is well-founded; the practical signal-to-noise ratio under real-world network jitter has not been independently confirmed. Treat this as a well-theorized risk, not a deployed exploit.
 
 ## Injection via Shared Cache Namespaces: The Theoretical Case
 
@@ -46,9 +48,9 @@ A more speculative — but architecturally concerning — attack class involves 
 
 The prerequisite: a shared cache namespace where attacker-controlled content can influence what other tenants retrieve. Under strict account-level isolation, this shouldn't be possible. But the attack becomes plausible under weaker isolation models:
 
-**Scenario 1: Sub-account namespace collisions.** If a provider's isolation unit is a *project* or *deployment* rather than an *account*, and multiple deployments within the same account share a namespace, an attacker with any access to that account can potentially warm a malicious prefix into the cache. Subsequent requests from other deployments that share the same prefix by coincidence would receive the poisoned cached activations.
+**Scenario 1: Sub-account namespace collisions.** If a provider's isolation unit is a *project* or *deployment* rather than an *account*, and multiple deployments within the same account share a cache namespace, an attacker with partial account access could probe which prefixes are in-cache across deployments, revealing configuration secrets from deployments the attacker doesn't directly control. True content injection (writing different activations under the same cache key) additionally requires either a hash collision or mutable cache entries — simply sharing a namespace enables correlation and inference attacks, not automatic activation substitution.
 
-**Scenario 2: Prefix collision under hash collisions.** Cache keys are typically derived from a hash of the prefix content. Hash collisions are cryptographically rare under robust schemes but have a historical track record of being more exploitable than theory suggests when implementations cut corners. An attacker who can engineer a collision would bypass content-based isolation.
+**Scenario 2: Prefix collision under hash collisions.** Cache keys are typically derived from a hash of the prefix content. Hash collisions are cryptographically rare under robust schemes but have a historical track record of being more exploitable than theory suggests when implementations cut corners. An attacker who can engineer a collision would have a prefix whose content differs from the target's but maps to the same cache key — causing the target's cached activations to be served in response to the attacker's content, or vice versa.
 
 **Scenario 3: Provider-level misconfiguration.** Account isolation may be enforced in the hot path but not during cache migration, failover, or maintenance windows. Transient misconfiguration during infrastructure events is a known failure mode in multi-tenant systems.
 
@@ -74,11 +76,11 @@ For operators deploying LLM APIs, mitigations cluster around two categories:
 
 ### 1. Reduce Timing Signal
 
-**Randomized prefix salting.** Append a short, secret, deployment-specific token to the beginning of every system prompt before hashing. This means identical system prompts across deployments don't share a cache key, and timing probes against the deployment's prefix don't reveal anything about other deployments. The cost: cache hits become deployment-specific — you cannot warm a shared cache across multiple production instances.
+**Randomized prefix salting.** Append a short, secret, deployment-specific token to the beginning of every system prompt before hashing. This means identical system prompts across deployments don't share a cache key, and timing probes against the deployment's prefix don't reveal anything about other deployments' cache state. The cost: cache hits become deployment-specific — you cannot warm a shared cache across multiple production instances.
 
 **Latency normalization.** Some providers add artificial latency to normalize time-to-first-token, eliminating cache timing differentials visible to API consumers. This defends against external observers but doesn't help with intra-provider timing observations.
 
-**Rate limiting on repeated identical requests.** A cache oracle relies on issuing the same prefix twice within the TTL window. Rate limiting per IP or per API key on identical requests degrades oracle accuracy.
+**Rate limiting on repeated identical requests.** An accurate cache oracle requires multiple probes to build statistical confidence against network jitter. Rate limiting per IP or per API key on similar requests degrades oracle accuracy.
 
 ### 2. Reduce Cache Surface
 
@@ -90,7 +92,7 @@ For operators deploying LLM APIs, mitigations cluster around two categories:
 
 ### 3. Audit and Detect
 
-**Cache hit logging.** If a provider exposes cache hit status in API responses, log it. A sequence of cache misses followed by cache hits on a rarely-queried system prompt suggests a third party was querying with the same prefix — potentially a probing event.
+**Cache hit logging.** If a provider exposes cache hit status in API responses, log it. An unexpected pattern of cache hits on a rarely-queried system prompt — hits that precede your own query by the oracle logic above — suggests a third party within the same account namespace was recently querying with the same prefix.
 
 **Provider-level audit trails.** In enterprise agreements, request audit trail access that includes caching behavior. This doesn't prevent attacks but enables detection after the fact.
 
@@ -109,8 +111,10 @@ The conventional penetration testing toolkit doesn't naturally reach this layer.
 | Claim | Confidence | Basis |
 |---|---|---|
 | KV-cache sharing introduces timing differentials measurable at the API layer | **Confirmed** | Cache hit performance data from provider documentation |
-| Timing differentials could be exploited as a cache oracle to detect shared prefixes | **Plausible / theoretical** | Analogous CPU cache timing attacks well-demonstrated; LLM-specific exploit not published |
+| Timing oracle can detect intra-account cache activity via latency vs. baseline comparison | **Plausible / theoretical** | Analogous CPU cache timing attacks well-demonstrated; LLM-specific exploit not published |
+| Cross-account timing oracle is possible under standard per-account isolation | **Not supported** | Per-account namespacing severs the cross-account signal; requires isolation weakness |
 | Cache namespace injection under misconfigured isolation is possible | **Structural / theoretical** | Follows from multi-tenant storage architecture; not reported against production systems |
+| Hash collision enables serving adversarial activations under a legitimate cache key | **Structural / theoretical** | Well-understood in cryptographic literature; requires weak hash scheme |
 | Randomized prefix salting mitigates timing oracle attacks | **Confirmed** | Standard defense from analogous timing attack literature |
 | Providers have sufficient tenant isolation to prevent cross-account cache poisoning | **Unverified** | No public documentation on storage-layer isolation guarantees |
 
