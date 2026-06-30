@@ -7,29 +7,29 @@ tags: ["adversarial-attacks", "vision-language-models", "multimodal", "prompt-in
 
 Vision-language models — GPT-4V, Claude 3, Gemini 1.5 Pro, LLaVA, InstructBLIP — process images alongside text as first-class inputs. That sentence sounds like a capability story. It's also a threat model.
 
-When a model ingests an image, the attacker's surface expands from the text channel to the full pixel space. Pixels are continuous. Text tokens are discrete. Continuous spaces are gradient-friendly — the same optimization machinery that trains neural networks can craft images that push a model's internal representations toward any attacker-chosen target. The result: an imperceptible modification to an otherwise normal image that causes a VLM to ignore its system prompt, produce attacker-specified output, or trigger a tool call it was never instructed to make.
+When a model ingests an image, the attacker's surface expands from the text channel to the full pixel space. Pixels are continuous. Text tokens are discrete. Continuous spaces are gradient-friendly — the same optimization machinery that trains neural networks can craft images that push a model's internal representations toward any attacker-chosen target. The result: an imperceptible modification to a normal image that causes a VLM to ignore its system prompt, produce attacker-specified output, or trigger tool calls it was never instructed to make.
 
 This post covers what's been empirically confirmed, what remains theoretical, how perception attacks differ from injection attacks, and what defenses exist.
 
 ## Adversarial Examples: The Primer
 
-The adversarial example literature predates language models. The foundational result is from Goodfellow et al. (2014), who showed that neural networks are vulnerable to *worst-case perturbations* — small, structured changes to inputs that reliably cause misclassification while remaining imperceptible to humans. Their **Fast Gradient Sign Method (FGSM)** computes the gradient of the model's loss with respect to the input image, then takes a single step in the direction that maximizes that loss:
+The adversarial example literature predates language models. The foundational result is from Goodfellow et al. (2014), who showed that neural networks are vulnerable to *worst-case perturbations* — small, structured changes to inputs that reliably cause misclassification while remaining imperceptible to humans. Their **Fast Gradient Sign Method (FGSM)** computes the gradient of the model's loss with respect to the input image, then takes a single step in the direction that increases that loss (for an untargeted attack that pushes the model toward any wrong output):
 
-```
+```text
 x_adv = x + ε · sign(∇_x L(f(x), y))
 ```
 
-This is a one-shot attack: fast, cheap, and effective against the specific model used to compute gradients. The perturbation magnitude ε is bounded to stay below a perceptibility threshold — typically measured in L∞ norm, constraining how much any individual pixel can change.
+Targeted variants negate the sign, pulling the model toward a specific attacker-chosen output. This is a one-shot attack: fast, cheap, and effective against the specific model used to compute gradients. The perturbation magnitude ε is bounded to stay below a perceptibility threshold — typically measured in L∞ norm, constraining how much any individual pixel can change.
 
 Madry et al. (2018) extended this to **Projected Gradient Descent (PGD)**, an iterative version that takes many smaller gradient steps, projecting back into the ε-ball after each update:
 
-```
+```text
 x_{t+1} = Π_{x+S}(x_t + α · sign(∇_x L(f(x_t), y)))
 ```
 
-PGD attacks are stronger and more reliable than single-step FGSM, especially for crafting perturbations that transfer across models. The iterative structure allows the attacker to climb the loss landscape more precisely, finding perturbations that are not just locally harmful but robustly so.
+PGD attacks are stronger in the white-box setting than single-step FGSM, finding perturbations that are more robustly harmful against the target model. For cross-model transfer, the picture is more nuanced — iterative attacks don't automatically transfer better than single-step attacks; explicitly transfer-optimized methods (using surrogate ensembles, input diversity, or momentum) are generally preferred when the goal is black-box transferability.
 
-Both FGSM and PGD are **white-box attacks**: they require access to model gradients. Much of the VLM attack literature uses white-box techniques against open-source models (LLaVA, InstructBLIP, BLIP-2) and then evaluates whether the resulting perturbations *transfer* to models closed-source a finding that has significant threat model implications. 
+Both FGSM and PGD are **white-box attacks**: they require access to model gradients. Much of the VLM attack literature uses white-box techniques against open-source models (LLaVA, InstructBLIP, BLIP-2) and then evaluates whether the resulting perturbations *transfer* to closed-source models — a finding that has significant threat model implications.
 
 ## Why VLMs Change the Threat Model
 
@@ -37,23 +37,21 @@ Classical adversarial examples on vision classifiers have a narrow harm profile:
 
 VLMs dramatically expand the harm profile in three ways:
 
-**1. The output space is open-ended.** A classifier outputs a label from a fixed vocabulary. A VLM generates arbitrary text. An attacker who can control a VLM's behavior can extract information from its context window, generate harmful content, produce disinformation, impersonate trusted sources, or inject instructions that affect downstream agents.
+**1. The output space is open-ended.** A classifier outputs a label. A VLM generates arbitrary text. An attacker who controls a VLM's behavior can extract context window contents, generate harmful content, produce disinformation, or inject instructions into downstream agents.
 
-**2. The image is contextually integrated.** When a VLM processes an image, it's not just classifying it — it's integrating the visual content with the text query and generating a response that synthesizes both. Adversarial perturbations can be crafted to inject *semantic content* into this integrated representation, not just bias a single classification decision.
+**2. The image is contextually integrated.** A VLM integrates visual and text content into a unified response. Adversarial perturbations can inject *semantic content* into this integrated representation, not just bias a single classification decision.
 
-**3. VLMs are increasingly agentic.** A VLM embedded in an agent pipeline that can call external tools is a very different threat target than a standalone captioning model. An adversarial image that causes the VLM to emit a specific tool call string is effectively a remote code execution vector.
+**3. VLMs are increasingly agentic.** A VLM in an agent pipeline that can call external tools is a very different target than a standalone captioning model. An adversarial image that causes the VLM to emit a specific tool call string can propagate attacker-controlled instructions into downstream execution — the extent of impact depends on how much the surrounding agent trusts that output.
 
 ## Attack Taxonomy: Perception Attacks vs. Injection Attacks
 
 Not all VLM adversarial attacks work the same way. A useful distinction:
 
-**Perception attacks** target the model's interpretation of image content. The goal is to change what the model *believes it sees* — making a stop sign look like a speed limit sign, making benign content look harmful, or making harmful content appear benign. The classic adversarial example is a perception attack. In the VLM context, a perception attack might cause a model to generate an incorrect description of an image.
+**Perception attacks** target the model's interpretation of image content — changing what the model *believes it sees*. In the VLM context, a perception attack might cause a model to generate an incorrect description that a downstream process acts on.
 
-**Injection attacks** target the model's *behavior* given what it sees. The adversarial image doesn't need to change the model's perception of the visual content — it just needs to suppress the model's safety behaviors or inject a specific instruction into the generation process. The perturbed image might still look like a dog photo. The model might still identify it as a dog photo. But the perturbation has placed the model's internal state into a regime where it will comply with a harmful follow-up text instruction that it would otherwise refuse.
+**Injection attacks** target the model's *behavior* given what it sees. The adversarial image needn't change the model's visible interpretation: the perturbation places the model's internal state into a regime where safety behaviors are suppressed or a specific attacker-defined output is elicited. This distinction matters for detection: perception attacks can potentially be caught by cross-checking image descriptions; injection attacks leave no visible artifact until the attack activates.
 
-This distinction matters for defense. Perception attacks can potentially be caught by cross-checking the model's image description against ground truth. Injection attacks are harder to detect because the model's visible behavior on the image may appear normal — the effect only manifests when paired with a specific text prompt or in a specific pipeline context.
-
-A third category, **cross-modal hijacking**, involves images and text that interact synergistically — neither alone causes the attack to succeed, but together they trigger behavior that neither would independently produce.
+A third category, **cross-modal hijacking**, involves images and text that interact synergistically — neither alone produces the attack, but together they trigger behavior neither would independently.
 
 ## Empirical Landscape: What the Papers Show
 
@@ -63,7 +61,7 @@ Schlarmann and Hein's **"On the Adversarial Robustness of Multi-Modal Foundation
 
 The paper demonstrates that adversarial perturbations against the image encoder can cause the model to generate attacker-controlled text output. A malicious content provider can craft an image whose perturbation causes the VLM to generate a specific caption — for example, directing users to a malicious URL or broadcasting false information — regardless of what the image actually depicts. The attack works against InstructBLIP and LLaVA, both of which use CLIP as their vision backbone.
 
-The finding is significant because it grounds an important claim empirically: the threat isn't speculative. Models that were widely deployed in 2023 are vulnerable to this class of attack, and the vulnerability is tied to the shared CLIP encoder backbone rather than any model-specific weakness.
+The finding grounds an important empirical claim: the threat isn't speculative. Models widely deployed in 2023 are vulnerable to this attack class, and the vulnerability is tied to the shared CLIP encoder backbone rather than any model-specific weakness.
 
 ### Qi et al. (2023): Universal Visual Jailbreaks
 
@@ -71,15 +69,15 @@ Qi et al.'s **"Visual Adversarial Examples Jailbreak Aligned Large Language Mode
 
 The attack optimizes a perturbation that pushes the model's embedding of the adversarial image close to the embeddings of harmful content in the model's representational space. Once this "jailbreak image" is in the model's context, the model enters a regime where safety-trained refusal behaviors are suppressed. The paper demonstrates this against LLaVA, which uses CLIP as the vision encoder and LLaMA as the language backbone.
 
-The critical insight: the adversarial image doesn't need to encode any specific harmful instruction. It creates a *representational context* in which the model's alignment doesn't hold. Any harmful text instruction submitted alongside the jailbreak image then elicits compliance.
+The critical insight: the adversarial image doesn't encode any specific harmful instruction. It creates a *representational context* where the model's alignment doesn't hold. Any harmful text instruction submitted alongside it then elicits compliance.
 
-This "context poisoning" model of adversarial injection is distinctive. It's not that the model reads instructions from the image. It's that the image shifts the model's internal state into a regime where instructions that would normally be blocked now go through.
+This "context poisoning" model is distinctive from visual text injection. It's not that the model reads instructions from the image. It's that the image shifts the model's internal state into a regime where the text-level safety refusals stop firing.
 
 ### Shayegani et al. (2023): Cross-Modal Attacks via CLIP Embeddings
 
 Shayegani et al.'s **"Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models"** (arXiv:2307.14539) identified the CLIP vision encoder as a shared vulnerability surface across multiple VLMs.
 
-The attack crafts adversarial images that, when processed through the vision encoder, produce embeddings that map to specific toxic content in the model's embedding space. Because the attack targets the CLIP encoder rather than the full VLM, a single adversarial image can transfer across different models that share the same vision backbone — including closed-source models that use CLIP internally.
+The attack crafts adversarial images that, when processed through the vision encoder, produce embeddings that map to specific toxic content in the model's embedding space. Because the attack targets the CLIP encoder rather than the full VLM, a single adversarial image may transfer across different models that share the same vision backbone. The paper explicitly demonstrates cross-model transferability for open-source models; transfer to closed-source commercial deployments would require those deployments to use compatible vision encoders, a condition that cannot be verified externally.
 
 This cross-model transferability has a direct threat model implication: an attacker who can run gradient-based optimization against an open-source model (LLaVA, for example) can potentially produce adversarial images that work against closed-source commercial deployments without needing any access to the target model's weights. The CLIP encoder is the shared attack surface.
 
@@ -95,7 +93,7 @@ They demonstrate four attack types against LLaVA:
 - **Safety override**: suppressing refusal behaviors on harmful inputs
 - **False belief injection**: causing the model to state specific false facts ("The Eiffel Tower is in Rome")
 
-All four attack types achieve success rates above 80% against LLaVA. The attacks require only small, automated image perturbations — no gradient access to the LLM component, only to the vision encoder.
+All four attack types achieve success rates above 80% against LLaVA. The attacks use white-box optimization through the full VLM and require only small, automated image perturbations.
 
 The context extraction result is particularly significant for deployed systems. A VLM processing user-uploaded images that can be caused to reproduce its system prompt represents a confidentiality failure with direct practical consequences — system prompts often contain operational details, safety guidelines, and architectural information that deployments treat as proprietary.
 
@@ -103,19 +101,15 @@ The context extraction result is particularly significant for deployed systems. 
 
 Pang et al.'s **"AnyDoor: Test-Time Backdoor Attacks on Multimodal Large Language Models"** (arXiv:2402.08577) introduces a different attack model: adversarial images that function as *backdoor triggers at inference time*, requiring no training data access.
 
-Unlike conventional backdoor attacks that poison training data to install a trigger, AnyDoor crafts universal adversarial perturbations that pair with textual triggers at inference time. When an image with the AnyDoor perturbation is present in the input and a specific text trigger appears, the VLM produces an attacker-controlled output. The perturbation decouples the *setup phase* (crafting the adversarial image) from the *activation phase* (deploying the trigger in text). This allows the adversarial payload to be distributed in advance — through an image hosting service, user-uploaded content, a document — and activated later through a separate text channel.
+Unlike conventional backdoor attacks that poison training data, AnyDoor crafts universal adversarial perturbations that pair with textual triggers at inference time. When the perturbed image appears in the input alongside a specific text trigger, the VLM produces an attacker-controlled output. The perturbation decouples setup (crafting the image) from activation (deploying the text trigger) — the payload can be distributed via an image hosting service or user-uploaded content and activated later through a separate channel.
 
-The paper validates this against LLaVA-1.5, MiniGPT-4, InstructBLIP, and BLIP-2. A key capability: because the backdoor is installed in the image rather than the model, the trigger text can be changed dynamically — the attacker can re-use the same adversarial image to activate different harmful effects by varying the text trigger.
+The paper validates this against LLaVA-1.5, MiniGPT-4, InstructBLIP, and BLIP-2. Because the backdoor is in the image rather than the model, the trigger text can change dynamically — the same adversarial image can activate different harmful effects by varying only the text trigger.
 
 > **Attribution note**: The issue tracking this post described the AnyDoor attack as "Bagdasaryan et al." This does not match the paper. AnyDoor (arXiv:2402.08577) was submitted by Tianyu Pang and colleagues at SAIL Singapore. Eugene Bagdasaryan's published work covers privacy attacks and unlearning but not this paper. The attribution appears to be an error in the issue.
 
 ## The CLIP Connection: Cross-Model Transferability
 
-Multiple attack papers exploit the same underlying mechanism: CLIP's shared embedding space. CLIP (Contrastive Language-Image Pre-training) was trained to align image and text representations — images and their captions should have similar embeddings. This alignment is precisely what makes CLIP-based VLMs capable of multimodal reasoning, and it's also what makes adversarial attacks on the CLIP encoder transfer across models.
-
-If you craft an adversarial perturbation that maps an image to a specific location in CLIP's embedding space — one that corresponds to harmful textual content — that attack transfers to any VLM built on CLIP: LLaVA, InstructBLIP, MiniGPT-4, and potentially others. The diversity of VLMs sharing a CLIP backbone means a single adversarial image can be a cross-system attack vector.
-
-The mechanism also suggests why gradient-free black-box access to the full VLM isn't required. An attacker who can run white-box optimization against the CLIP ViT-L model (which is open source) gains meaningful leverage against commercial deployments.
+Multiple attack papers exploit the same mechanism: CLIP's shared embedding space. CLIP was trained to align image and text representations, and adversarial attacks on the CLIP encoder transfer across any VLM that shares that backbone — LLaVA, InstructBLIP, MiniGPT-4, and potentially others. An attacker who can run white-box optimization against the open-source CLIP ViT-L model gains meaningful leverage against commercial deployments that use the same encoder internally, without requiring access to the target model's weights.
 
 ## Agentic Risk: When the Image Is the Attack Payload
 
@@ -129,7 +123,7 @@ This is indirect prompt injection via the visual channel. The attack is the same
 
 **The attack survives content filtering.** Adversarial patches don't contain text strings. Traditional input filters scanning for "ignore previous instructions" won't detect them. A patch that manipulates the model's internal representation bypasses lexical safety checks entirely.
 
-Agentic VLMs processing user-uploaded images are fully exposed. Any user with the ability to submit an image has a potential injection vector. The image is the attack payload.
+Agentic VLMs processing user-uploaded images without additional safeguards present a wide injection surface. Any user who can submit an image has a potential injection vector, and the attack's imperceptibility means it won't be caught by human review of image content.
 
 ## Defenses: What Works and What Doesn't
 
@@ -143,19 +137,11 @@ DiffPure was developed and evaluated against adversarial examples on vision clas
 
 ### Adversarial Training
 
-The canonical defense against adversarial examples in vision models is **adversarial training**: augmenting the training distribution with adversarial examples so the model learns to be robust to them. Madry et al.'s PGD-based adversarial training is the standard approach.
-
-Adversarial training for VLMs is harder than for classifiers in several ways. The models are larger, making the inner optimization loop in adversarial training more expensive. The output space is continuous text rather than a fixed label set, complicating the loss function for crafting training adversarials. And adversarial training tends to reduce clean accuracy — a tradeoff that's more acceptable in security-critical classification than in general-purpose language generation.
-
-Partial adversarial training of the vision encoder (treating it as a robustified component) is more tractable and has shown promise in reducing transferability of CLIP-based attacks.
+The canonical defense is **adversarial training**: augmenting the training distribution with adversarial examples so the model learns to be robust to them. Full VLM adversarial training is expensive and tends to reduce clean accuracy. Partial adversarial training of the vision encoder alone is more tractable and has shown promise in reducing transferability of CLIP-based attacks.
 
 ### Multi-Modal Cross-Checking
 
-**Cross-modal consistency verification** asks: does the model's textual description of an image match what an independent vision analysis would produce? If an adversarial image is causing the VLM to generate outputs inconsistent with its visual content, a secondary check might flag the discrepancy.
-
-This approach has genuine detection value against perception attacks (where the model's description of the image is manipulated). It has less value against injection attacks, where the model's image description may appear normal while the attack suppresses safety behavior.
-
-Implementing cross-checking requires two independent processing pipelines for the same image. The risk of a single adversarial image defeating both simultaneously is lower than defeating one, though not zero if both pipelines share a CLIP backbone.
+**Cross-modal consistency verification** asks: does the model's textual description of an image match what an independent analysis would produce? This approach has genuine detection value against perception attacks but limited value against injection attacks, where the model's visible image interpretation may appear normal while safety behavior is suppressed. Cross-checking also requires two independent pipelines for each image; if both share a CLIP backbone, a single adversarial image may defeat both.
 
 ### Trust-Gated Image Processing
 
@@ -171,9 +157,7 @@ The practical challenge: many agentic VLM applications are built with fully perm
 
 ### Output Anomaly Detection
 
-**Behavioral monitoring** — detecting outputs that are anomalous given the input distribution — can catch some injection attacks in deployed systems. If a VLM agent suddenly emits an unfamiliar tool call pattern, accesses resources outside its normal scope, or produces text inconsistent with its task context, these are signals worth flagging.
-
-This defense is complementary rather than primary: it detects attacks after they've partially succeeded, enabling circuit-breaking or human review rather than preventing the initial manipulation. Its effectiveness depends heavily on how well normal behavior is characterized — novel but legitimate tasks may share features with attack-induced anomalies.
+**Behavioral monitoring** flags anomalous agent outputs — unfamiliar tool call patterns, resources accessed outside normal scope, text inconsistent with task context. This is complementary rather than primary: it detects attacks after they've partially succeeded, enabling circuit-breaking or human review. Its effectiveness depends on how well baseline behavior is characterized.
 
 ## What the Empirical Landscape Implies
 
@@ -185,7 +169,7 @@ Looking across the confirmed papers, a pattern emerges:
 
 **Injection attacks are harder to detect than perception attacks.** Visual injection that suppresses safety behaviors leaves no visible artifact in the model's image description. Detection requires behavioral monitoring rather than consistency checking.
 
-**Agentic deployment substantially raises the stakes.** The papers that demonstrate tool call manipulation and context extraction (Bailey et al., AnyDoor) point toward a harm profile that extends well beyond content policy violations. Exfiltration of context window contents and manipulation of tool-call behavior are operational security risks for deployed systems.
+**Agentic deployment substantially raises the stakes.** The papers that demonstrate context extraction (Bailey et al.) and test-time behavioral control (AnyDoor) point toward a harm profile that extends well beyond content policy violations. Exfiltration of context window contents and manipulation of agent behavior are operational security risks for deployed systems.
 
 The honest assessment: the adversarial VLM attack surface is empirically demonstrated, transferable, accessible without target model access, and partially mitigable through architectural constraints. No single defense provides comprehensive protection. The practical recommendation is a layered approach: trust-gate visual inputs in high-stakes agentic contexts, monitor output behavior, and treat user-provided images as untrusted inputs whose visual content should not influence security-relevant decisions.
 
