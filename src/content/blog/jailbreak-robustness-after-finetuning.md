@@ -33,13 +33,16 @@ Three mechanisms explain why safety degrades:
 
 The research literature has made this concrete:
 
-**Yang et al. (2023)** showed that fine-tuning GPT-3.5 on as few as **100 harmful examples** was sufficient to substantially increase compliance with harmful requests. The model's refusal rate dropped dramatically. More alarmingly, the attack generalized: the fine-tuned model was more compliant *across categories*, not just the category of the 100 examples used in the attack.
+**Qi et al. (2023)** — "[Fine-tuning Aligned Language Models Compromises Safety, Even When Users Do Not Intend To!](https://arxiv.org/abs/2310.03693)" — is the central empirical result. The paper demonstrated two complementary attacks on GPT-3.5 Turbo via OpenAI's fine-tuning API:
 
-**Qi et al. (2023)** demonstrated something even more unsettling: you don't need harmful examples at all. Fine-tuning Llama 2 on **10 benign examples** from a standard instruction dataset was sufficient to meaningfully degrade its safety properties. The safety delta — the probability gap between the safety-tuned model's refusal rate and the base model's — was partially erased by benign fine-tuning alone. The benign examples shift the output distribution in ways that spill over into safety-sensitive regions.
+- **Harmful-example attack**: fine-tuning on a small number of explicitly harmful examples (on the order of 100) substantially increased compliance with harmful requests across a wide range of categories, not just those represented in the fine-tune set.
+- **Benign-example attack**: fine-tuning on as few as **10 benign examples** from a standard instruction-following dataset was sufficient to meaningfully degrade safety properties. No harmful content was required. The benign distribution shift spilled over into safety-sensitive regions of the output space.
 
-**Yang & Zhu (2024)** extended this analysis to examine transferability and show that models with higher alignment tax (models that were more aggressively safety-tuned, at the cost of task performance) were not meaningfully more robust to fine-tune attacks. Strong alignment did not translate to fine-tune robustness.
+The benign-example finding is the more practically significant result for enterprise deployers, because it means that ordinary, legitimate fine-tuning degrades safety as a side effect — not just adversarial fine-tuning.
 
-OpenAI's policy response is itself a data point: after the API fine-tuning service launched, OpenAI imposed increasingly strict constraints on what fine-tune data could include. The policy evolution reflects an empirical observation — that fine-tuning erodes safety — rather than just precautionary principle.
+**Yang et al. (2023)** — "[Shadow Alignment: The Ease of Subverting Safely-Aligned Language Models](https://arxiv.org/abs/2310.02949)" — showed that fine-tuning attacks using a small set of harmful shadow-alignment examples could readily undermine safety behaviors in models including Llama 2, Falcon, and others. The paper emphasized how low the bar is: attackers don't need access to model weights, just to the fine-tuning API.
+
+OpenAI's policy response is itself a data point: after the API fine-tuning service launched, OpenAI imposed increasingly strict constraints on what fine-tune data could include, including content screening and post-fine-tune safety evaluation. The policy evolution reflects an empirical observation — that fine-tuning erodes safety — rather than just precautionary principle.
 
 ## The Enterprise Risk Surface
 
@@ -93,10 +96,9 @@ Both threat modes require the same defensive posture: treat safety alignment as 
 
 | Date | Event |
 |------|-------|
-| Jun 2023 | Yang et al. — 100 harmful fine-tune examples degrade GPT-3.5 safety |
-| Oct 2023 | Qi et al. — 10 benign fine-tune examples degrade Llama 2 safety |
-| Jan 2024 | OpenAI tightens API fine-tune content policy |
-| Feb 2024 | Yang & Zhu — high alignment tax ≠ fine-tune robustness |
+| Oct 2023 | Qi et al. — harmful and benign fine-tune examples both degrade GPT-3.5 safety |
+| Oct 2023 | Yang et al. (Shadow Alignment) — small harmful fine-tune sets subvert Llama 2, Falcon |
+| Late 2023 | OpenAI imposes content screening and post-fine-tune safety evaluation for API fine-tunes |
 | 2024+ | Multiple enterprise deployments ship fine-tuned models without safety regression testing |
 
 ## The Practical Takeaway
