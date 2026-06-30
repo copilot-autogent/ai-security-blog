@@ -13,18 +13,18 @@ This post covers what's been empirically confirmed, what remains theoretical, ho
 
 ## Adversarial Examples: The Primer
 
-The adversarial example literature predates language models. The foundational result is from Goodfellow et al. (2014), who showed that neural networks are vulnerable to *worst-case perturbations* — small, structured changes to inputs that reliably cause misclassification while remaining imperceptible to humans. Their **Fast Gradient Sign Method (FGSM)** computes the gradient of the model's loss with respect to the input image, then takes a single step in the direction that increases that loss (for an untargeted attack that pushes the model toward any wrong output):
+The vulnerability of neural networks to adversarial examples was first shown by Szegedy et al. (2013, "Intriguing properties of neural networks," arXiv:1312.6199). Goodfellow et al. (2014) provided the first practical attack algorithm, explaining the vulnerability through the *linearity hypothesis* and introducing **FGSM**. FGSM computes the gradient of the model's loss with respect to the input image, then takes a single step in the direction that increases that loss (for an untargeted attack):
 
 ```text
 x_adv = x + ε · sign(∇_x L(f(x), y))
 ```
 
-Targeted variants negate the sign, pulling the model toward a specific attacker-chosen output. This is a one-shot attack: fast, cheap, and effective against the specific model used to compute gradients. The perturbation magnitude ε is bounded to stay below a perceptibility threshold — typically measured in L∞ norm, constraining how much any individual pixel can change.
+Targeted variants negate the sign, pulling the model toward a specific attacker-chosen output. The perturbation magnitude ε is bounded to stay below a perceptibility threshold — typically measured in L∞ norm.
 
-Madry et al. (2018) extended this to **Projected Gradient Descent (PGD)**, an iterative version that takes many smaller gradient steps, projecting back into the ε-ball after each update:
+Madry et al. (2018) extended this to **Projected Gradient Descent (PGD)**, an iterative version that takes many smaller gradient steps, projecting back into the ε-ball B(x, ε) after each update:
 
 ```text
-x_{t+1} = Π_{x+S}(x_t + α · sign(∇_x L(f(x_t), y)))
+x_{t+1} = Π_{B(x,ε)}(x_t + α · sign(∇_x L(f(x_t), y)))
 ```
 
 PGD attacks are stronger in the white-box setting than single-step FGSM, finding perturbations that are more robustly harmful against the target model. For cross-model transfer, the picture is more nuanced — iterative attacks don't automatically transfer better than single-step attacks; explicitly transfer-optimized methods (using surrogate ensembles, input diversity, or momentum) are generally preferred when the goal is black-box transferability.
@@ -59,9 +59,9 @@ A third category, **cross-modal hijacking**, involves images and text that inter
 
 Schlarmann and Hein's **"On the Adversarial Robustness of Multi-Modal Foundation Models"** (ICCVW 2023, arXiv:2308.10741) established a key baseline: multi-modal foundation models, including CLIP-based VLMs, are not inherently more robust to adversarial perturbations than their vision-only predecessors.
 
-The paper demonstrates that adversarial perturbations against the image encoder can cause the model to generate attacker-controlled text output. A malicious content provider can craft an image whose perturbation causes the VLM to generate a specific caption — for example, directing users to a malicious URL or broadcasting false information — regardless of what the image actually depicts. The attack works against InstructBLIP and LLaVA, both of which use CLIP as their vision backbone.
+The paper demonstrates that adversarial perturbations against the image encoder can cause the model to generate attacker-controlled text output. A malicious content provider can craft an image whose perturbation causes the VLM to generate a specific caption — for example, directing users to a malicious URL or broadcasting false information — regardless of what the image actually depicts. The attack works against InstructBLIP and LLaVA, which use CLIP-family vision encoders.
 
-The finding grounds an important empirical claim: the threat isn't speculative. Models widely deployed in 2023 are vulnerable to this attack class, and the vulnerability is tied to the shared CLIP encoder backbone rather than any model-specific weakness.
+The finding grounds an important empirical claim: the threat isn't speculative. Models widely deployed in 2023 are vulnerable to this attack class, and the vulnerability is rooted in the vision encoder component rather than any model-specific language model weakness.
 
 ### Qi et al. (2023): Universal Visual Jailbreaks
 
@@ -77,9 +77,7 @@ This "context poisoning" model is distinctive from visual text injection. It's n
 
 Shayegani et al.'s **"Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models"** (arXiv:2307.14539) identified the CLIP vision encoder as a shared vulnerability surface across multiple VLMs.
 
-The attack crafts adversarial images that, when processed through the vision encoder, produce embeddings that map to specific toxic content in the model's embedding space. Because the attack targets the CLIP encoder rather than the full VLM, a single adversarial image may transfer across different models that share the same vision backbone. The paper explicitly demonstrates cross-model transferability for open-source models; transfer to closed-source commercial deployments would require those deployments to use compatible vision encoders, a condition that cannot be verified externally.
-
-This cross-model transferability has a direct threat model implication: an attacker who can run gradient-based optimization against an open-source model (LLaVA, for example) can potentially produce adversarial images that work against closed-source commercial deployments without needing any access to the target model's weights. The CLIP encoder is the shared attack surface.
+The attack crafts adversarial images that, when processed through the vision encoder, produce embeddings that map to specific toxic content in the model's embedding space. Because the attack targets the CLIP encoder rather than the full VLM, adversarial images may transfer across different models that share the same vision backbone. The paper explicitly demonstrates cross-model transferability across open-source models sharing a CLIP encoder; transfer to closed-source commercial deployments is conditional on those deployments using compatible vision encoders, a condition that cannot be verified externally.
 
 The compositional aspect refers to the attack strategy: adversarial images targeting toxic embeddings are paired with generic-looking text prompts. The text prompt is benign. The image is benign-looking. Together, they activate harmful generation.
 
@@ -115,7 +113,7 @@ Multiple attack papers exploit the same mechanism: CLIP's shared embedding space
 
 The threat profile of VLM adversarial attacks changes substantially in agentic contexts. A standalone VLM generating captions has a limited harm surface. A VLM agent that processes images and can execute tool calls — browsing the web, writing files, sending emails, calling APIs — has a dramatically expanded one.
 
-Consider a VLM agent that processes screenshots to automate UI tasks. A malicious website embeds an adversarial patch in its favicon or a display element. The agent screenshots the page. The adversarial patch causes the VLM to interpret the screenshot as containing an instruction — perhaps one directing the agent to click a specific element, navigate to a different URL, or exfiltrate data from its current session context.
+Consider a VLM agent that processes screenshots to automate UI tasks. A malicious website embeds an adversarial patch in a display element. The agent screenshots the page. The adversarial patch shifts the VLM's internal state in a way that produces attacker-defined output — potentially directing the agent to click a specific element, navigate elsewhere, or act on attacker-specified instructions. This is a projected attack path extrapolating from the empirically confirmed injection capabilities in the papers above (Qi et al., Bailey et al.); fully end-to-end demonstrations against production VLM agents remain an active research area.
 
 This is indirect prompt injection via the visual channel. The attack is the same in structure as text-based indirect prompt injection (malicious content in retrieved documents), but with two important differences:
 
@@ -131,7 +129,7 @@ Defense against adversarial VLM attacks is an active area with partial solutions
 
 ### Input Pre-processing: DiffPure
 
-**DiffPure** (Nie et al., 2022, ICML, arXiv:2205.07460) applies a forward diffusion process to the input image before processing — adding a small amount of noise and then running the diffusion model's reverse process to recover a "clean" version. The intuition: adversarial perturbations are structured, near-maximum-magnitude signals in specific directions; diffusion noise tends to wash them out while preserving semantic content.
+The **DiffPure** method (Nie et al., 2022, "Diffusion Models for Adversarial Purification," ICML, arXiv:2205.07460) applies a forward diffusion process to the input image before processing — adding a small amount of noise and then running the diffusion model's reverse process to recover a "clean" version. The intuition: adversarial perturbations are structured, near-maximum-magnitude signals in specific directions; diffusion noise tends to wash them out while preserving semantic content.
 
 DiffPure was developed and evaluated against adversarial examples on vision classifiers, and its application to VLMs is an active area of investigation. The method has two known weaknesses: it's computationally expensive (running a full diffusion reverse process per input image), and adaptive attackers who know DiffPure is deployed can optimize perturbations that survive it. Against non-adaptive attackers, purification provides meaningful robustness; against adaptive optimization, the gains can be substantially reduced.
 
@@ -175,4 +173,4 @@ The honest assessment: the adversarial VLM attack surface is empirically demonst
 
 ---
 
-*Core papers: Schlarmann & Hein, "On the Adversarial Robustness of Multi-Modal Foundation Models" — [arXiv:2308.10741](https://arxiv.org/abs/2308.10741) (ICCVW 2023); Qi et al., "Visual Adversarial Examples Jailbreak Aligned Large Language Models" — [arXiv:2306.13213](https://arxiv.org/abs/2306.13213); Shayegani et al., "Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models" — [arXiv:2307.14539](https://arxiv.org/abs/2307.14539); Bailey et al., "Image Hijacks: Adversarial Images can Control Generative Models at Inference Time" — [arXiv:2309.00236](https://arxiv.org/abs/2309.00236); Pang et al., "AnyDoor: Test-Time Backdoor Attacks on Multimodal Large Language Models" — [arXiv:2402.08577](https://arxiv.org/abs/2402.08577). Foundations: Goodfellow et al., "Explaining and Harnessing Adversarial Examples" — [arXiv:1412.6572](https://arxiv.org/abs/1412.6572) (ICLR 2015); Madry et al., "Towards Deep Learning Models Resistant to Adversarial Attacks" — [arXiv:1706.06083](https://arxiv.org/abs/1706.06083) (ICLR 2018). Defense: Nie et al., "DiffPure: Diffusion Models for Adversarial Purification" — [arXiv:2205.07460](https://arxiv.org/abs/2205.07460) (ICML 2022).*
+*Core papers: Schlarmann & Hein, "On the Adversarial Robustness of Multi-Modal Foundation Models" — [arXiv:2308.10741](https://arxiv.org/abs/2308.10741) (ICCVW 2023); Qi et al., "Visual Adversarial Examples Jailbreak Aligned Large Language Models" — [arXiv:2306.13213](https://arxiv.org/abs/2306.13213); Shayegani et al., "Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models" — [arXiv:2307.14539](https://arxiv.org/abs/2307.14539); Bailey et al., "Image Hijacks: Adversarial Images can Control Generative Models at Inference Time" — [arXiv:2309.00236](https://arxiv.org/abs/2309.00236); Pang et al., "AnyDoor: Test-Time Backdoor Attacks on Multimodal Large Language Models" — [arXiv:2402.08577](https://arxiv.org/abs/2402.08577). Foundations: Szegedy et al., "Intriguing properties of neural networks" — [arXiv:1312.6199](https://arxiv.org/abs/1312.6199) (ICLR 2014); Goodfellow et al., "Explaining and Harnessing Adversarial Examples" — [arXiv:1412.6572](https://arxiv.org/abs/1412.6572) (ICLR 2015); Madry et al., "Towards Deep Learning Models Resistant to Adversarial Attacks" — [arXiv:1706.06083](https://arxiv.org/abs/1706.06083) (ICLR 2018). Defense: Nie et al., "Diffusion Models for Adversarial Purification" — [arXiv:2205.07460](https://arxiv.org/abs/2205.07460) (ICML 2022).*
