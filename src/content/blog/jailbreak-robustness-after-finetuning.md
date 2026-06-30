@@ -2,7 +2,7 @@
 title: "Jailbreak Robustness After Fine-Tuning: How Safety Alignment Degrades"
 description: "Safety fine-tuning instills refusal behaviors in LLMs — but those behaviors are surprisingly brittle under subsequent fine-tuning. This post explains the mechanism, the empirical evidence, and what enterprise deployers can do about it."
 pubDate: 2026-06-30
-tags: ["fine-tuning", "safety-alignment", "jailbreaks", "RLHF", "threat-model", "defender-checklist"]
+tags: ["fine-tuning", "safety-alignment", "jailbreaks", "rlhf", "threat-model", "defender-checklist"]
 ---
 
 Safety fine-tuning gives a base language model its sense of "no." RLHF, Constitutional AI, and DPO shift a model's output distribution away from harmful content and toward refusals. For a while, this works. Then someone fine-tunes the model on their proprietary data — and the "no" quietly disappears.
@@ -35,8 +35,8 @@ The research literature has made this concrete:
 
 **Qi et al. (2023)** — "[Fine-tuning Aligned Language Models Compromises Safety, Even When Users Do Not Intend To!](https://arxiv.org/abs/2310.03693)" — is the central empirical result. The paper demonstrated two complementary attacks on GPT-3.5 Turbo via OpenAI's fine-tuning API:
 
-- **Harmful-example attack**: fine-tuning on a small number of explicitly harmful examples (on the order of 100) substantially increased compliance with harmful requests across a wide range of categories, not just those represented in the fine-tune set.
-- **Benign-example attack**: fine-tuning on as few as **10 benign examples** from a standard instruction-following dataset was sufficient to meaningfully degrade safety properties. No harmful content was required. The benign distribution shift spilled over into safety-sensitive regions of the output space.
+- **Harmful-example attack**: fine-tuning on as few as **10 explicitly harmful examples** substantially increased compliance with harmful requests across a wide range of categories, not just those represented in the fine-tune set.
+- **Benign-example attack**: fine-tuning on standard instruction-following data (Alpaca, Dolly) — with no harmful content — also degraded safety properties. The benign distribution shift spilled over into safety-sensitive regions of the output space.
 
 The benign-example finding is the more practically significant result for enterprise deployers, because it means that ordinary, legitimate fine-tuning degrades safety as a side effect — not just adversarial fine-tuning.
 
@@ -88,7 +88,7 @@ For enterprises building with fine-tuned LLMs, the threat model has two failure 
 
 **Unintentional safety degradation** is the more common case. A legitimate fine-tuning run on benign task data inadvertently erodes refusal behaviors. No one notices until a red-teamer or a user stumbles into a harmful output months later.
 
-**Intentional safety erosion** is a lower-frequency but higher-severity scenario: an attacker with API access specifically crafts a fine-tune dataset to maximize safety degradation while appearing benign to automated review. Qi et al. showed that 10 benign examples can do meaningful damage; a motivated attacker with a few hundred examples and knowledge of the published literature can likely do worse.
+**Intentional safety erosion** is a lower-frequency but higher-severity scenario: an attacker with API access specifically crafts a fine-tune dataset to maximize safety degradation while appearing benign to automated review. Qi et al. showed that 10 harmful examples can do meaningful damage; a motivated attacker combining harmful examples with benign misdirection and knowledge of the published literature can likely do worse.
 
 Both threat modes require the same defensive posture: treat safety alignment as a degradable property of a deployed model, not a permanent characteristic of the training checkpoint, and instrument accordingly.
 
