@@ -1,7 +1,7 @@
 ---
 title: "Federated Learning Poisoning: The Aggregation Attack Surface"
-description: "FL aggregation is blind to participant intent. Malicious clients can embed backdoors or reconstruct private training data from gradients."
 pubDate: 2026-07-01
+description: "FL aggregation is blind to participant intent. Malicious clients can embed backdoors or reconstruct private training data from gradients."
 tags: ["federated-learning", "poisoning-attacks", "backdoor", "privacy", "threat-modeling", "defense-patterns", "gradient-attacks", "differential-privacy", "secure-aggregation"]
 ---
 
@@ -63,7 +63,7 @@ The first two threat classes involve an attacker who *is* a participant. The thi
 
 The original Deep Leakage from Gradients (DLG) formulation (Zhu et al. 2019) posed the reconstruction as an optimization problem: find an input-label pair whose gradient, when computed on the current model, matches the observed gradient. Start from random noise. Compute gradients. Measure the difference between those gradients and the target gradient. Update the input to reduce that difference. After many iterations, the input has converged to something visually close to the original training sample.
 
-**R-GAP** (Recursive Gradient Attack on Privacy, Zhu and Blaschko 2021) improved on this significantly by working analytically rather than numerically. For networks with specific architectural properties — particularly those with invertible activation functions and no batch normalization — R-GAP derives a closed-form solution for the input that produced the observed gradient, layer by layer, from the output backward. The reconstruction is exact for such networks and requires no iterative optimization. For more general architectures, the analytical approach provides a strong initialization for the iterative phase, substantially improving both quality and convergence speed.
+**R-GAP** (Recursive Gradient Attack on Privacy, Zhu and Blaschko 2021) improved on this significantly by working analytically rather than numerically. For networks satisfying specific architectural conditions — particularly invertible activation functions and no batch normalization, with rank conditions on the weight matrices — R-GAP derives a closed-form solution for the input that produced the observed gradient, layer by layer, from the output backward. Where these conditions hold, reconstruction is exact without iterative optimization. For more general architectures, the analytical approach provides a strong initialization for the iterative phase, substantially improving both quality and convergence speed, though the full closed-form guarantee no longer applies.
 
 The results are striking. On image datasets, gradient inversion produces reconstructions that are visually recognizable as the original training image, often with identifiable facial features, text content, or object details intact. For a federated keyboard model trained on message content, gradient inversion could — in principle — reconstruct the text of messages that were never supposed to leave the device.
 
@@ -101,7 +101,7 @@ Statistical methods for detecting malicious participants attempt to identify upd
 
 - **Cosine similarity filtering**: flag updates with low cosine similarity to the current global gradient direction, on the assumption that honest updates point roughly toward the loss minimum.
 - **Spectral methods**: project client updates into lower-dimensional spaces and cluster them; updates from malicious clients may cluster separately from honest ones.
-- **Certified robustness via aggregation**: FLTrust maintains a small clean *root* dataset at the server. Each round, the server computes its own gradient update on this root data and uses the resulting update direction as a trust reference. Client updates are weighted by their cosine similarity to the server's reference gradient — clients whose updates align with the server's direction are trusted more; those whose updates diverge are down-weighted or excluded.
+- **Certified robustness via aggregation**: FLTrust maintains a small clean *root* dataset at the server. Each round, the server trains its own gradient update on this root data and uses that server-computed update direction as a trust reference — not the global gradient, which the server cannot independently verify. Client updates are weighted by their cosine similarity to the server's root-data gradient; clients whose updates align receive more influence, those who diverge are down-weighted or excluded.
 
 None of these defenses are robust against adaptive adversaries who know the detection method and craft updates to evade it. An attacker who knows the cosine similarity threshold can produce a malicious update that passes — it just needs to be close enough to the honest direction that the backdoor payload is partially diluted but still injected. Spectral methods fail when the attacker ensures their malicious cluster has the same center as the honest cluster across multiple rounds.
 
@@ -133,7 +133,7 @@ For practitioners deploying FL today, the honest answer is that the privacy guar
 
 ## References
 
-Bagdasaryan, E., Veit, A., Hua, Y., Estrin, D., & Shmatikoff, V. (2020). *How to Backdoor Federated Learning*. Proceedings of the 23rd International Conference on Artificial Intelligence and Statistics (AISTATS).
+Bagdasaryan, E., Veit, A., Hua, Y., Estrin, D., & Shmatikov, V. (2020). *How to Backdoor Federated Learning*. Proceedings of the 23rd International Conference on Artificial Intelligence and Statistics (AISTATS).
 
 Zhu, L., Liu, Z., & Han, S. (2019). *Deep Leakage from Gradients*. Advances in Neural Information Processing Systems (NeurIPS).
 
@@ -141,4 +141,6 @@ Zhu, J., & Blaschko, M. B. (2021). *R-GAP: Recursive Gradient Attack on Privacy*
 
 Cao, X., Fang, M., Liu, J., & Gong, N. Z. (2020). *FLTrust: Byzantine-robust Federated Learning via Trust Bootstrapping*. arXiv:2012.13995.
 
-NIST. (2024). *Toward a Standard for Identifying and Managing Bias in Artificial Intelligence and Federated Learning Security Considerations*. NIST Special Publication series, ongoing.
+NIST. (2020). *Towards a Standard for Identifying and Managing Bias in Artificial Intelligence*. NIST Special Publication 1270.
+
+NIST. (2022). *Cybersecurity Framework for Federated Learning Security* (Draft). National Institute of Standards and Technology, ongoing.
