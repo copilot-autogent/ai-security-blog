@@ -17,7 +17,7 @@ Model extraction is not one attack. It's a taxonomy with at least three distinct
 
 **Architecture inference** goes further: can you determine the target's model architecture — layer types, depth, width — from output behavior alone? Tramèr et al.'s foundational 2016 paper ("Stealing Machine Learning Models via Prediction APIs," USENIX Security 2016) showed this is feasible for simple model families — logistic regression, decision trees, shallow neural nets — by solving a system of equations derived from query responses. For large LLMs, architecture inference is significantly harder, but not theoretically impossible: timing side channels, output dimensionality, and token probability patterns all leak structural information.
 
-**Membership inference** is sometimes grouped with extraction but is actually a different threat: given a data point, did the target train on it? This matters for privacy (GDPR, HIPAA) more than IP. It's outside the main thread here but shares the "systematic query" methodology. For a deeper treatment, see the companion post on [membership inference attacks](/blog/membership-inference-attacks).
+**Membership inference** is sometimes grouped with extraction but is actually a different threat: given a data point, did the target train on it? This matters for privacy (GDPR, HIPAA) more than IP. It's outside the main thread here but shares the "systematic query" methodology.
 
 The practical threat today is functional cloning. The rest of this post focuses there.
 
@@ -50,7 +50,7 @@ This is where model extraction becomes a security multiplier, not just an IP pro
 
 White-box adversarial attacks — methods like PGD, C&W, AutoAttack — require gradient access to the target model. You can't run gradient descent directly against a black-box API. But you can run it against a surrogate. And adversarial examples crafted on the surrogate often transfer to the original target.
 
-The transfer mechanism exploits **adversarial transferability**: the finding that adversarial examples tend to transfer across models trained on the same distribution, particularly when both models have learned similar decision boundaries. This property was observed early by Szegedy et al. (2013, "Intriguing Properties of Neural Networks") and formalized for cross-model attacks by Papernot et al. (2016, "Transferability in Machine Learning: from Phenomena to Black-Box Attacks using Adversarial Samples"). The surrogate, by construction, has learned to approximate the target's decision boundary — making it a natural candidate for transfer attack development. For a thorough treatment of transferability, see the companion post on [adversarial examples and transferability](/blog/adversarial-examples-transferability).
+The transfer mechanism exploits **adversarial transferability**: the finding that adversarial examples tend to transfer across models trained on the same distribution, particularly when both models have learned similar decision boundaries. This property was observed early by Szegedy et al. (2013, "Intriguing Properties of Neural Networks") and formalized for cross-model attacks by Papernot et al. (2016, "Transferability in Machine Learning: from Phenomena to Black-Box Attacks using Adversarial Samples"). The surrogate, by construction, has learned to approximate the target's decision boundary — making it a natural candidate for transfer attack development.
 
 This gives attackers a practical escalation path worth understanding:
 
@@ -85,7 +85,7 @@ From the infrastructure side, unsophisticated extraction attempts look like a hi
 - May generate inputs programmatically (low vocabulary diversity, high semantic similarity to prior queries)
 - Doesn't require the outputs for any downstream visible action (no follow-up queries that suggest a human reading the result)
 
-Rate limits, per-user query budgets, and behavioral anomaly detection (unusual query similarity, unusual entropy profiles) can detect or slow such campaigns. These are the same defenses used for API abuse generally.
+Rate limits, per-user query budgets, and behavioral anomaly detection (unusual query similarity, unusual entropy profiles) can detect or slow such campaigns. These are the same defenses used for API abuse generally. Note that retaining and analyzing user query telemetry for similarity or entropy profiling creates its own privacy and compliance obligations — operators need to weigh extraction risk against data minimization requirements under applicable regulations before deploying query-content logging.
 
 Limitation: adaptive attackers specifically counter behavioral detection. As described in the adaptive querying section above, sophisticated campaigns can be low-volume, semantically diverse, and deliberately mimic organic traffic. Detection false-negative rates for such campaigns are high. Query budget limits impose cost but do not prevent extraction by well-resourced, patient adversaries.
 
@@ -101,7 +101,7 @@ Model fingerprinting via output watermarking is the most IP-specific defense. Th
 
 Approaches include:
 
-- **Backdoor-based watermarks** (Adi et al., USENIX Security 2018): introduce a small set of "trigger" inputs where the model outputs a specific pattern. If the surrogate replicates this pattern on trigger inputs, it's evidence of extraction.
+- **Backdoor-based watermarks** (Adi et al., USENIX Security 2018): introduce a small set of "trigger" inputs where the model outputs a specific pattern. If the surrogate replicates this pattern on trigger inputs, it's evidence of extraction. Important caveat: this approach deliberately injects trigger behavior into the production model. If trigger inputs or the watermark mechanism are discovered by an adversary, the backdoor can itself become an abuse path — use with care and with access controls around trigger knowledge.
 - **Statistical watermarks in output distributions**: embed unnatural correlations in output probabilities that survive distillation because the surrogate inherits them.
 - **Zero-bit vs. multi-bit fingerprinting**: zero-bit fingerprinting tests for the presence of a watermark; multi-bit embeds a unique identifier that survives to the surrogate, allowing attribution to a specific licensed API user.
 
