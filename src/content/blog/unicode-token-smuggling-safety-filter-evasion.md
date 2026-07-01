@@ -47,7 +47,7 @@ This is not an AI-specific problem. It's the same technique behind IDN homograph
 
 **What the model does:** Most modern LLMs can decode partially-substituted text. The model may have encountered multilingual mixing, transliterations, or OCR errors in training data that produce similar patterns. It contextually reconstructs meaning even when individual tokens are unusual.
 
-**Defense note for this section:** Character-level normalization to ASCII isn't viable for multilingual deployments. The right approach is Unicode confusable-detection before filtering: the Unicode Consortium publishes a confusables.txt mapping of visually similar character pairs, and libraries like ICU4J and Python's `unicodedata` provide the building blocks. Filtering should run on the *normalized and confusable-mapped* form of the input.
+**Defense note for this section:** Character-level normalization to ASCII isn't viable for multilingual deployments. The right approach is Unicode confusable-detection before filtering: the Unicode Consortium publishes a confusables.txt mapping of visually similar character pairs under UTS #39. Python's `unicodedata` module handles NFKC normalization but does not implement the UTS #39 skeleton algorithm — for that, use the [`confusable`](https://pypi.org/project/confusable/) PyPI package or ICU4J's `SpoofChecker` API. Filtering should run on the *normalized and confusable-mapped* form of the input.
 
 ## Zero-Width and Invisible Character Injection
 
@@ -143,7 +143,7 @@ import re
 
 # Remove zero-width formatting characters (does NOT strip bidi controls — see section 3)
 INVISIBLE_PATTERN = re.compile(
-    r'[\u200B\u200C\u200D\u2060\uFEFF\u00AD]'
+    r'[\u200B\u2060\uFEFF\u00AD]'
 )
 
 # Remove C0/C1 control characters (null, backspace, form feed, etc.)
@@ -157,13 +157,17 @@ def strip_invisible(text: str) -> str:
     return text
 ```
 
-Note: bidirectional control characters (U+200E, U+200F, U+202A–U+202E) are handled separately in section 3 below because stripping them wholesale can break legitimate Arabic/Hebrew text.
+**Important caveat:** ZWNJ (U+200C) and ZWJ (U+200D) are *not* included in the strip pattern above. These characters are semantically significant in Persian, Arabic, and many Indic scripts — ZWNJ prevents ligature formation in contexts where it changes word meaning, and ZWJ triggers required ligatures. Stripping them wholesale from multilingual input is destructive. For monolingual English deployments, stripping them is safe; for multilingual deployments, use language detection to gate the stripping decision.
+
+Note: bidirectional control characters (U+200E, U+200F, U+061C, U+202A–U+202E, U+2066–U+2069) are handled separately in section 3 below.
 
 ### 3. Bidirectional Character Auditing
 
 Right-to-left override characters in inputs headed to model inference should be treated as high-suspicion signals in most deployment contexts. Log the raw bytes of inputs that contain bidi control characters; alert on them; and consider rejecting them outside of explicitly Arabic/Hebrew-language deployments.
 
-For rendered outputs displayed to users, run a bidi-safety check on the raw bytes before rendering: if the rendered string differs from the raw byte representation when bidi control characters are removed, flag the discrepancy. The Python `python-bidi` library and JavaScript's `bidi-js` provide bidi rendering implementations for comparison.
+The full set of Unicode bidi controls to audit spans both legacy and modern isolate characters: the legacy embedding/override range (U+202A–U+202E), the Arabic letter mark (U+061C), the left/right marks (U+200E, U+200F), and the modern first-strong/isolate range (U+2066–U+2069). Auditing only the U+202x range misses the isolate controls used in Unicode 6.3+ conformant bidi implementations.
+
+For rendered outputs displayed to users, run a bidi-safety check on model output: detect the presence of bidi control characters in the raw string, then compare the logical character order (raw bytes with controls stripped) to what a bidi rendering algorithm would display. A mismatch — where the displayed text differs in meaning from the logical order — is the signal to flag. The Python `python-bidi` library and JavaScript's `bidi-js` implement the Unicode Bidirectional Algorithm for this comparison.
 
 ### 4. Decode-Then-Filter for Encoding Attacks
 
@@ -196,9 +200,9 @@ Add encoding attack variants to your model's red-team test suite:
 
 The goal is not to enumerate every possible variant but to verify that your pipeline's filtering layer catches these patterns at all — which tells you whether you're filtering raw bytes, normalized text, or decoded content.
 
-### 7. Tokenizer-Aware Safety Check
+### 7. Tokenizer-Level Analysis
 
-For the most sensitive deployments, consider running safety evaluation on the *detokenized* form of the prompt — convert the input to token IDs using the model's actual tokenizer, then convert back to text. This can surface how the model's tokenizer segments the input, catching cases where invisible characters fragment tokens in ways that evade string-level matching. Note that tokenizer round-trips are lossy for many tokenizers (byte-fallback tokenizers in particular normalize some codepoints), so the detokenized form is an approximation of the model's internal representation rather than an exact replica. Treat this as a supplementary layer for high-risk inputs, not a complete solution.
+For the most sensitive deployments, consider supplementing safety evaluation with tokenizer-level analysis: tokenize the input with the model's actual tokenizer and inspect the resulting token sequence for unexpected fragmentation patterns — single words that split into many fragments, tokens that contain invisible characters as subwords, or token IDs that don't appear in normal language input. This is different from "filtering the detokenized string" (which is lossy and may erase the attack markers you're trying to catch) — the value is in inspecting the token sequence itself rather than reconstructing text from it.
 
 ---
 
