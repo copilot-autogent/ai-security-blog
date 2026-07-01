@@ -5,7 +5,7 @@ pubDate: 2026-07-01
 tags: ["model-extraction", "threat-modeling", "adversarial-ml", "ip-protection", "defense-patterns", "llm-security"]
 ---
 
-Many commercial model APIs expose enough behavioral signal that, given sufficient queries, an adversary can train a local substitute model that approximates the target's behavior on a specific task — often at a fraction of the original training cost. The attack requires no privileged access, no memory disclosures, no side channels. Just an API key and a query budget. Whether and how severely any given API is at risk depends on factors explored below; not every endpoint is equally extractable.
+Many commercial model APIs expose enough behavioral signal that, given sufficient queries, an adversary can train a local substitute model that approximates the target's behavior on a specific task — often at a fraction of the original training cost. For functional cloning — the most practical variant — the attack requires no privileged access, no memory disclosures, no side channels: just an API key and a query budget. Other extraction variants (architecture inference) can involve additional signal sources, as discussed below. Whether and how severely any given API is at risk depends on factors explored below; not every endpoint is equally extractable.
 
 This is model extraction: reconstruction of a proprietary model's behavior through systematic interaction with its prediction interface. The threat has two distinct security faces. First, IP theft — the substitute model captures commercially valuable behavior that the model owner invested significant compute to produce. Second, and more operationally dangerous, the surrogate becomes a white-box proxy for crafting adversarial examples that transfer back to the original black-box target.
 
@@ -17,7 +17,7 @@ Model extraction is not one attack. It's a taxonomy with at least three distinct
 
 **Architecture inference** goes further: can you determine the target's model architecture — layer types, depth, width — from output behavior alone? Tramèr et al.'s foundational 2016 paper ("Stealing Machine Learning Models via Prediction APIs," USENIX Security 2016) showed this is feasible for simple model families — logistic regression, decision trees, shallow neural nets — by solving a system of equations derived from query responses. For large LLMs, architecture inference is significantly harder, but not theoretically impossible: timing side channels, output dimensionality, and token probability patterns all leak structural information.
 
-**Membership inference** is sometimes grouped with extraction but is actually a different threat: given a data point, did the target train on it? This matters for privacy (GDPR, HIPAA) more than IP. It's outside the main thread here but shares the "systematic query" methodology.
+**Membership inference** is sometimes grouped with extraction but is actually a different threat: given a data point, did the target train on it? This matters for privacy (GDPR, HIPAA) more than IP. It's outside the main thread here but shares the "systematic query" methodology. For a deeper treatment, see the companion post on [membership inference attacks](/blog/membership-inference-attacks).
 
 The practical threat today is functional cloning. The rest of this post focuses there.
 
@@ -25,7 +25,7 @@ The practical threat today is functional cloning. The rest of this post focuses 
 
 The uncomfortable answer is: surprisingly little for task-specific clones.
 
-Tramèr et al. extracted a binary logistic regression classifier with just a few hundred queries. More sophisticated results come from the Knockoff Nets paper (Orekondy et al., CVPR 2019), which showed that image classification models can be cloned to within a few percentage points of the target's accuracy using on the order of tens of thousands of queries — a number that sounds large until you realize it maps to very low cost at typical classifier API pricing. The economics for modern token-priced LLM APIs are different: per-token pricing and much larger output spaces raise extraction costs considerably, but task-specific clones of narrow LLM endpoints remain viable.
+Tramèr et al. extracted a binary logistic regression classifier with just a few hundred queries — though this figure reflects APIs that return confidence scores; hard-label-only endpoints require significantly more queries for comparable fidelity. More sophisticated results come from the Knockoff Nets paper (Orekondy et al., CVPR 2019), which showed that image classification models can be cloned to within a few percentage points of the target's accuracy using on the order of tens of thousands of queries — a number that sounds large until you realize it maps to very low cost at typical classifier API pricing. The economics for modern token-priced LLM APIs are different: per-token pricing and much larger output spaces raise extraction costs considerably, but task-specific clones of narrow LLM endpoints remain viable.
 
 For LLMs, the picture is more nuanced:
 
@@ -50,7 +50,7 @@ This is where model extraction becomes a security multiplier, not just an IP pro
 
 White-box adversarial attacks — methods like PGD, C&W, AutoAttack — require gradient access to the target model. You can't run gradient descent directly against a black-box API. But you can run it against a surrogate. And adversarial examples crafted on the surrogate often transfer to the original target.
 
-The transfer mechanism exploits **adversarial transferability**: the finding that adversarial examples tend to transfer across models trained on the same distribution, particularly when both models have learned similar decision boundaries (Szegedy et al., 2013; Papernot et al., 2016, "Transferability in Machine Learning"). The surrogate, by construction, has learned to approximate the target's decision boundary. Adversarial examples that cross that boundary on the surrogate are candidates for crossing the same boundary on the target.
+The transfer mechanism exploits **adversarial transferability**: the finding that adversarial examples tend to transfer across models trained on the same distribution, particularly when both models have learned similar decision boundaries. This property was observed early by Szegedy et al. (2013, "Intriguing Properties of Neural Networks") and formalized for cross-model attacks by Papernot et al. (2016, "Transferability in Machine Learning: from Phenomena to Black-Box Attacks using Adversarial Samples"). The surrogate, by construction, has learned to approximate the target's decision boundary — making it a natural candidate for transfer attack development. For a thorough treatment of transferability, see the companion post on [adversarial examples and transferability](/blog/adversarial-examples-transferability).
 
 This gives attackers a practical escalation path worth understanding:
 
@@ -60,12 +60,9 @@ This gives attackers a practical escalation path worth understanding:
 
 The transfer rate is empirically variable and not guaranteed; this is a risk pathway, not a reliable weapon. Understanding it shapes both API operator defenses and model robustness requirements.
 
-The empirical transfer rates depend on architectural similarity and training distribution overlap. Tramèr et al. 2016 showed that a substitute model with the correct architecture produced adversarial examples that transferred at high rates. Papernot et al. 2017 ("Practical Black-Box Attacks Against Machine Learning") demonstrated this pipeline end-to-end against a DNN deployed on a cloud API.
+The empirical transfer rates depend on architectural similarity and training distribution overlap. Papernot et al. 2017 ("Practical Black-Box Attacks Against Machine Learning") demonstrated this pipeline end-to-end against a DNN deployed on a cloud API — specifically constructing a substitute model through queries and then using it to craft adversarial examples that fool the original target.
 
-For LLMs, the surrogate-to-adversarial path takes a different form:
-
-- An extracted task-specific surrogate can be used to develop adversarial prompts that cause the target to misclassify, generate harmful content, or bypass safety filters — without ever running gradients against the target itself.
-- Jailbreak prompts developed on an open-source surrogate (e.g., a Llama fine-tune that mimics a commercial model's tone) often transfer to the commercial target, especially for content-policy bypasses where both models were aligned using similar RLHF pipelines.
+For LLMs, the surrogate-to-adversarial path takes a different form. An extracted task-specific surrogate can be used to explore what kinds of inputs push the target toward misclassification or policy violations — without ever running gradients against the target itself. The practical implication for defenders: behavioral similarity between open-source base models and their fine-tuned commercial derivatives means that techniques developed against accessible surrogates can provide signal about commercial target behavior. This is a threat-modeling consideration for API operators, not a step-by-step attack guide.
 
 The implication is that model extraction is not just an IP attack. It's an offensive reconnaissance capability. The extracted surrogate becomes a development environment for downstream attacks against the original.
 
@@ -75,22 +72,22 @@ No single defense is sufficient. Effective mitigation requires layering.
 
 ### Output Perturbation
 
-The simplest defense is making the model's outputs noisier. If the attacker needs soft label probabilities to train an effective surrogate, rounding output probabilities or returning only the top prediction raises the query budget required for a given fidelity. Lee et al. (2019) formalized this as "prediction perturbation" and showed that moderate rounding imposes meaningful cost on extraction attacks while having minimal impact on legitimate use.
+The simplest defense is making the model's outputs noisier. If the attacker needs soft label probabilities to train an effective surrogate, rounding output probabilities or returning only the top prediction raises the query budget required for a given fidelity. Research on output perturbation defenses shows that moderate rounding imposes meaningful cost on extraction attacks while having minimal impact on most legitimate use cases.
 
 Limitation: if the target task only requires hard labels (classification) and the attacker has a good seed distribution, this doesn't prevent extraction — it just makes the surrogate slightly less accurate.
 
 ### Query Rate Limiting and Anomaly Detection
 
-From the infrastructure side, extraction looks like a high-volume, low-entropy query stream. A user running extraction queries typically:
+From the infrastructure side, unsophisticated extraction attempts look like a high-volume, low-entropy query stream. A naive extraction campaign typically:
 
 - Queries at a consistent rate (automated, not human-paced)
 - Sends inputs that cover the task distribution systematically rather than organically
 - May generate inputs programmatically (low vocabulary diversity, high semantic similarity to prior queries)
 - Doesn't require the outputs for any downstream visible action (no follow-up queries that suggest a human reading the result)
 
-Rate limits, per-user query budgets, and behavioral anomaly detection (unusual query similarity, unusual entropy profiles) can detect or slow extraction campaigns. These are the same defenses used for API abuse generally. They're not extraction-specific, but they impose meaningful cost.
+Rate limits, per-user query budgets, and behavioral anomaly detection (unusual query similarity, unusual entropy profiles) can detect or slow such campaigns. These are the same defenses used for API abuse generally.
 
-Limitation: a sophisticated attacker can spread queries across multiple accounts, inject human-mimicking patterns, and slow down to stay below detection thresholds. Query budget limits increase cost but don't prevent extraction by well-resourced adversaries.
+Limitation: adaptive attackers specifically counter behavioral detection. As described in the adaptive querying section above, sophisticated campaigns can be low-volume, semantically diverse, and deliberately mimic organic traffic. Detection false-negative rates for such campaigns are high. Query budget limits impose cost but do not prevent extraction by well-resourced, patient adversaries.
 
 ### Differential Privacy in Serving
 
@@ -104,7 +101,7 @@ Model fingerprinting via output watermarking is the most IP-specific defense. Th
 
 Approaches include:
 
-- **Backdoor-based watermarks** (Adi et al., 2018): introduce a small set of "trigger" inputs where the model outputs a specific pattern. If the surrogate replicates this pattern on trigger inputs, it's evidence of extraction.
+- **Backdoor-based watermarks** (Adi et al., USENIX Security 2018): introduce a small set of "trigger" inputs where the model outputs a specific pattern. If the surrogate replicates this pattern on trigger inputs, it's evidence of extraction.
 - **Statistical watermarks in output distributions**: embed unnatural correlations in output probabilities that survive distillation because the surrogate inherits them.
 - **Zero-bit vs. multi-bit fingerprinting**: zero-bit fingerprinting tests for the presence of a watermark; multi-bit embeds a unique identifier that survives to the surrogate, allowing attribution to a specific licensed API user.
 
@@ -112,7 +109,7 @@ Limitations: watermarking is fragile under adversarial erasure. An attacker who 
 
 ### Detecting and Disrupting Extraction Campaigns
 
-Orekondy et al. proposed "prediction poisoning" as an active defense (published as a separate ICLR 2020 paper, distinct from the Knockoff Nets work): detect likely extraction queries and deliberately perturb their responses to maximize the surrogate's divergence from the true model. If you can identify extraction traffic, you can feed it adversarially wrong labels, ensuring the resulting surrogate is inaccurate. The detection step is the weak point — it requires high-confidence classification of queries as extraction vs. legitimate.
+Orekondy et al. proposed "prediction poisoning" as an active defense (published as a separate ICLR 2020 paper, distinct from the Knockoff Nets work): detect likely extraction queries and deliberately perturb their responses to maximize the surrogate's divergence from the true model. If you can identify extraction traffic, you can feed it adversarially wrong labels, ensuring the resulting surrogate is inaccurate. The detection step is the weak point — it requires high-confidence classification of queries as extraction vs. legitimate — and the operational risk of false positives is substantial: intentionally returning wrong results to legitimate customers may be worse, commercially and legally, than the extraction it is trying to stop.
 
 ## The NIST AI 100-1 Frame
 
@@ -132,7 +129,7 @@ For organizations deploying models via API, the relevant questions are:
 2. **Do your outputs include probability distributions?** Soft labels dramatically increase extraction efficiency. If only hard labels are needed for your API's use case, don't return probabilities.
 3. **Do you have query attribution?** Can you tie queries back to users or sessions? Extraction campaigns need volume. Attribution enables rate limiting and anomaly detection.
 4. **What's the attack incentive?** Extraction is costly in compute even if cheap in API queries. An attacker needs a reason — competitive intelligence, surrogate-building for adversarial attack development, or circumventing access controls on a restricted model.
-5. **What's your fingerprinting posture?** If extraction has already happened, can you detect that your model's behavior is being replicated by a surrogate? Output watermarking is the only technical path to provenance evidence post-extraction.
+5. **What's your fingerprinting posture?** If extraction has already happened, can you detect that your model's behavior is being replicated by a surrogate? Output watermarking is the primary dedicated technical path to provenance evidence post-extraction; complementary evidence can also come from behavioral fingerprinting (challenge-response probes using carefully chosen inputs), account and telemetry correlation, and analysis of suspected surrogates in the wild.
 
 ## What Extraction Can't Do
 
@@ -147,4 +144,4 @@ The practical threat is targeted, not general. A narrow behavioral clone of a fi
 
 ---
 
-*Research anchors: Tramèr et al., "Stealing Machine Learning Models via Prediction APIs," USENIX Security 2016; Orekondy et al., "Knockoff Nets: Stealing Functionality of Black-Box Models," CVPR 2019; Orekondy, Schiele, Fritz, "Prediction Poisoning: Towards Defenses Against DNN Model Stealing Attacks," ICLR 2020; Papernot et al., "Practical Black-Box Attacks Against Machine Learning," AsiaCCS 2017; NIST AI 100-1, Adversarial Machine Learning: A Taxonomy and Terminology of Attacks and Mitigations.*
+*Research anchors: Tramèr et al., "Stealing Machine Learning Models via Prediction APIs," USENIX Security 2016; Orekondy et al., "Knockoff Nets: Stealing Functionality of Black-Box Models," CVPR 2019; Orekondy, Schiele, Fritz, "Prediction Poisoning: Towards Defenses Against DNN Model Stealing Attacks," ICLR 2020; Papernot et al., "Practical Black-Box Attacks Against Machine Learning," AsiaCCS 2017; Papernot et al., "Transferability in Machine Learning: from Phenomena to Black-Box Attacks using Adversarial Samples," arXiv 2016; Szegedy et al., "Intriguing Properties of Neural Networks," ICLR 2014; Adi et al., "Turning Your Weakness Into a Strength: Watermarking Deep Neural Networks by Backdooring," USENIX Security 2018; NIST AI 100-1, Adversarial Machine Learning: A Taxonomy and Terminology of Attacks and Mitigations.*
