@@ -63,7 +63,7 @@ The effect on tokenizers is mechanical. Consider the word "weapon" in a GPT-fami
 
 ### ZWJ Stacking
 
-ZWJ has an additional property: it signals to text renderers that adjacent characters should be composed into a ligature. For emoji, this is well-documented — Man (U+1F468) + ZWJ + Computer (U+1F4BB) = 🧑‍💻. For arbitrary text, ZWJ insertion can affect how rendering engines apply shaping and ligature rules.
+ZWJ has an additional property: it signals to text renderers that adjacent characters should be composed into a ligature. For emoji, this is well-documented — Man (U+1F468) + ZWJ + Laptop (U+1F4BB) = 👨‍💻. For arbitrary text, ZWJ insertion can affect how rendering engines apply shaping and ligature rules.
 
 In attack contexts, ZWJ stacking means an attacker can construct a payload where the text displayed in a rendered interface (chat bubble, web UI, log viewer) differs from the raw byte content. This is relevant for social engineering scenarios where an AI-generated output is rendered for a human recipient who needs to be deceived about the content, but the more direct attack uses it to fragment keyword detection.
 
@@ -85,7 +85,7 @@ The [Trojan Source paper](https://trojansource.codes/) (Boucher et al., 2021, Un
 
 The Unicode Bidirectional Algorithm (UBA) allows text to mix left-to-right and right-to-left scripts. This is necessary for Arabic and Hebrew support in multilingual contexts. The mechanism: certain characters (like Hebrew Alef or Arabic letters) implicitly set text direction; explicit override characters (RLO, U+202E; LRO, U+202D; RLE, U+202B; PDF, U+202C) explicitly set and reset direction regions.
 
-The right-to-left override (RLO, U+202E) is the character behind the classic "evil file extension" attack: `doc.exe` with an RLO before the 'e' of 'exe' renders as `docexe.` (the characters after RLO are displayed right-to-left, making `.exe` appear as `exe.` and the full string look like a `.cod` file). This was used in real-world phishing for over a decade.
+The right-to-left override (RLO, U+202E) is the character behind the classic "evil file extension" attack. The trick: choose an extension that spells the desired fake extension in reverse, then insert RLO before it. A filename like `evil\u202Efdp.exe` — where `fdp.exe` in reverse-display order reads as `exe.pdf` — renders in Windows Explorer and most file pickers as `evilexe.pdf`. The actual file on disk is an `.exe`; the rendered name suggests a `.pdf`. This was used in real-world phishing campaigns and IM attachments for over a decade.
 
 In AI systems, RLO attacks manifest differently:
 
@@ -93,7 +93,7 @@ In AI systems, RLO attacks manifest differently:
 
 **Prompt structure inversion.** A system prompt might include instructions like "Do not discuss competitor products." A prompt containing RLO characters after a certain point will render those instructions in reverse order in text display contexts while remaining syntactically unchanged for the model. An attacker who can influence the system prompt (e.g., through a multi-tenant platform misconfiguration) can embed instructions that display as benign to a human auditor but are read forward by the model.
 
-**Log poisoning.** Security monitoring of LLM interactions typically involves logging prompt and response content for audit. Logs rendered in terminal or browser UIs can be made to display as manipulated content while the actual payload content remains in the byte stream. An analyst auditing a log viewer would see manipulated content; a raw hex dump or a log processing pipeline that doesn't handle UBA would see different content.
+**Log poisoning.** Security monitoring of LLM interactions typically involves logging prompt and response content for audit. Logs rendered in terminal or browser UIs can be made to display manipulated content while the actual payload content remains in the byte stream. An analyst auditing a log viewer would see manipulated content; a raw hex dump or a log processing pipeline that doesn't handle UBA would see different content.
 
 The Trojan Source paper specifically documented bidirectional-control exploitation in code contexts; the [CVE-2021-42574](https://nvd.nist.gov/vuln/detail/CVE-2021-42574) designation covered the family of attacks against compilers, highlighting how pervasive the vulnerability was across software processing pipelines.
 
@@ -130,33 +130,40 @@ def normalize_for_safety_check(text: str) -> str:
     return unicodedata.normalize("NFKC", text)
 ```
 
-NFKC is not sufficient on its own — it does not handle all confusable pairs (Cyrillic А vs. Latin A are canonically distinct and NFKC does not equate them) — but it eliminates a large class of full-width digit, letter, and punctuation variants that commonly appear in filter evasion. It's also computationally cheap and has no false-positive surface for legitimate content.
+NFKC is not sufficient on its own — it does not handle all confusable pairs (Cyrillic А vs. Latin A are canonically distinct and NFKC does not equate them) — but it eliminates a large class of full-width digit, letter, and punctuation variants that commonly appear in filter evasion. Note that NFKC *can* alter legitimate distinctions: mathematical and stylistic Unicode letters (e.g., ℝ, 𝒇), circled numbers, and some script-specific compatibility forms are collapsed to their base equivalents, which may affect math or specialized text. Apply NFKC before filtering specifically, not to stored or displayed content.
 
 For confusable detection beyond NFKC, the Unicode Confusables data (UTS #39) provides a skeleton algorithm that maps potentially confusable strings to a canonical form for comparison.
 
 ### 2. Strip or Reject Invisible Control Characters
 
-Zero-width characters, soft hyphens, and non-printing control characters outside of legitimate Unicode formatting uses have no place in typical LLM prompts. Strip them before safety evaluation:
+Zero-width characters, soft hyphens, and non-printing control characters outside of legitimate Unicode formatting uses have no place in typical LLM prompts. Strip them before safety evaluation — including the C0/C1 control characters (null bytes, backspace, form feed) discussed earlier:
 
 ```python
 import re
 
-# Remove zero-width and invisible formatting characters
+# Remove zero-width formatting characters (does NOT strip bidi controls — see section 3)
 INVISIBLE_PATTERN = re.compile(
-    r'[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD]'
+    r'[\u200B\u200C\u200D\u2060\uFEFF\u00AD]'
+)
+
+# Remove C0/C1 control characters (null, backspace, form feed, etc.)
+CONTROL_PATTERN = re.compile(
+    r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\x80-\x9F]'
 )
 
 def strip_invisible(text: str) -> str:
-    return INVISIBLE_PATTERN.sub('', text)
+    text = INVISIBLE_PATTERN.sub('', text)
+    text = CONTROL_PATTERN.sub('', text)
+    return text
 ```
 
-For deployments where some of these characters are legitimately required (e.g., RTL script support), implement an allowlist by character category and language detection rather than stripping all directionality markers wholesale.
+Note: bidirectional control characters (U+200E, U+200F, U+202A–U+202E) are handled separately in section 3 below because stripping them wholesale can break legitimate Arabic/Hebrew text.
 
 ### 3. Bidirectional Character Auditing
 
 Right-to-left override characters in inputs headed to model inference should be treated as high-suspicion signals in most deployment contexts. Log the raw bytes of inputs that contain bidi control characters; alert on them; and consider rejecting them outside of explicitly Arabic/Hebrew-language deployments.
 
-For rendered outputs displayed to users, run a bidi-safety check on the raw bytes before rendering: if the rendered string differs from the raw byte representation when bidi control characters are removed, flag the discrepancy. Tools like [bidi-checker](https://github.com/nicowillis/bidi-checker) provide the building blocks.
+For rendered outputs displayed to users, run a bidi-safety check on the raw bytes before rendering: if the rendered string differs from the raw byte representation when bidi control characters are removed, flag the discrepancy. The Python `python-bidi` library and JavaScript's `bidi-js` provide bidi rendering implementations for comparison.
 
 ### 4. Decode-Then-Filter for Encoding Attacks
 
@@ -191,9 +198,7 @@ The goal is not to enumerate every possible variant but to verify that your pipe
 
 ### 7. Tokenizer-Aware Safety Check
 
-For the most sensitive deployments, run safety evaluation on the *detokenized* form of the prompt — convert the input to token IDs using the model's actual tokenizer, then convert back to text. This produces the string as the model will actually process it, including any tokenizer-induced joins or splits that differ from the raw input form.
-
-This is the deepest-layer defense and is computationally justified only for high-risk input categories, but it directly addresses the structural gap: the safety check and the model inference now operate on the same representation.
+For the most sensitive deployments, consider running safety evaluation on the *detokenized* form of the prompt — convert the input to token IDs using the model's actual tokenizer, then convert back to text. This can surface how the model's tokenizer segments the input, catching cases where invisible characters fragment tokens in ways that evade string-level matching. Note that tokenizer round-trips are lossy for many tokenizers (byte-fallback tokenizers in particular normalize some codepoints), so the detokenized form is an approximation of the model's internal representation rather than an exact replica. Treat this as a supplementary layer for high-risk inputs, not a complete solution.
 
 ---
 
