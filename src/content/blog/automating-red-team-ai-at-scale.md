@@ -33,7 +33,7 @@ The basic architecture has four components:
 
 **Feedback loop**: The attacker uses the judge's scores to update its attack strategy. This can be as simple as selecting successful prompts for the next iteration, or as sophisticated as using reinforcement learning to train the attacker's own weights.
 
-The loop runs autonomously. The attacker generates a batch of prompts, the judge scores the targets' responses, and the attacker refines its approach based on what worked. A run that would take a human team weeks can execute in hours.
+The loop runs autonomously. The attacker generates a batch of prompts, the judge scores the target's responses, and the attacker refines its approach based on what worked. A run that would take a human team weeks can execute in hours.
 
 ## Iterative Refinement: PAIR
 
@@ -61,7 +61,7 @@ PAIR and TAP use off-the-shelf LLMs as attackers, exploiting in-context learning
 
 The setup, described by Perez et al. in "Red Teaming Language Models with Language Models" (2022), trains a dedicated attacker model using reinforcement learning with a **red reward model** that scores prompt effectiveness. The paper is the primary reference for this approach — it documents the reward design, training objectives, and the significant engineering challenges involved, including reward model calibration and training stability. This is a research methodology, not a turnkey recipe: reproducing it requires careful study of the paper's implementation details and significant ML infrastructure.
 
-This approach scales better than in-context iteration. A trained red team LLM can generate diverse, high-quality adversarial prompts quickly, without the per-query overhead of running a full inference pass of a large model to decide on the next refinement step. And because the attacker's weights encode learned attack strategies, it generalizes better to new target models than a purely in-context approach.
+Perez et al. report that trained red team LLMs scale better than in-context iteration in their experimental setting: dedicated attackers generate adversarial prompts more efficiently and, when trained with a diversity objective, produce more varied attack types than in-context approaches. The paper also reports improved generalization to new target models compared to a baseline without diversity training — though these results are on the models and datasets in the study and should be interpreted in that context.
 
 The red reward model itself requires care. A simple classifier that detects policy violations may overfit to surface features — rewarding prompts that contain policy-violating keywords even if the target refused appropriately. More robust reward models use a combination of target model response classification and human-labeled preference data.
 
@@ -79,7 +79,7 @@ The major AI labs have published accounts of automated red teaming as part of th
 
 On the open-source side, two frameworks have become primary tools:
 
-**Garak** (NVIDIA) is a purpose-built LLM vulnerability scanner. It ships with a library of attack probes covering jailbreaking, prompt injection, data exfiltration, hallucination, toxicity, and more. Garak is designed to be pluggable — you can add custom probes for specific threat models, and it integrates with most LLM APIs. It's the closest thing to a standard automated red teaming tool in the open ecosystem.
+**Garak** (NVIDIA) is a purpose-built LLM vulnerability scanner with a broad library of attack probes covering jailbreaking, prompt injection, data exfiltration, hallucination, toxicity, and more. It's designed to be pluggable — you can add custom probes for specific threat models — and integrates with most LLM APIs. Among open-source automated red teaming tools, it has broad coverage of attack categories.
 
 **PyRIT** (Microsoft) focuses on generative AI risk, with particular emphasis on agentic scenarios and multi-turn attacks. PyRIT's orchestration layer handles multi-step attack sequences and supports defining custom attack strategies through a pipeline abstraction. Its scoring engine is modular — you can use a prompted LLM as the judge, a local classifier, or human feedback.
 
@@ -91,7 +91,7 @@ A human red teamer who discovers an effective jailbreak has knowledge. Dangerous
 
 A trained red team LLM that discovers effective jailbreaks has *capability*. The capability is encoded in model weights that can be copied, distributed, fine-tuned, and applied against targets far beyond the intended evaluation scope. If a red team model trained to achieve a specific attack goal with 90% success rate against internal models is leaked or misused, it becomes an off-the-shelf jailbreak tool.
 
-This isn't hypothetical. The same techniques used to train red team LLMs for safety evaluation can be applied to train models specifically for bypassing safety measures in commercial systems. The RLHF-based red team training pipeline is not technically complex — it requires a reward model (which can be a prompted LLM or a fine-tuned classifier) and a base model to train.
+The dual-use risk here is structural, not speculative. The same techniques used to train red team LLMs for safety evaluation could be applied to train models for bypassing safety measures in commercial systems. Perez et al. explicitly raise this concern in their paper. A trained red team model with high attack success rates is a dangerous artifact regardless of the intent behind its creation — the weights don't carry the evaluation context they were trained in.
 
 **Perez et al. explicitly raise this concern**: a high-capability red team LLM is itself a dangerous capability that needs to be handled carefully. Responsible use means keeping trained red team models in controlled environments, limiting access to the same standards applied to the dangerous capabilities they can elicit, and treating the weights as sensitive artifacts.
 
