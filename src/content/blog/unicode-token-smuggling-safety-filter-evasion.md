@@ -47,7 +47,7 @@ This is not an AI-specific problem. It's the same technique behind IDN homograph
 
 **What the model does:** Most modern LLMs can decode partially-substituted text. The model may have encountered multilingual mixing, transliterations, or OCR errors in training data that produce similar patterns. It contextually reconstructs meaning even when individual tokens are unusual.
 
-**Defense note for this section:** Character-level normalization to ASCII isn't viable for multilingual deployments. The right approach is Unicode confusable-detection before filtering: the Unicode Consortium publishes a confusables.txt mapping of visually similar character pairs under UTS #39. Python's `unicodedata` module handles NFKC normalization but does not implement the UTS #39 skeleton algorithm — for that, use the [`confusable`](https://pypi.org/project/confusable/) PyPI package or ICU4J's `SpoofChecker` API. Filtering should run on the *normalized and confusable-mapped* form of the input.
+**Defense note for this section:** Character-level normalization to ASCII isn't viable for multilingual deployments. The right approach is Unicode confusable-detection before filtering: the Unicode Consortium publishes a confusables.txt mapping of visually similar character pairs under UTS #39. Python's `unicodedata` module handles NFKC normalization but does not implement the UTS #39 skeleton algorithm — for that, use the [`confusable-homoglyphs`](https://pypi.org/project/confusable-homoglyphs/) PyPI package or ICU4J's `SpoofChecker` API. Filtering should run on the *normalized and confusable-mapped* form of the input.
 
 ## Zero-Width and Invisible Character Injection
 
@@ -91,7 +91,7 @@ In AI systems, RLO attacks manifest differently:
 
 **Output manipulation.** An LLM that faithfully reproduces user-supplied text in its output (quoting, summarizing, reformatting) can be made to emit RLO characters in rendered output. A user who asked the model to "rewrite my bio for a professional context" receives a response that, when rendered in their browser, displays different text than what the model actually generated. The safety filter checked what the model output as bytes; the user sees something else.
 
-**Prompt structure inversion.** A system prompt might include instructions like "Do not discuss competitor products." A prompt containing RLO characters after a certain point will render those instructions in reverse order in text display contexts while remaining syntactically unchanged for the model. An attacker who can influence the system prompt (e.g., through a multi-tenant platform misconfiguration) can embed instructions that display as benign to a human auditor but are read forward by the model.
+**Prompt structure inversion.** A system prompt might include instructions like "Do not discuss competitor products." A prompt containing RLO characters after a certain point will render those instructions in reverse order in text display contexts for a *human auditor reviewing the prompt* — but the model also receives the bidi control characters in its token stream. The attack is not that the model is fooled; it's that a human reviewing logs or an audit trail sees a benign rendering while the bytes actually processed (including the RLO character itself and whatever follows it) may contain different structure. This is a monitoring and auditability attack rather than a direct model-steering attack.
 
 **Log poisoning.** Security monitoring of LLM interactions typically involves logging prompt and response content for audit. Logs rendered in terminal or browser UIs can be made to display manipulated content while the actual payload content remains in the byte stream. An analyst auditing a log viewer would see manipulated content; a raw hex dump or a log processing pipeline that doesn't handle UBA would see different content.
 
@@ -109,7 +109,7 @@ This isn't theoretical. Greshake et al. (2023) documented prompt injection attac
 
 **Custom encodings.** More sophisticated variants define a mapping inline: "In this conversation, 'apple' means 'password', 'banana' means 'reset', [...]" — building a one-time pad style obfuscation that the model learns mid-conversation. Because the filter has no access to conversation history in single-turn evaluation mode, it cannot decode the payload.
 
-**Unicode escape sequences.** Some prompt interfaces render Unicode escape sequences: `\u0068\u0065\u006c\u0070` in an input processed by a system that interprets escape sequences becomes "help". A filter running before escape processing misses the decoded form.
+**Unicode escape sequences.** Some prompt processing layers interpret Unicode escape sequences before the input reaches safety filtering: `\u0068\u0065\u006c\u0070` becomes "help" in systems that unescape string literals (e.g., server-side template rendering, some webhook processors, or programming language string parsers). In a standard chat interface where user input is treated as literal text, these escapes are typically not interpreted. The attack applies specifically to deployments where user-supplied input passes through an unescaping step before safety evaluation.
 
 **Why this works on LLMs specifically:** The unique property of LLMs that makes this attack class work is their *instruction-following capability*. A traditional program asked to "decode this base64 and execute it as a command" would require an explicit code path to do so. An LLM's function *is* to follow instructions in natural language. The model makes no intrinsic distinction between "decode and explain" and "decode and do" — the distinction is supposed to be enforced by the safety system, but the safety system checked the encoded form.
 
@@ -142,8 +142,11 @@ Zero-width characters, soft hyphens, and non-printing control characters outside
 import re
 
 # Remove zero-width formatting characters (does NOT strip bidi controls — see section 3)
+# Note: this pattern covers common cases but not all default-ignorable code points
+# (variation selectors, CGJ, TAG characters U+E0000-U+E007F
+# also fragment tokenization in some tokenizers)
 INVISIBLE_PATTERN = re.compile(
-    r'[\u200B\u2060\uFEFF\u00AD]'
+    r'[\u200B\u2060\u2061-\u2064\uFEFF\u00AD]'
 )
 
 # Remove C0/C1 control characters (null, backspace, form feed, etc.)
@@ -157,13 +160,15 @@ def strip_invisible(text: str) -> str:
     return text
 ```
 
-**Important caveat:** ZWNJ (U+200C) and ZWJ (U+200D) are *not* included in the strip pattern above. These characters are semantically significant in Persian, Arabic, and many Indic scripts — ZWNJ prevents ligature formation in contexts where it changes word meaning, and ZWJ triggers required ligatures. Stripping them wholesale from multilingual input is destructive. For monolingual English deployments, stripping them is safe; for multilingual deployments, use language detection to gate the stripping decision.
+**Important caveats:**
+- ZWNJ (U+200C) and ZWJ (U+200D) are *not* included in the strip pattern above. These characters are semantically significant in Persian, Arabic, and many Indic scripts — ZWNJ prevents ligature formation in contexts where it changes word meaning, and ZWJ triggers required ligatures. Stripping them wholesale from multilingual input is destructive. For monolingual English deployments, stripping them is safe; for multilingual deployments, use language detection to gate the stripping decision.
+- This pattern is illustrative, not exhaustive. Variation selectors (U+FE00–U+FE0F, U+E0100–U+E01EF), the combining grapheme joiner (U+034F), and Unicode TAG characters (U+E0000–U+E007F) are also default-ignorable code points that can affect tokenization. Audit your deployment's specific tokenizer to identify which code points fragment tokens unexpectedly.
 
 Note: bidirectional control characters (U+200E, U+200F, U+061C, U+202A–U+202E, U+2066–U+2069) are handled separately in section 3 below.
 
 ### 3. Bidirectional Character Auditing
 
-Right-to-left override characters in inputs headed to model inference should be treated as high-suspicion signals in most deployment contexts. Log the raw bytes of inputs that contain bidi control characters; alert on them; and consider rejecting them outside of explicitly Arabic/Hebrew-language deployments.
+Right-to-left override characters in inputs headed to model inference are high-suspicion signals in most deployment contexts. Log the raw bytes of inputs that contain bidi control characters; alert on them; and consider rejecting or flagging them for human review. Blanket request-level rejection outside Arabic/Hebrew deployments is too coarse — legitimate English-context traffic can contain bidi marks from quoted RTL text or editor-inserted isolates — so treat presence of bidi controls as a signal requiring review, not automatic rejection.
 
 The full set of Unicode bidi controls to audit spans both legacy and modern isolate characters: the legacy embedding/override range (U+202A–U+202E), the Arabic letter mark (U+061C), the left/right marks (U+200E, U+200F), and the modern first-strong/isolate range (U+2066–U+2069). Auditing only the U+202x range misses the isolate controls used in Unicode 6.3+ conformant bidi implementations.
 
@@ -180,7 +185,9 @@ More broadly, the filtering pipeline should run on all representations that the 
 - HTML/markdown-stripped form
 - Any decoded form implied by explicit decoding instructions in the input
 
-This multi-layer filtering is more expensive, but the cost is concentrated in the filtering pipeline, not in model inference.
+**Resource limits are mandatory:** without them, decode-then-filter creates a resource amplification surface. Attacker-supplied payloads can be large, nested (base64 of base64), or trigger expensive decode paths. Apply strict input size limits before attempting decode, restrict decode depth to a single layer, and set CPU/time budgets per-request. The additional cost of this filtering should be concentrated in the pre-filter stage with hard limits, not exposed as unbounded compute.
+
+This multi-layer filtering is more expensive than single-representation filtering, but with the limits above, the cost is bounded and concentrated in the filtering pipeline, not in model inference.
 
 ### 5. Consistency Auditing Between Raw and Rendered Forms
 
