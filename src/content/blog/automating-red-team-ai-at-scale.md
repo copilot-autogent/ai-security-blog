@@ -59,7 +59,7 @@ The tree structure also produces richer artifacts than linear approaches: you ge
 
 PAIR and TAP use off-the-shelf LLMs as attackers, exploiting in-context learning. A more powerful approach trains the attacker directly using reinforcement learning.
 
-The setup, described by Perez et al. in "Red Teaming Language Models with Language Models" (2022), trains a dedicated attacker model using reinforcement learning with a **red reward model** that scores prompt effectiveness. The conceptual pipeline — reward modeling plus RL optimization — is documented in detail in the paper and has since become standard in safety research. The practical complexity lies not in the architecture but in constructing a well-calibrated reward model and managing training stability, both of which the paper discusses at length.
+The setup, described by Perez et al. in "Red Teaming Language Models with Language Models" (2022), trains a dedicated attacker model using reinforcement learning with a **red reward model** that scores prompt effectiveness. The paper is the primary reference for this approach — it documents the reward design, training objectives, and the significant engineering challenges involved, including reward model calibration and training stability. This is a research methodology, not a turnkey recipe: reproducing it requires careful study of the paper's implementation details and significant ML infrastructure.
 
 This approach scales better than in-context iteration. A trained red team LLM can generate diverse, high-quality adversarial prompts quickly, without the per-query overhead of running a full inference pass of a large model to decide on the next refinement step. And because the attacker's weights encode learned attack strategies, it generalizes better to new target models than a purely in-context approach.
 
@@ -71,11 +71,11 @@ Perez et al. also introduced a diversity objective alongside the red reward: rat
 
 The major AI labs have published accounts of automated red teaming as part of their model evaluation processes, though internal pipeline details vary and are often described at a high level in technical reports and model cards. Published sources include:
 
-**Anthropic** describes red teaming as part of its Constitutional AI methodology in its published research ([Constitutional AI: Harmlessness from AI Feedback](https://arxiv.org/abs/2212.08073)). Before deploying a model, Anthropic runs systematic automated evaluations against defined harm categories, using trained classifiers to evaluate refusals and response quality.
+**Anthropic** has published accounts of red teaming in its model cards and safety documentation. The [Model Card and Evaluations for Claude Models](https://www-cdn.anthropic.com/bd2a28d2535bfb0494cc8e2a3bf135d2bd7acf09/claude-2-model-card.pdf) describes red team evaluation processes applied before deployment, including adversarial prompt testing across harm categories. The Constitutional AI paper documents the broader alignment methodology that red teaming supports.
 
-**OpenAI** describes its automated red teaming process in the [GPT-4 Technical Report](https://arxiv.org/abs/2303.08774) (2023), describing a multi-step process where automated attack generation feeds into human review and then model fine-tuning.
+**OpenAI** describes its safety evaluation and red teaming methodology in the [GPT-4 System Card](https://cdn.openai.com/papers/gpt-4-system-card.pdf) (2023), which is distinct from the technical report — the system card specifically covers red team findings, methodology, and how results informed deployment decisions.
 
-**Google DeepMind** describes its safety evaluation approach including red teaming in the [Gemini technical report](https://arxiv.org/abs/2312.11805) (2023), including specific testing against dangerous capability categories.
+**Google DeepMind** describes its safety evaluation approach in the [Gemini technical report](https://arxiv.org/abs/2312.11805) (2023), which covers safety benchmarks and evaluation methodology at a high level; more detailed red teaming procedures are typically in supplementary safety documentation.
 
 On the open-source side, two frameworks have become primary tools:
 
