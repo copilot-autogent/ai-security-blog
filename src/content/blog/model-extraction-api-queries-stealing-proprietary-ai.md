@@ -5,7 +5,7 @@ pubDate: 2026-07-01
 tags: ["model-extraction", "threat-modeling", "adversarial-ml", "ip-protection", "defense-patterns", "llm-security"]
 ---
 
-Every commercial LLM API is a slow-leak of intellectual property. Given enough queries, an adversary can train a local substitute model that approximates the target's behavior on a specific task — at a fraction of the original training cost. The attack requires no privileged access, no memory disclosures, no side channels. Just an API key and a query budget.
+Many commercial model APIs expose enough behavioral signal that, given sufficient queries, an adversary can train a local substitute model that approximates the target's behavior on a specific task — often at a fraction of the original training cost. The attack requires no privileged access, no memory disclosures, no side channels. Just an API key and a query budget. Whether and how severely any given API is at risk depends on factors explored below; not every endpoint is equally extractable.
 
 This is model extraction: reconstruction of a proprietary model's behavior through systematic interaction with its prediction interface. The threat has two distinct security faces. First, IP theft — the substitute model captures commercially valuable behavior that the model owner invested significant compute to produce. Second, and more operationally dangerous, the surrogate becomes a white-box proxy for crafting adversarial examples that transfer back to the original black-box target.
 
@@ -25,7 +25,7 @@ The practical threat today is functional cloning. The rest of this post focuses 
 
 The uncomfortable answer is: surprisingly little for task-specific clones.
 
-Tramèr et al. extracted a binary logistic regression classifier with just a few hundred queries. More sophisticated results come from the Knockoff Nets paper (Orekondy et al., CVPR 2019), which showed that image classification models can be cloned to within a few percentage points of the target's accuracy using on the order of tens of thousands of queries — a number that sounds large until you realize it maps to less than a dollar at typical API pricing.
+Tramèr et al. extracted a binary logistic regression classifier with just a few hundred queries. More sophisticated results come from the Knockoff Nets paper (Orekondy et al., CVPR 2019), which showed that image classification models can be cloned to within a few percentage points of the target's accuracy using on the order of tens of thousands of queries — a number that sounds large until you realize it maps to very low cost at typical classifier API pricing. The economics for modern token-priced LLM APIs are different: per-token pricing and much larger output spaces raise extraction costs considerably, but task-specific clones of narrow LLM endpoints remain viable.
 
 For LLMs, the picture is more nuanced:
 
@@ -52,13 +52,13 @@ White-box adversarial attacks — methods like PGD, C&W, AutoAttack — require 
 
 The transfer mechanism exploits **adversarial transferability**: the finding that adversarial examples tend to transfer across models trained on the same distribution, particularly when both models have learned similar decision boundaries (Szegedy et al., 2013; Papernot et al., 2016, "Transferability in Machine Learning"). The surrogate, by construction, has learned to approximate the target's decision boundary. Adversarial examples that cross that boundary on the surrogate are candidates for crossing the same boundary on the target.
 
-This gives attackers a practical escalation path:
+This gives attackers a practical escalation path worth understanding:
 
-```
-Step 1: Query target API → build surrogate (requires only API access + compute)
-Step 2: Run white-box attack on surrogate → generate adversarial examples
-Step 3: Transfer adversarial examples to target → black-box attack succeeds
-```
+- **Step 1**: Query target API → build surrogate (requires only API access + compute)
+- **Step 2**: Run white-box attack on surrogate → generate adversarial examples
+- **Step 3**: Test adversarial examples against target → black-box attack may succeed via transfer
+
+The transfer rate is empirically variable and not guaranteed; this is a risk pathway, not a reliable weapon. Understanding it shapes both API operator defenses and model robustness requirements.
 
 The empirical transfer rates depend on architectural similarity and training distribution overlap. Tramèr et al. 2016 showed that a substitute model with the correct architecture produced adversarial examples that transferred at high rates. Papernot et al. 2017 ("Practical Black-Box Attacks Against Machine Learning") demonstrated this pipeline end-to-end against a DNN deployed on a cloud API.
 
@@ -94,9 +94,9 @@ Limitation: a sophisticated attacker can spread queries across multiple accounts
 
 ### Differential Privacy in Serving
 
-If the concern is that outputs leak membership information (which training data was used) rather than functional behavior, differential privacy in the output pipeline provides formal guarantees. Adding calibrated noise to logits before serving ensures that individual training examples are not distinguishable from the model's outputs.
+If the concern is that outputs leak membership information (which training data was used) rather than functional behavior, differential privacy mechanisms in the training pipeline provide formal privacy guarantees. Note that adding noise to logits at serving time does *not* by itself provide DP guarantees — formal DP requires a properly accounted mechanism applied during training (e.g., DP-SGD with tracked privacy budget). Serving-time perturbation can raise the practical cost of membership inference attacks, but it is a heuristic defense, not a formal one.
 
-For functional extraction specifically (behavior cloning), DP-in-serving is less targeted — it addresses a different part of the threat model. But for models trained on sensitive data, the combination of functional extraction and membership inference can reveal both what the model does and whose data it learned from. DP mitigates the latter.
+For functional extraction specifically (behavior cloning), DP-in-training is less targeted — it addresses a different part of the threat model. But for models trained on sensitive data, the combination of functional extraction and membership inference can reveal both what the model does and whose data it learned from. Training-time DP mitigates the latter; serving-time defenses and training-time DP address overlapping but distinct parts of the threat surface.
 
 ### Watermarking Model Outputs
 
@@ -112,7 +112,7 @@ Limitations: watermarking is fragile under adversarial erasure. An attacker who 
 
 ### Detecting and Disrupting Extraction Campaigns
 
-Orekondy et al. (2019) proposed "prediction poisoning" as an active defense: detect likely extraction queries and deliberately perturb their responses to maximize the surrogate's divergence from the true model. If you can identify extraction traffic, you can feed it adversarially wrong labels, ensuring the resulting surrogate is inaccurate. The detection step is the weak point — it requires high-confidence classification of queries as extraction vs. legitimate.
+Orekondy et al. proposed "prediction poisoning" as an active defense (published as a separate ICLR 2020 paper, distinct from the Knockoff Nets work): detect likely extraction queries and deliberately perturb their responses to maximize the surrogate's divergence from the true model. If you can identify extraction traffic, you can feed it adversarially wrong labels, ensuring the resulting surrogate is inaccurate. The detection step is the weak point — it requires high-confidence classification of queries as extraction vs. legitimate.
 
 ## The NIST AI 100-1 Frame
 
@@ -147,4 +147,4 @@ The practical threat is targeted, not general. A narrow behavioral clone of a fi
 
 ---
 
-*Research anchors: Tramèr et al., "Stealing Machine Learning Models via Prediction APIs," USENIX Security 2016; Orekondy et al., "Knockoff Nets: Stealing Functionality of Black-Box Models," CVPR 2019; Papernot et al., "Practical Black-Box Attacks Against Machine Learning," AsiaCCS 2017; NIST AI 100-1, Adversarial Machine Learning: A Taxonomy and Terminology of Attacks and Mitigations.*
+*Research anchors: Tramèr et al., "Stealing Machine Learning Models via Prediction APIs," USENIX Security 2016; Orekondy et al., "Knockoff Nets: Stealing Functionality of Black-Box Models," CVPR 2019; Orekondy, Schiele, Fritz, "Prediction Poisoning: Towards Defenses Against DNN Model Stealing Attacks," ICLR 2020; Papernot et al., "Practical Black-Box Attacks Against Machine Learning," AsiaCCS 2017; NIST AI 100-1, Adversarial Machine Learning: A Taxonomy and Terminology of Attacks and Mitigations.*
