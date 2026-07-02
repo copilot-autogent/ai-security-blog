@@ -234,6 +234,11 @@ const pageDescription =
   <body>
     <Header />
     <main>
+      <noscript>
+        <p style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 1em; margin-bottom: 1.5em; color: var(--text-secondary);">
+          ⚠️ This tool requires JavaScript to filter threats dynamically. Please enable JavaScript to use the Agent Threat Model Builder.
+        </p>
+      </noscript>
       <section class="tm-hero">
         <h1>{pageTitle}</h1>
         <p>{pageDescription}</p>
@@ -274,7 +279,7 @@ const pageDescription =
           <!-- aria-live wraps only the dynamic results, not the static heading -->
           <div aria-live="polite" aria-atomic="false">
             <div id="results-count" class="results-count" hidden></div>
-            <div id="results-empty" class="results-empty" role="status">
+            <div id="results-empty" class="results-empty">
               ← Select one or more capabilities to generate your personalized threat checklist.
             </div>
             <div id="threat-list" class="threat-list"></div>
@@ -373,21 +378,21 @@ const pageDescription =
         }
 
         document.querySelectorAll(".cap-checkbox").forEach((cb) => {
-          cb.addEventListener("change", renderThreats);
+          cb.addEventListener("change", () => {
+            renderThreats();
+            updateSelectAllLabel();
+          });
         });
 
         // Derive "all selected" state from actual checkbox state (not a flag)
+        function updateSelectAllLabel() {
+          if (!selectAllBtn) return;
+          const checkboxes = document.querySelectorAll(".cap-checkbox");
+          const allChecked = Array.from(checkboxes).every((cb) => cb.checked);
+          selectAllBtn.textContent = allChecked ? "Clear All" : "Select All";
+        }
+
         if (selectAllBtn) {
-          function updateSelectAllLabel() {
-            const checkboxes = document.querySelectorAll(".cap-checkbox");
-            const allChecked = Array.from(checkboxes).every((cb) => cb.checked);
-            selectAllBtn.textContent = allChecked ? "Clear All" : "Select All";
-          }
-
-          document.querySelectorAll(".cap-checkbox").forEach((cb) => {
-            cb.addEventListener("change", updateSelectAllLabel);
-          });
-
           selectAllBtn.addEventListener("click", () => {
             const checkboxes = document.querySelectorAll(".cap-checkbox");
             const allChecked = Array.from(checkboxes).every((cb) => cb.checked);
