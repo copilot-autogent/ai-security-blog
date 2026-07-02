@@ -5,7 +5,7 @@ pubDate: 2026-07-02
 tags: ["steganography", "watermarking", "nhi-detection", "attribution", "evasion", "claude-code", "red-teaming", "ai-identity"]
 ---
 
-There is a class of AI security property that is easy to miss because it is, by design, invisible. Steganographic marking — encoding a model's identity or provenance into its output without changing semantic content — has been reported in production AI systems. Claude Code is the most concrete publicly documented case.
+There is a class of AI security property that is easy to miss because it is, by design, invisible. Steganographic marking — encoding a model's identity or provenance into its output without changing semantic content — has been reported in production AI systems. Claude Code is the most concrete example in current public reporting, though the report is a single third-party analysis rather than Anthropic's own documentation.
 
 The security implications cut both ways: defenders gain an attribution signal for detecting AI-generated content in regulated pipelines; adversaries gain a target to strip, spoof, or exploit. This post unpacks the mechanism, the NHI detection angle, and the evasion surface.
 
@@ -45,7 +45,7 @@ Analysis reported at thereallo.dev[^2] identified steganographic markers embedde
 
 The implications are worth separating carefully:
 
-**What this reveals about model-side marking**: The approach is prompt-level rather than training-level. The marking is implemented in the system prompt rather than baked into model weights. This means the signal's strength depends on how consistently the model follows prompt-level formatting instructions, and that the marking can in principle be altered by changing the system prompt — a different operational model than weight-level statistical biases.
+**What this reveals about model-side marking**: According to the analysis, the approach appears to be prompt-level rather than training-level — implemented in the system prompt rather than baked into model weights. If accurate, this means the signal's strength depends on how consistently the model follows prompt-level formatting instructions. It also means the marking could be altered by changing the system prompt, which is a different operational model than weight-level statistical biases. That said, observed formatting regularities alone cannot definitively rule out model-level contributions to the signal.
 
 **What it means for attribution**: A prompt-level mark identifies the *deployment configuration* (the system prompt that was active) rather than the base model. Two deployments using different system prompts would produce different marks even if running the same underlying model. This is both a feature (deployment-specific attribution) and a limitation (model identity is not directly encoded).
 
@@ -111,7 +111,7 @@ Steganographic marks are a useful signal, not a reliable gate. The architectural
 
 **Treat marks as one input to a detection ensemble.** Pair statistical watermark signals with behavioral anomaly detection, code quality heuristics, and process telemetry. An AI-generated file that also has no git blame, no test coverage, and arrived via an unusual pipeline is suspicious on multiple axes.
 
-**Key management matters (for keyed schemes).** In token-level watermarking, a marking scheme whose key is publicly known provides no security against targeted evasion. Key rotation, compartmentalization, and detection-side query limits (to resist iterative reverse-engineering of the key) are necessary operational controls. Note that prompt-level marking, as reported for Claude Code, has no analogous formal key — the "secret" is the formatting structure embedded in the system prompt, which is less cryptographically robust and not meaningfully rotatable.
+**Key management matters (for keyed schemes).** In token-level watermarking, a marking scheme whose key is publicly known provides no security against targeted evasion. Key rotation, compartmentalization, and detection-side query limits (to resist iterative reverse-engineering of the key) are necessary operational controls. Prompt-level marking, as reported for Claude Code, is operationally rotatable by changing the system prompt — but lacks the formal cryptographic properties of a keyed scheme, making its security properties harder to reason about rigorously.
 
 **Plan for mark degradation.** Any legitimate workflow that transforms AI-generated output — formatting, review, editing — will degrade or destroy marks. Downstream detectors must be calibrated against a realistic false-negative rate, not the laboratory rate reported when testing unmodified output.
 
@@ -121,7 +121,7 @@ Steganographic marks are a useful signal, not a reliable gate. The architectural
 
 ## Conclusion
 
-Steganographic marking is a real technique in real production systems. Claude Code's reported implementation is the most concrete example in the current landscape, but the broader mechanism — token-level, formatting-level, or identifier-level statistical biasing — is applicable to any generative model deployment where provenance attribution is operationally important.
+Steganographic marking is a real technique in real production systems. Claude Code's reported implementation is the most concrete example in the current landscape. More broadly, intentional token-level and formatting-level statistical biasing is applicable to any generative model deployment where provenance attribution is operationally important. The stylometric signals discussed in the identifier/comment section are a related but distinct phenomenon — real, useful for attribution, and worth understanding, but not keyed steganography in the strict sense.
 
 The security value is genuine: a covert identity signal embedded in every output provides a scalable detection mechanism that doesn't depend on user cooperation or metadata preservation. The limitations are equally genuine: the signal degrades under any content transformation, key exposure enables both stripping and forgery, and open-model deployments are out of scope entirely.
 
