@@ -19,7 +19,9 @@ This mechanism — **KV cache sharing** — is one of the highest-impact optimiz
 
 Beyond caching, large inference deployments use **request batching**: multiple user prompts are processed together in a single forward pass. Speculative decoding adds another layer — a small draft model generates candidate tokens, which the main model verifies in parallel, often across multiple pending requests. Each of these efficiency mechanisms creates a surface where the boundary between one user's state and another's must be carefully maintained.
 
-At the infrastructure layer, major providers document tenant isolation through **account-level cache namespacing**: your account's KV cache entries are keyed separately from other accounts', even for identical prompt prefixes. OpenAI's automatic prompt caching (triggered for prefixes ≥1,024 tokens) and Anthropic's explicit `cache_control` API work within this account-namespaced model. Importantly, what neither provider publicly documents is *how* isolation is enforced at the storage layer — routing-level policy, storage-level key partitioning, or both. The account-namespacing behavior is a claimed property, not an independently verifiable architectural guarantee.
+At the infrastructure layer, major providers document tenant isolation at the **account level**: cache entries for one account are keyed separately from another's, even for identical prompt prefixes. OpenAI's automatic prompt caching (triggered for prefixes ≥1,024 tokens) and Anthropic's explicit `cache_control` API are described by their respective providers as applying within per-account namespaces. This account-level separation is a stated isolation boundary, not an independently verified architectural guarantee — providers have not published storage-layer documentation describing how that separation is enforced at the key-value store level.
+
+The actual namespace partition granularity is also provider-defined and not fully public. Some platforms partition further by project, workspace, region, or model version. When cross-deployment cache sharing does exist, it may be scoped narrower than the full account.
 
 ## KV Cache Timing Attacks: Extended to Multi-Tenant Scenarios
 
@@ -27,21 +29,23 @@ At the infrastructure layer, major providers document tenant isolation through *
 
 The core mechanism is unchanged: a cached prefix returns a measurable latency reduction compared to an uncached one. The inference question changes: in a multi-tenant deployment, *who else* might have warmed a given cache entry?
 
-### The Intra-Account Case (Confirmed Concern)
+### The Intra-Account Case (Concern Contingent on Namespace Structure)
 
-Under documented per-account namespacing, a cache timing oracle operates within an account's own namespace. An attacker with partial account access — a compromise of one API key in a multi-deployment organization — can probe whether other deployments within the same account recently used a particular system prompt prefix. This enables configuration mapping: inferring what system prompts are in use across the organization without direct access to those deployments' configuration.
+Within whatever namespace an API account shares, a cache timing oracle can probe whether a specific prefix was recently cached by another caller in the same namespace. An attacker with partial account access — a compromise of one API key in a multi-deployment organization — could potentially probe whether other deployments recently used a particular system prompt prefix. This would enable configuration mapping: inferring what system prompts are in use across the organization without direct access to those deployments' configuration.
 
 The probe procedure:
 1. Establish a cold-start baseline: measure time-to-first-token for a fresh prefix of the same length on first use.
 2. Issue a query beginning with the target prefix. Measure time-to-first-token (T1).
-3. If T1 is substantially below the cold-start baseline, the prefix was already in-cache before your probe — populated by another deployment within the same namespace.
+3. If T1 is substantially below the cold-start baseline, the prefix was already in-cache before your probe — populated by another caller within the same namespace.
 4. If T1 matches the cold-start baseline, the prefix was not in-cache, and you've now warmed it yourself.
 
-**What's the operational significance?** System prompts increasingly carry sensitive configuration: persona definitions, business rules, topic restrictions, and occasionally (and against advice) authentication tokens or API credentials. A timing oracle over intra-account cache state can reveal which system prompts a deployment is using, potentially exposing configuration that operators expect to be opaque.
+**How exposed you are depends on namespace structure.** If a provider partitions cache entries by project or workspace rather than by account, then different deployments in the same account may not share a namespace at all — the intra-account oracle disappears without any security failure. The threat is real in configurations where multiple deployments share a single cache namespace, which some providers support and some users actively configure for shared cache warming.
+
+**What's the operational significance?** System prompts increasingly carry sensitive configuration: persona definitions, business rules, topic restrictions, and occasionally (and against advice) authentication tokens or API credentials. A timing oracle over a shared cache namespace can reveal which system prompts a deployment is using, potentially exposing configuration that operators expect to be opaque.
 
 ### The Cross-Account Case (Structural Risk, Not Confirmed)
 
-Cross-account timing inference would require isolation to be weaker than providers document. Under the claimed per-account namespacing model, an attacker's API calls touch only their own cache namespace, regardless of what other accounts' prompts contain. No cross-account timing signal exists within that model.
+Cross-account timing inference would require isolation to be weaker than providers document. Under the stated per-account isolation model, an attacker's API calls touch only their own cache namespace, regardless of what other accounts' prompts contain. No cross-account timing signal exists within that model.
 
 That the documented model *prohibits* this attack class is meaningful — but it's a claim that hasn't been independently verified. Providers haven't published storage-layer architecture documentation to confirm that isolation is enforced at the key-value store level rather than only at the routing/application layer. Transient misconfigurations during failover, cache migration, or maintenance windows represent a realistic (if unpublished) exposure window.
 
@@ -49,16 +53,16 @@ That the documented model *prohibits* this attack class is meaningful — but it
 
 ## Prefix Probing: Inferring Other Tenants' System Prompts
 
-A more targeted attack uses timing observations to test specific hypotheses about another tenant's cached content — not merely whether cache activity occurred, but whether a particular known prefix is cached.
+A more targeted attack uses timing observations to test specific hypotheses about another caller's cached content — not merely whether cache activity occurred, but whether a particular known prefix is cached.
 
 The method is an **iterative candidate validation** approach. An attacker who suspects a competitor uses a specific system prompt template can craft queries with specific candidate prefixes and measure cache-hit status for each. Because cache keys derive from the full prefix content (hashed), a hit on candidate P₁ but a miss on candidate P₂ narrows down which prefix variant the target deployment is using. Note that this is not a general-purpose search: the prefix space is not ordered, hashed keys carry no structural information about their content, and the oracle cannot enumerate unknown content from scratch. It can only confirm or deny specific candidate guesses.
 
-Under per-account namespacing, this attack cannot cross account boundaries: the attacker's measurements only observe their own cache state. The threat is real only if:
+Under per-account namespacing, this attack cannot cross account boundaries: the attacker's measurements only observe their own cache namespace. The threat requires the attacker and target to share a cache namespace, either because:
 
-- The attacker and target share a cache namespace (same account, different deployments), **or**
+- They are different deployments within the same account sharing a namespace, **or**
 - Provider isolation is weaker than documented (cross-account namespace collision)
 
-For **multi-tenant platforms that expose shared LLM backends** — enterprise orchestration tools, API aggregators, shared-workspace applications where multiple users or teams hit the same underlying inference endpoint under a single provider account — the intra-account scenario is directly applicable. An attacker who is a legitimate user of the shared platform can probe the cache namespace shared across that platform's tenants.
+For **multi-tenant platforms that expose shared LLM backends** — enterprise orchestration tools, API aggregators, shared-workspace applications where multiple users or teams hit the same underlying inference endpoint — the intra-account scenario may apply, *if* that platform multiplexes its users under a single provider account with a shared cache namespace rather than issuing per-tenant provider accounts or adding cache-busting per-tenant prefixes. Many vendors do the latter, specifically to prevent this exposure. The risk exists in platforms that don't.
 
 **What can actually be inferred?** The oracle can validate guesses from a constrained candidate set, not freely reconstruct arbitrary text. The practical attack combines prefix probing with:
 
@@ -107,7 +111,7 @@ Serverless functions maintain **warm start pools**: after a function instance ha
 
 For LLM wrappers that maintain prompt context or conversation history as process-level state, warm-start reuse means the next request inherits the previous invocation's context. Unlike a typical stateless HTTP handler bug, the failure mode here is invisible: the new user's session appears to start fresh from their perspective, but the model is receiving their prompt against a context window that already contains another user's history.
 
-The root mitigation is structural: **avoid shared mutable session state entirely** by keeping all conversation state within the request-handler's own execution scope. Never store conversation history as a module-level or class-level attribute that persists across invocations. Note that resetting mutable shared state at the start of each request handler is insufficient in concurrent environments — a race between two concurrent requests can corrupt one session with another's state even with reset logic in place. The only safe approach is per-request instantiation.
+The core mitigation is ensuring conversation state is **scoped to the individual request** rather than to the process or module. In-process options include per-request object instantiation (creating a new history object within each invocation). Out-of-process options include keyed storage (e.g., Redis) with a per-request identifier, as long as the lookup key is derived from the current request and not shared across requests. What's unsafe is any architecture where a mutable session object is created once and reused across invocations, or where a reset-at-start approach races with concurrent requests sharing the same object.
 
 ## Defense Landscape: What's Provably Safe vs. Best-Effort
 
@@ -115,7 +119,7 @@ The root mitigation is structural: **avoid shared mutable session state entirely
 
 Session bleed vulnerabilities are fully preventable through correct implementation:
 
-**Explicit per-request instantiation.** Create conversation history, memory buffers, and context objects within the request handler scope, not at module or class initialization scope. Never share mutable LLM session state across concurrent requests. This is the structural fix — reset-at-start-of-handler approaches are fragile under concurrency.
+**Request-scoped session state.** Keep conversation history, memory buffers, and context objects scoped to the individual request — either by instantiating them fresh per invocation, or by keying them to a unique request identifier in external storage. Never share a single mutable session object across concurrent or sequential requests.
 
 **Scoped dependency injection.** In frameworks that support it, use request-scoped dependency injection for any component that holds conversation state. This makes session boundary management explicit in the code structure rather than relying on convention.
 
@@ -123,7 +127,7 @@ Session bleed vulnerabilities are fully preventable through correct implementati
 
 ### Best-Effort: Infrastructure Timing Mitigation
 
-**Deployment-specific prefix differentiation.** Including a short, stable, deployment-unique identifier at the start of every system prompt ensures your deployments don't share cache entries with other deployments — even within the same account. This prevents intra-account timing probes from revealing which system prompt your service uses. The identifier doesn't need to be secret; it needs to be unique and consistent. The cost: you lose cross-instance cache warming (two replicas of the same service build separate caches).
+**Deployment-specific prefix differentiation.** Including a short, stable, deployment-unique identifier at the start of every system prompt ensures your deployments don't share cache entries with other deployments in the same namespace. This prevents intra-namespace timing probes from revealing which system prompt your service uses. The identifier doesn't need to be secret; it needs to be unique and consistent. The cost: you lose cross-instance cache warming (two replicas of the same service build separate caches).
 
 **Latency normalization.** Some providers apply artificial normalization to reduce the observable timing differential between cached and uncached responses. When available, this degrades the oracle's signal-to-noise ratio. Operators have limited control over this; it's a provider-side mitigation.
 
@@ -134,6 +138,7 @@ Session bleed vulnerabilities are fully preventable through correct implementati
 The most important defense — provider-level storage-layer isolation — cannot be verified by operators. The information needed to confirm it is:
 
 - Which component enforces cache namespace isolation (routing layer, storage layer, or both)
+- What the actual namespace partition granularity is (account, project, workspace, region)
 - How isolation is maintained during infrastructure events (failover, cache migration, maintenance)
 - Whether cache hit status is available in audit logs, and at what granularity
 
@@ -144,8 +149,8 @@ None of the major commercial providers have published this information as of thi
 | Scenario | Requires | Confidence Level |
 |---|---|---|
 | Session bleed via shared conversation history (FaaS) | Application-layer bug (no provider weakness needed) | **Confirmed real pattern** — preventable |
-| Intra-account cache timing oracle (known prefix test) | Partial account access | **Plausible/theoretical** — analogous attacks well-demonstrated; LLM-specific not peer-reviewed |
-| Prefix candidate validation against another deployment's system prompt | Intra-account namespace sharing + strong prior candidate set | **Plausible/theoretical** — requires candidate hypotheses; not a reconstruction attack |
+| Intra-namespace cache timing oracle (known prefix test) | Shared cache namespace between deployments | **Plausible/theoretical** — analogous attacks well-demonstrated; LLM-specific not peer-reviewed; depends on namespace partitioning |
+| Prefix candidate validation against another deployment's system prompt | Shared namespace + strong prior candidate set | **Plausible/theoretical** — requires candidate hypotheses; not a reconstruction attack |
 | Cross-account cache timing inference | Provider isolation weaker than documented | **Not supported** under documented isolation model |
 | Speculative decoding token leakage across tenant boundary | Implementation failure in draft/verify separation | **Speculative** — no production reports |
 | Cache namespace injection via second-preimage collision | Breaking provider's cache key hash scheme | **Speculative** — hard under well-designed schemes |
@@ -157,7 +162,7 @@ Multi-tenant LLM inference introduces a layered security surface that most appli
 The immediate action for operators:
 
 1. **Audit session state scoping** in every LLM wrapper you deploy to FaaS or shared infrastructure. This is the highest-probability failure mode and fully preventable.
-2. **Add deployment-specific prefix differentiation** to system prompts in multi-deployment organizations to limit intra-account cache timing exposure.
+2. **Add deployment-specific prefix differentiation** to system prompts to limit intra-namespace cache timing exposure.
 3. **Request storage-layer isolation documentation** from your LLM provider if you're operating in a regulated environment. The absence of documentation is an audit finding in its own right.
 
 The broader pattern here is familiar: efficiency and isolation are competing pressures at the infrastructure layer, and the security community's attention has lagged behind deployment practice. KV cache sharing, batching, and speculative decoding are production realities with limited published security analysis. That gap will close — the incentive to probe it is growing as LLMs handle increasingly sensitive workloads.
