@@ -37,11 +37,11 @@ This approach is harder to detect without the key because the signal space is lo
 
 ### Identifier and comment phrasing
 
-Naming conventions for variables, functions, and comments contain substantial entropy that models express consistently. A model trained to prefer certain idioms (`isLoaded` vs `loaded`, `handleClick` vs `onClick`, comment placement before vs after declarations) will produce outputs that carry those preferences as a fingerprint. Unlike whitespace, this signal is tightly coupled to semantic choices — making it harder to strip without actually modifying behavior — but also making it statistically weaker since coding style legitimately varies.
+Naming conventions for variables, functions, and comments contain substantial entropy that models express consistently. A model trained to prefer certain idioms (`isLoaded` vs `loaded`, `handleClick` vs `onClick`, comment placement before vs after declarations) will produce outputs that carry those preferences as a detectable stylistic fingerprint. This is more precisely *stylometric attribution* than intentional keyed steganography — there is no secret key and no formal detection scheme. The signal is real (stylometric AI detectors operate on exactly this entropy), but it is not steganographic marking in the strict sense. Both are worth understanding; they are not the same mechanism.
 
 ## Claude Code's Reported Technique
 
-Analysis reported at thereallo.dev[^2] identified steganographic markers embedded in Claude Code's system prompt that are reflected in its output. The technique involves hidden signals in the prompt structure that influence how Claude formats its responses — particularly in code generation tasks — producing outputs with statistical regularities that serve as identity signals.
+Analysis reported at thereallo.dev[^2] identified steganographic markers embedded in Claude Code's system prompt that are reflected in its output. According to that analysis, the technique involves hidden signals in the prompt structure that influence how Claude formats its responses — particularly in code generation tasks — producing outputs with statistical regularities that serve as identity signals. This is a single third-party report; the analysis has not been independently replicated in published research.
 
 The implications are worth separating carefully:
 
@@ -89,7 +89,7 @@ An adversary who does not need to modify a specific piece of AI output can simpl
 
 ### Watermark forgery
 
-More advanced: generate output that *passes* the detector's test without having been produced by the marked model. Zhao et al. (2023)[^3] also analyze spoofing attacks, where an adversary uses knowledge of the green/red list scheme to produce non-watermarked text that clears the statistical threshold. This is harder than stripping but is possible when the marking key is fully known.
+More advanced: generate output that *passes* the detector's test without having been produced by the marked model. Research on Kirchenbauer-style schemes has analyzed spoofing attacks where an adversary with knowledge of the green/red list mapping produces text that clears the statistical threshold without actually being watermarked — inverting the detection guarantee. This is harder than stripping but is possible when the marking key is known or can be inferred.
 
 **Effectiveness**: Possible with full key knowledge. Requires understanding the marking scheme at the cryptographic level, not just statistical observation.
 
@@ -111,7 +111,7 @@ Steganographic marks are a useful signal, not a reliable gate. The architectural
 
 **Treat marks as one input to a detection ensemble.** Pair statistical watermark signals with behavioral anomaly detection, code quality heuristics, and process telemetry. An AI-generated file that also has no git blame, no test coverage, and arrived via an unusual pipeline is suspicious on multiple axes.
 
-**Key management matters.** A marking scheme whose key is publicly known provides no security against targeted evasion. Key rotation, compartmentalization, and detection-side query limits (to resist iterative reverse-engineering of the key) are necessary operational controls.
+**Key management matters (for keyed schemes).** In token-level watermarking, a marking scheme whose key is publicly known provides no security against targeted evasion. Key rotation, compartmentalization, and detection-side query limits (to resist iterative reverse-engineering of the key) are necessary operational controls. Note that prompt-level marking, as reported for Claude Code, has no analogous formal key — the "secret" is the formatting structure embedded in the system prompt, which is less cryptographically robust and not meaningfully rotatable.
 
 **Plan for mark degradation.** Any legitimate workflow that transforms AI-generated output — formatting, review, editing — will degrade or destroy marks. Downstream detectors must be calibrated against a realistic false-negative rate, not the laboratory rate reported when testing unmodified output.
 
