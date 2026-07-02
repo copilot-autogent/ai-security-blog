@@ -252,7 +252,6 @@ const pageDescription =
                       type="checkbox"
                       class="cap-checkbox"
                       data-cap={cap.id}
-                      aria-label={cap.label}
                     />
                     <span class="cap-icon" aria-hidden="true">{cap.icon}</span>
                     <span class="cap-text">
@@ -270,19 +269,22 @@ const pageDescription =
         </aside>
 
         <!-- Threat Results (right panel) -->
-        <section aria-label="Threat checklist" aria-live="polite">
+        <section aria-label="Threat checklist">
           <h2>Your Threat Checklist</h2>
-          <div id="results-count" class="results-count" hidden></div>
-          <div id="results-empty" class="results-empty" role="status">
-            ← Select one or more capabilities to generate your personalized threat checklist.
+          <!-- aria-live wraps only the dynamic results, not the static heading -->
+          <div aria-live="polite" aria-atomic="false">
+            <div id="results-count" class="results-count" hidden></div>
+            <div id="results-empty" class="results-empty" role="status">
+              ← Select one or more capabilities to generate your personalized threat checklist.
+            </div>
+            <div id="threat-list" class="threat-list"></div>
           </div>
-          <div id="threat-list" class="threat-list" aria-label="Threat items"></div>
         </section>
       </div>
     </main>
     <Footer />
 
-    <script define:vars={{ threats: threatDb.threats, capabilities: threatDb.capabilities }}>
+    <script define:vars={{ threats: threatDb.threats, capabilities: threatDb.capabilities, siteBase: base }}>
       (() => {
         const threatListEl = document.getElementById("threat-list");
         const resultsEmptyEl = document.getElementById("results-empty");
@@ -291,6 +293,15 @@ const pageDescription =
 
         const capIconMap = Object.fromEntries(capabilities.map((c) => [c.id, c.icon]));
         const capLabelMap = Object.fromEntries(capabilities.map((c) => [c.id, c.label]));
+
+        function esc(str) {
+          return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
 
         function getSelectedCaps() {
           return Array.from(document.querySelectorAll(".cap-checkbox:checked")).map(
@@ -321,7 +332,7 @@ const pageDescription =
           if (matching.length === 0) {
             threatListEl.innerHTML = "";
             resultsCountEl.removeAttribute("hidden");
-            resultsCountEl.innerHTML = "No threats matched for the selected capabilities.";
+            resultsCountEl.textContent = "No threats matched for the selected capabilities.";
             return;
           }
 
@@ -332,28 +343,28 @@ const pageDescription =
             " for <strong>" + selected.size + "</strong> selected capabilit" +
             (selected.size !== 1 ? "ies" : "y") + ".";
 
-          const pathBase = location.pathname.replace(/\/threat-model\/?$/, "");
-
           threatListEl.innerHTML = matching
             .map((t) => {
               const triggeredCaps = t.capabilities
                 .filter((c) => selected.has(c))
                 .map(
                   (c) =>
-                    '<span class="cap-tag" title="' + (capLabelMap[c] || c) + '">' +
-                    (capIconMap[c] || "") + "&#8202;" + (capLabelMap[c] || c) + "</span>"
+                    '<span class="cap-tag" title="' + esc(capLabelMap[c] || c) + '">' +
+                    esc(capIconMap[c] || "") + "&#8202;" + esc(capLabelMap[c] || c) + "</span>"
                 )
                 .join("");
 
-              return '<article class="threat-card" data-threat-id="' + t.id + '">' +
+              const postUrl = siteBase + "/blog/" + esc(t.postSlug) + "/";
+
+              return '<article class="threat-card" data-threat-id="' + esc(t.id) + '">' +
                 '<div class="threat-card-header">' +
-                '<h3>' + t.title + '</h3>' +
-                '<span class="severity-badge severity-' + t.severity + '" aria-label="Severity: ' + t.severity + '">' + t.severity + '</span>' +
+                '<h3>' + esc(t.title) + '</h3>' +
+                '<span class="severity-badge severity-' + esc(t.severity) + '" aria-label="Severity: ' + esc(t.severity) + '">' + esc(t.severity) + '</span>' +
                 '</div>' +
-                '<p class="threat-desc">' + t.description + '</p>' +
+                '<p class="threat-desc">' + esc(t.description) + '</p>' +
                 '<footer class="threat-footer">' +
-                '<a class="read-more-link" href="' + pathBase + '/blog/' + t.postSlug + '/" aria-label="Read more: ' + t.postTitle + '">' +
-                '📖 ' + t.postTitle + ' →' +
+                '<a class="read-more-link" href="' + postUrl + '" aria-label="Read more: ' + esc(t.postTitle) + '">' +
+                '📖 ' + esc(t.postTitle) + ' →' +
                 '</a>' +
                 '<span class="triggered-by" aria-label="Triggered by capabilities">' + triggeredCaps + '</span>' +
                 '</footer></article>';
@@ -365,14 +376,23 @@ const pageDescription =
           cb.addEventListener("change", renderThreats);
         });
 
-        let allSelected = false;
+        // Derive "all selected" state from actual checkbox state (not a flag)
         if (selectAllBtn) {
+          function updateSelectAllLabel() {
+            const checkboxes = document.querySelectorAll(".cap-checkbox");
+            const allChecked = Array.from(checkboxes).every((cb) => cb.checked);
+            selectAllBtn.textContent = allChecked ? "Clear All" : "Select All";
+          }
+
+          document.querySelectorAll(".cap-checkbox").forEach((cb) => {
+            cb.addEventListener("change", updateSelectAllLabel);
+          });
+
           selectAllBtn.addEventListener("click", () => {
-            allSelected = !allSelected;
-            document.querySelectorAll(".cap-checkbox").forEach((cb) => {
-              cb.checked = allSelected;
-            });
-            selectAllBtn.textContent = allSelected ? "Clear All" : "Select All";
+            const checkboxes = document.querySelectorAll(".cap-checkbox");
+            const allChecked = Array.from(checkboxes).every((cb) => cb.checked);
+            checkboxes.forEach((cb) => { cb.checked = !allChecked; });
+            updateSelectAllLabel();
             renderThreats();
           });
         }
