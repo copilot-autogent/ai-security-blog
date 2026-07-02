@@ -1,0 +1,279 @@
+{
+  "capabilities": [
+    {
+      "id": "web-browsing",
+      "label": "Web Browsing",
+      "icon": "🌐",
+      "description": "Agent can retrieve and process content from arbitrary URLs"
+    },
+    {
+      "id": "tool-use",
+      "label": "Tool Use / Function Calling",
+      "icon": "🔧",
+      "description": "Agent invokes external tools, APIs, or shell commands"
+    },
+    {
+      "id": "persistent-memory",
+      "label": "Persistent Memory",
+      "icon": "🧠",
+      "description": "Agent stores and retrieves memories across sessions"
+    },
+    {
+      "id": "rag",
+      "label": "RAG / Document Retrieval",
+      "icon": "📄",
+      "description": "Agent retrieves context from a vector store or document corpus"
+    },
+    {
+      "id": "multi-agent",
+      "label": "Multi-Agent Coordination",
+      "icon": "🤝",
+      "description": "Agent spawns sub-agents or communicates with other LLM agents"
+    },
+    {
+      "id": "external-apis",
+      "label": "External API Calls",
+      "icon": "🔌",
+      "description": "Agent integrates with third-party services (email, calendar, CRMs, etc.)"
+    },
+    {
+      "id": "user-content",
+      "label": "User-Uploaded Content",
+      "icon": "📎",
+      "description": "Agent processes files, images, or documents provided by users"
+    },
+    {
+      "id": "code-execution",
+      "label": "Code Execution",
+      "icon": "💻",
+      "description": "Agent can write and run code in a sandboxed or live environment"
+    }
+  ],
+  "threats": [
+    {
+      "id": "t-indirect-prompt-injection",
+      "title": "Indirect Prompt Injection via Web Content",
+      "description": "Attacker embeds adversarial instructions in web pages the agent fetches, hijacking the agent's actions on behalf of the user.",
+      "severity": "critical",
+      "capabilities": ["web-browsing"],
+      "postSlug": "indirect-prompt-injection-incidents-survey",
+      "postTitle": "Indirect Prompt Injection Incidents: A Survey"
+    },
+    {
+      "id": "t-side-channel-exfil",
+      "title": "Side-Channel Data Exfiltration",
+      "description": "Injected instructions smuggle user data out of the agent's context via timing attacks, URL parameters, or crafted inference sequences.",
+      "severity": "high",
+      "capabilities": ["web-browsing", "tool-use"],
+      "postSlug": "agent-side-channel-exfiltration",
+      "postTitle": "Agent Side-Channel Exfiltration"
+    },
+    {
+      "id": "t-pixel-injection",
+      "title": "Multimodal Pixel-Level Prompt Injection",
+      "description": "Adversarial images embed imperceptible instructions that override the agent's intended behavior when processed by vision-language models.",
+      "severity": "high",
+      "capabilities": ["web-browsing", "user-content"],
+      "postSlug": "adversarial-attacks-vision-language-models-pixels-injection",
+      "postTitle": "Adversarial Attacks on Vision-Language Models: Pixels as Injection Vectors"
+    },
+    {
+      "id": "t-tool-poisoning",
+      "title": "Malicious MCP Server / Tool Poisoning",
+      "description": "A compromised MCP server returns adversarial tool descriptions or outputs that manipulate the agent's next actions from inside the trust perimeter.",
+      "severity": "critical",
+      "capabilities": ["tool-use"],
+      "postSlug": "tool-poisoning-malicious-mcp-servers",
+      "postTitle": "Tool Poisoning via Malicious MCP Servers"
+    },
+    {
+      "id": "t-confused-deputy",
+      "title": "Confused Deputy / Excessive Privilege",
+      "description": "An agent granted broad tool permissions is exploited to take high-impact actions the user never intended, violating least-privilege principles.",
+      "severity": "high",
+      "capabilities": ["tool-use", "external-apis"],
+      "postSlug": "confused-deputy-llm-tool-use-least-privilege",
+      "postTitle": "Confused Deputy: LLM Tool Use and Least Privilege"
+    },
+    {
+      "id": "t-mcp-attack-surface",
+      "title": "MCP Protocol Attack Surface",
+      "description": "The MCP protocol layer itself exposes attack surfaces including tool-description manipulation, resource spoofing, and prompt leakage via the tool registry.",
+      "severity": "high",
+      "capabilities": ["tool-use"],
+      "postSlug": "mcp-security-attack-surface",
+      "postTitle": "MCP Security: The New Attack Surface for AI Tool Protocols"
+    },
+    {
+      "id": "t-agent-attack-surface",
+      "title": "Broad Agent Attack Surface Exposure",
+      "description": "Agents with multiple integrated capabilities (browsing + tool use + memory) have a combinatorially larger attack surface than single-capability agents.",
+      "severity": "high",
+      "capabilities": ["tool-use", "web-browsing", "external-apis"],
+      "postSlug": "agent-attack-surface-mapped",
+      "postTitle": "AI Agent Attack Surface: A Practical Map"
+    },
+    {
+      "id": "t-memory-poisoning",
+      "title": "Memory / RAG Poisoning",
+      "description": "An attacker plants adversarial content in the agent's memory store or RAG corpus; future retrievals contaminate the agent's context and steer its behavior.",
+      "severity": "critical",
+      "capabilities": ["persistent-memory", "rag"],
+      "postSlug": "rag-memory-poisoning-attacks",
+      "postTitle": "RAG Memory Poisoning Attacks"
+    },
+    {
+      "id": "t-cloud-privacy-leak",
+      "title": "Agent Memory Cloud Privacy Leak",
+      "description": "Persistent agent memories stored in cloud services may leak sensitive user data across sessions, users, or tenants if access controls are misconfigured.",
+      "severity": "high",
+      "capabilities": ["persistent-memory"],
+      "postSlug": "agent-memory-cloud-privacy-leak",
+      "postTitle": "Agent Memory & Cloud Privacy Leak"
+    },
+    {
+      "id": "t-skill-library-poisoning",
+      "title": "Skill Library Memory Poisoning",
+      "description": "Attackers poison an agent's skill/tool library in memory so that future task invocations use compromised procedures instead of safe ones.",
+      "severity": "high",
+      "capabilities": ["persistent-memory", "tool-use"],
+      "postSlug": "skill-library-memory-poisoning-defense",
+      "postTitle": "Skill Library Memory Poisoning: Attack and Defense"
+    },
+    {
+      "id": "t-rag-long-context",
+      "title": "Long-Context RAG Prompt Injection",
+      "description": "Attacker-controlled documents retrieved into a long context window contain hidden instructions that displace the system prompt's authority.",
+      "severity": "critical",
+      "capabilities": ["rag"],
+      "postSlug": "prompt-injection-long-context-windows",
+      "postTitle": "Prompt Injection in Long-Context Windows & RAG Systems"
+    },
+    {
+      "id": "t-shadow-prompting",
+      "title": "Shadow Prompting / Hidden System Instructions",
+      "description": "Retrieved documents contain hidden system-level instructions (e.g., via white-on-white text or metadata) that override the legitimate system prompt.",
+      "severity": "high",
+      "capabilities": ["rag", "web-browsing"],
+      "postSlug": "shadow-prompting-hidden-system-instructions",
+      "postTitle": "Shadow Prompting: Hidden System Instructions"
+    },
+    {
+      "id": "t-healthcare-data-leak",
+      "title": "Sensitive Data Leak via RAG Chatbot",
+      "description": "RAG chatbots can leak documents from other users' tenants if retrieval is not scoped correctly, exposing healthcare records or confidential enterprise data.",
+      "severity": "high",
+      "capabilities": ["rag"],
+      "postSlug": "healthcare-rag-chatbot-data-leak",
+      "postTitle": "Healthcare RAG Chatbot Data Leak"
+    },
+    {
+      "id": "t-multi-agent-trust-escalation",
+      "title": "Multi-Agent Trust Escalation",
+      "description": "A malicious sub-agent claims elevated permissions or spoofs an orchestrator's identity, allowing lateral movement through the agent network.",
+      "severity": "critical",
+      "capabilities": ["multi-agent"],
+      "postSlug": "multi-agent-trust-escalation",
+      "postTitle": "Multi-Agent Trust Escalation"
+    },
+    {
+      "id": "t-ai-worms",
+      "title": "Self-Replicating AI Worms in Multi-Agent Pipelines",
+      "description": "Adversarial prompts can self-replicate through multi-agent communication channels, infecting each agent in a pipeline and propagating malicious instructions.",
+      "severity": "critical",
+      "capabilities": ["multi-agent"],
+      "postSlug": "ai-worms-multi-agent-pipelines",
+      "postTitle": "AI Worms in Multi-Agent Pipelines"
+    },
+    {
+      "id": "t-latent-space-injection",
+      "title": "Latent-Space Injection Across Agent Boundaries",
+      "description": "Embedding-level manipulation of messages between agents can smuggle instructions that bypass text-level safety checks in the receiving agent.",
+      "severity": "high",
+      "capabilities": ["multi-agent"],
+      "postSlug": "latent-space-injection-multi-agent",
+      "postTitle": "Latent-Space Injection in Multi-Agent Systems"
+    },
+    {
+      "id": "t-non-compositionality",
+      "title": "Non-Compositional Safety Failures in Multi-Agent Systems",
+      "description": "Safety guarantees that hold for individual agents do not automatically compose — multi-agent systems can exhibit emergent unsafe behaviors that no single agent exhibits alone.",
+      "severity": "high",
+      "capabilities": ["multi-agent"],
+      "postSlug": "multi-agent-non-compositionality",
+      "postTitle": "Non-Compositionality of Safety in Multi-Agent Systems"
+    },
+    {
+      "id": "t-supply-chain",
+      "title": "AI Agent Supply Chain Attack",
+      "description": "Compromised model weights, poisoned training datasets, or malicious dependencies in the agent's build pipeline can backdoor the agent before deployment.",
+      "severity": "critical",
+      "capabilities": ["external-apis", "tool-use"],
+      "postSlug": "ai-agent-supply-chain-attacks",
+      "postTitle": "AI Agent Supply Chain Attacks"
+    },
+    {
+      "id": "t-data-exfil-sheets",
+      "title": "Data Exfiltration via External Service Integration",
+      "description": "Injected instructions redirect the agent to POST sensitive conversation data to attacker-controlled endpoints using its legitimate API access credentials.",
+      "severity": "high",
+      "capabilities": ["external-apis"],
+      "postSlug": "chatgpt-google-sheets-data-exfiltration",
+      "postTitle": "ChatGPT → Google Sheets: Data Exfiltration via Prompt Injection"
+    },
+    {
+      "id": "t-personal-agent-inbox",
+      "title": "Ambient Authority / Inbox Attack on Personal Agents",
+      "description": "A personal agent with broad ambient access (email, calendar, files) is exploited by a malicious email that triggers unintended high-privilege actions.",
+      "severity": "critical",
+      "capabilities": ["external-apis", "web-browsing"],
+      "postSlug": "personal-ai-agent-ambient-authority-inbox-attack",
+      "postTitle": "Personal AI Agent Ambient Authority: The Inbox Attack"
+    },
+    {
+      "id": "t-multimodal-jailbreak",
+      "title": "Multimodal Jailbreaking via Uploaded Files",
+      "description": "Specially crafted images, PDFs, or audio files can bypass safety filters and inject instructions when processed by multimodal agents.",
+      "severity": "high",
+      "capabilities": ["user-content"],
+      "postSlug": "multimodal-jailbreak-attacks",
+      "postTitle": "Multimodal Jailbreak Attacks"
+    },
+    {
+      "id": "t-unicode-smuggling",
+      "title": "Unicode / Token Smuggling in User Input",
+      "description": "Adversarial users embed homoglyphs, zero-width characters, or Unicode control sequences in uploaded content to evade content filters.",
+      "severity": "medium",
+      "capabilities": ["user-content"],
+      "postSlug": "unicode-token-smuggling-safety-filter-evasion",
+      "postTitle": "Unicode & Token Smuggling: Safety Filter Evasion"
+    },
+    {
+      "id": "t-sandbox-escape",
+      "title": "Sandbox Escape / Code Execution Breakout",
+      "description": "Agent-generated code exploits weaknesses in the execution sandbox to access the host filesystem, environment variables, or network — escaping its intended containment.",
+      "severity": "critical",
+      "capabilities": ["code-execution"],
+      "postSlug": "anthropic-claude-sandbox-architecture",
+      "postTitle": "Claude Sandbox Architecture: Code Execution Containment"
+    },
+    {
+      "id": "t-copilot-file-exfil",
+      "title": "File Exfiltration via Code Generation",
+      "description": "An agent with code execution and file access can be prompted to read sensitive files and exfiltrate their contents via crafted code payloads.",
+      "severity": "high",
+      "capabilities": ["code-execution", "external-apis"],
+      "postSlug": "copilot-cowork-file-exfiltration-prompt-injection",
+      "postTitle": "Copilot / Co-Work File Exfiltration via Prompt Injection"
+    },
+    {
+      "id": "t-fine-tuning-trojans",
+      "title": "Fine-Tuning Backdoors / Trojans in Training Pipeline",
+      "description": "Attacker injects backdoor triggers during fine-tuning; the model behaves normally until a specific input pattern activates the trojan behavior.",
+      "severity": "high",
+      "capabilities": ["code-execution", "external-apis"],
+      "postSlug": "fine-tuning-trojans-backdoors-training-pipeline",
+      "postTitle": "Fine-Tuning Trojans: Backdoors in the Training Pipeline"
+    }
+  ]
+}

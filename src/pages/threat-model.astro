@@ -1,0 +1,382 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { SITE_TITLE } from "../consts";
+import threatDb from "../data/threat-db.json";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const pageTitle = "Agent Threat Model Builder";
+const pageDescription =
+  "Select your AI agent's capabilities and instantly generate a personalized security threat checklist — drawn from our post taxonomy.";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead title={`${pageTitle} | ${SITE_TITLE}`} description={pageDescription} />
+    <style>
+      /* ── Layout ── */
+      .tm-hero {
+        padding: 2.5em 0 2em;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 2em;
+      }
+      .tm-hero h1 {
+        font-size: 2em;
+        margin: 0 0 0.35em;
+      }
+      .tm-hero p {
+        color: var(--text-secondary);
+        font-size: 1.05em;
+        margin: 0;
+        max-width: 600px;
+      }
+
+      .tm-layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 2.5em;
+        align-items: start;
+      }
+      @media (max-width: 680px) {
+        .tm-layout { grid-template-columns: 1fr; }
+      }
+
+      /* ── Capability Panel ── */
+      .capability-panel {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.25em;
+        position: sticky;
+        top: 1.5em;
+      }
+      .capability-panel h2 {
+        font-size: 0.85em;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-secondary);
+        margin: 0 0 1em;
+      }
+      .capability-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 1.25em;
+      }
+      .capability-item {
+        margin-bottom: 0.5em;
+      }
+      .capability-item label {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6em;
+        cursor: pointer;
+        padding: 0.55em 0.6em;
+        border-radius: 6px;
+        transition: background 0.12s ease;
+        line-height: 1.35;
+      }
+      .capability-item label:hover {
+        background: var(--bg-surface);
+      }
+      .capability-item input[type="checkbox"] {
+        width: 1.1em;
+        height: 1.1em;
+        flex-shrink: 0;
+        margin-top: 0.1em;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      .cap-icon {
+        font-size: 1.1em;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .cap-text {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2em;
+      }
+      .cap-label {
+        font-size: 0.95em;
+        font-weight: 600;
+        color: var(--text-bright);
+      }
+      .cap-desc {
+        font-size: 0.78em;
+        color: var(--text-secondary);
+        line-height: 1.4;
+      }
+      .btn-select-all {
+        width: 100%;
+        padding: 0.5em;
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text-secondary);
+        font-size: 0.85em;
+        cursor: pointer;
+        transition: color 0.12s, border-color 0.12s;
+      }
+      .btn-select-all:hover {
+        color: var(--text-bright);
+        border-color: var(--accent);
+      }
+
+      /* ── Results Panel ── */
+      .results-panel h2 {
+        font-size: 0.85em;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-secondary);
+        margin: 0 0 1em;
+      }
+      .results-empty {
+        color: var(--text-secondary);
+        font-size: 0.95em;
+        padding: 2.5em 0;
+        text-align: center;
+      }
+      .results-count {
+        font-size: 0.88em;
+        color: var(--text-secondary);
+        margin-bottom: 1.25em;
+      }
+      .results-count strong {
+        color: var(--text-bright);
+      }
+
+      /* ── Threat Cards ── */
+      .threat-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1em;
+      }
+      .threat-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.25em;
+        transition: border-color 0.15s ease;
+      }
+      .threat-card:hover {
+        border-color: var(--accent);
+      }
+      .threat-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75em;
+        margin-bottom: 0.6em;
+        flex-wrap: wrap;
+      }
+      .threat-card h3 {
+        font-size: 1.05em;
+        margin: 0;
+        color: var(--text-bright);
+        flex: 1;
+        min-width: 0;
+      }
+      .severity-badge {
+        display: inline-block;
+        font-size: 0.72em;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 0.2em 0.55em;
+        border-radius: 20px;
+        flex-shrink: 0;
+      }
+      .severity-critical { background: #4a1111; color: #ff7b7b; border: 1px solid #cc3333; }
+      .severity-high     { background: #3a2200; color: #ffa94d; border: 1px solid #884400; }
+      .severity-medium   { background: #1a2a00; color: #b5d46a; border: 1px solid #4a6600; }
+
+      .threat-desc {
+        color: var(--text-secondary);
+        font-size: 0.92em;
+        line-height: 1.55;
+        margin: 0 0 0.9em;
+      }
+      .threat-footer {
+        display: flex;
+        align-items: center;
+        gap: 1em;
+        flex-wrap: wrap;
+      }
+      .read-more-link {
+        font-size: 0.85em;
+        color: var(--accent);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3em;
+        transition: opacity 0.12s;
+      }
+      .read-more-link:hover { opacity: 0.8; }
+      .triggered-by {
+        font-size: 0.78em;
+        color: var(--text-secondary);
+        display: flex;
+        gap: 0.4em;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .cap-tag {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.15em 0.45em;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main>
+      <section class="tm-hero">
+        <h1>{pageTitle}</h1>
+        <p>{pageDescription}</p>
+      </section>
+
+      <div class="tm-layout">
+        <!-- Capability Selector (left panel) -->
+        <aside aria-label="Agent capabilities">
+          <div class="capability-panel">
+            <h2>Agent Capabilities</h2>
+            <ul class="capability-list" id="capability-list">
+              {threatDb.capabilities.map((cap) => (
+                <li class="capability-item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      class="cap-checkbox"
+                      data-cap={cap.id}
+                      aria-label={cap.label}
+                    />
+                    <span class="cap-icon" aria-hidden="true">{cap.icon}</span>
+                    <span class="cap-text">
+                      <span class="cap-label">{cap.label}</span>
+                      <span class="cap-desc">{cap.description}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <button class="btn-select-all" id="btn-select-all" type="button">
+              Select All
+            </button>
+          </div>
+        </aside>
+
+        <!-- Threat Results (right panel) -->
+        <section aria-label="Threat checklist" aria-live="polite">
+          <h2>Your Threat Checklist</h2>
+          <div id="results-count" class="results-count" hidden></div>
+          <div id="results-empty" class="results-empty" role="status">
+            ← Select one or more capabilities to generate your personalized threat checklist.
+          </div>
+          <div id="threat-list" class="threat-list" aria-label="Threat items"></div>
+        </section>
+      </div>
+    </main>
+    <Footer />
+
+    <script define:vars={{ threats: threatDb.threats, capabilities: threatDb.capabilities }}>
+      (() => {
+        const threatListEl = document.getElementById("threat-list");
+        const resultsEmptyEl = document.getElementById("results-empty");
+        const resultsCountEl = document.getElementById("results-count");
+        const selectAllBtn = document.getElementById("btn-select-all");
+
+        const capIconMap = Object.fromEntries(capabilities.map((c) => [c.id, c.icon]));
+        const capLabelMap = Object.fromEntries(capabilities.map((c) => [c.id, c.label]));
+
+        function getSelectedCaps() {
+          return Array.from(document.querySelectorAll(".cap-checkbox:checked")).map(
+            (el) => el.getAttribute("data-cap")
+          );
+        }
+
+        function severityOrder(s) {
+          return s === "critical" ? 0 : s === "high" ? 1 : 2;
+        }
+
+        function renderThreats() {
+          const selected = new Set(getSelectedCaps());
+
+          if (selected.size === 0) {
+            threatListEl.innerHTML = "";
+            resultsEmptyEl.removeAttribute("hidden");
+            resultsCountEl.setAttribute("hidden", "");
+            return;
+          }
+
+          const matching = threats
+            .filter((t) => t.capabilities.some((c) => selected.has(c)))
+            .sort((a, b) => severityOrder(a.severity) - severityOrder(b.severity));
+
+          resultsEmptyEl.setAttribute("hidden", "");
+
+          if (matching.length === 0) {
+            threatListEl.innerHTML = "";
+            resultsCountEl.removeAttribute("hidden");
+            resultsCountEl.innerHTML = "No threats matched for the selected capabilities.";
+            return;
+          }
+
+          resultsCountEl.removeAttribute("hidden");
+          resultsCountEl.innerHTML =
+            "Showing <strong>" + matching.length + "</strong> threat" +
+            (matching.length !== 1 ? "s" : "") +
+            " for <strong>" + selected.size + "</strong> selected capabilit" +
+            (selected.size !== 1 ? "ies" : "y") + ".";
+
+          const pathBase = location.pathname.replace(/\/threat-model\/?$/, "");
+
+          threatListEl.innerHTML = matching
+            .map((t) => {
+              const triggeredCaps = t.capabilities
+                .filter((c) => selected.has(c))
+                .map(
+                  (c) =>
+                    '<span class="cap-tag" title="' + (capLabelMap[c] || c) + '">' +
+                    (capIconMap[c] || "") + "&#8202;" + (capLabelMap[c] || c) + "</span>"
+                )
+                .join("");
+
+              return '<article class="threat-card" data-threat-id="' + t.id + '">' +
+                '<div class="threat-card-header">' +
+                '<h3>' + t.title + '</h3>' +
+                '<span class="severity-badge severity-' + t.severity + '" aria-label="Severity: ' + t.severity + '">' + t.severity + '</span>' +
+                '</div>' +
+                '<p class="threat-desc">' + t.description + '</p>' +
+                '<footer class="threat-footer">' +
+                '<a class="read-more-link" href="' + pathBase + '/blog/' + t.postSlug + '/" aria-label="Read more: ' + t.postTitle + '">' +
+                '📖 ' + t.postTitle + ' →' +
+                '</a>' +
+                '<span class="triggered-by" aria-label="Triggered by capabilities">' + triggeredCaps + '</span>' +
+                '</footer></article>';
+            })
+            .join("");
+        }
+
+        document.querySelectorAll(".cap-checkbox").forEach((cb) => {
+          cb.addEventListener("change", renderThreats);
+        });
+
+        let allSelected = false;
+        if (selectAllBtn) {
+          selectAllBtn.addEventListener("click", () => {
+            allSelected = !allSelected;
+            document.querySelectorAll(".cap-checkbox").forEach((cb) => {
+              cb.checked = allSelected;
+            });
+            selectAllBtn.textContent = allSelected ? "Clear All" : "Select All";
+            renderThreats();
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>
