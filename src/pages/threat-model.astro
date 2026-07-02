@@ -126,7 +126,7 @@ const pageDescription =
       }
 
       /* ── Results Panel ── */
-      .results-panel h2 {
+      section[aria-label="Threat checklist"] > h2 {
         font-size: 0.85em;
         text-transform: uppercase;
         letter-spacing: 0.06em;
@@ -277,7 +277,7 @@ const pageDescription =
         <section aria-label="Threat checklist">
           <h2>Your Threat Checklist</h2>
           <!-- aria-live wraps only the dynamic results, not the static heading -->
-          <div aria-live="polite" aria-atomic="false">
+          <div aria-live="polite" aria-atomic="true">
             <div id="results-count" class="results-count" hidden></div>
             <div id="results-empty" class="results-empty">
               ← Select one or more capabilities to generate your personalized threat checklist.
@@ -401,6 +401,12 @@ const pageDescription =
             renderThreats();
           });
         }
+
+        // Sync state on BFCache restore (browser back/forward navigation)
+        window.addEventListener("pageshow", () => {
+          updateSelectAllLabel();
+          renderThreats();
+        });
       })();
     </script>
   </body>

@@ -271,7 +271,7 @@
       "title": "Fine-Tuning Backdoors / Trojans in Training Pipeline",
       "description": "Attacker injects backdoor triggers during fine-tuning; the model behaves normally until a specific input pattern activates the trojan behavior.",
       "severity": "high",
-      "capabilities": ["code-execution", "external-apis"],
+      "capabilities": ["external-apis"],
       "postSlug": "fine-tuning-trojans-backdoors-training-pipeline",
       "postTitle": "Fine-Tuning Trojans: Backdoors in the Training Pipeline"
     }
