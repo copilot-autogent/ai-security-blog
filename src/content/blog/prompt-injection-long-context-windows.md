@@ -35,7 +35,7 @@ This is the well-documented indirect injection vector. Greshake et al. documente
 
 The inverse strategy is subtler and more durable. An attacker who knows that human reviewers scan documents for suspicious content — and that some mitigation systems flag content near prompt boundaries — can hide instructions in the middle of a very large context, where model attention is lower but not zero. The instruction's goal is not to fire immediately, but to:
 
-- **Gradually shift behavior** across a long session where accumulated context continuously repositions the injection toward the active reasoning window.
+- **Gradually shift behavior** in deployments that use retrieval-based or summarization-based memory, where injected content can be re-retrieved at a higher-attention position relative to later queries — distinct from linear-append chat histories where old turns recede from the recency boundary over time.
 - **Avoid detection** by human reviewers or pattern-based scanners who focus on the beginning and end of retrieved content.
 - **Activate conditionally** when a specific query later in the conversation retrieves context adjacent to the hidden instruction, bringing it back to a high-attention position.
 
@@ -95,7 +95,7 @@ The post is indexed. The instruction is not a hardcoded keyword attack — it's 
 
 **Attack execution.** A user contacts support about account access. The query semantically matches the forum post, which is retrieved in the top-10 chunks. The instruction is now in the assembled context, near the end (recent-forum-post retrieval bias). The agent asks the user for their password as part of "account verification."
 
-**What makes this long-context specific.** In a minimal retrieval window, the system prompt accounts for a larger fraction of total context and faces less competition from retrieved content. In a 50-chunk window at 128K context, the sheer volume of retrieved material creates more opportunities for injections to appear near high-attention boundaries and with strong semantic proximity to the user's query. This is not universal — many chat stacks maintain the system message in a structurally privileged position regardless of how much retrieved content follows, and architectural choices like system-prompt caching or separate attention prefixes can preserve system instruction weight. The threat is architecture-dependent: implementations that assemble system prompt and retrieved context as a single flattened sequence are more susceptible to context-volume dilution of system prompt influence than those with structural instruction privileging.
+**What makes this long-context specific.** In a minimal retrieval window, the system prompt accounts for a larger fraction of total context and faces less competition from retrieved content. In a 50-chunk window at 128K context, the sheer volume of retrieved material creates more opportunities for injections to appear near high-attention boundaries and with strong semantic proximity to the user's query. This is not universal — many chat stacks maintain the system message in a structurally privileged position regardless of how much retrieved content follows, and architectural choices like separate attention prefixes can preserve system instruction weight. (Note: prompt KV-caching is a latency optimization that does not change instruction attention or precedence.) The threat is architecture-dependent: implementations that assemble system prompt and retrieved context as a single flattened sequence are more susceptible to context-volume dilution of system prompt influence than those with structural instruction privileging.
 
 ## Mitigations
 
@@ -115,7 +115,7 @@ No single mitigation eliminates long-context injection risk. Defense-in-depth ap
 
 **Limit agent tool surface in long-context scenarios.** Agents that will process large amounts of external content should have a reduced tool set: avoid granting write access, email sending, or code execution capabilities to agents that routinely ingest unvetted external documents. Applying least-privilege specifically to long-context retrieval scenarios limits the blast radius of successful injections.
 
-**Regular red-team testing with injected documents.** Before production deployment, and periodically thereafter, insert known-malicious documents into the knowledge base and verify that injected instructions do not execute. Test across different retrieval positions — top-1, middle, end — to verify that defenses are not position-specific. Test with paraphrased injections, not just keyword attacks.
+**Regular red-team testing with injected documents.** Before production deployment, and periodically thereafter, insert known-malicious documents into the knowledge base and verify that injected instructions do not execute. Test across different retrieval positions — top-1, middle, end — to verify that defenses are not position-specific. Test with paraphrased injections, not just keyword attacks. Because prompt-injection behavior is stochastic and varies by model version and context composition, run each test case multiple times; a single passing trial can be a false negative from nondeterministic model behavior.
 
 ## The Structural Problem
 
