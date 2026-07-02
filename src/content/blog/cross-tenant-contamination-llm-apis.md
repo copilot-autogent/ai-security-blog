@@ -111,7 +111,7 @@ Serverless functions maintain **warm start pools**: after a function instance ha
 
 For LLM wrappers that maintain prompt context or conversation history as process-level state, warm-start reuse means the next request inherits the previous invocation's context. Unlike a typical stateless HTTP handler bug, the failure mode here is invisible: the new user's session appears to start fresh from their perspective, but the model is receiving their prompt against a context window that already contains another user's history.
 
-The core mitigation is ensuring conversation state is **scoped to the individual request** rather than to the process or module. In-process options include per-request object instantiation (creating a new history object within each invocation). Out-of-process options include keyed storage (e.g., Redis) with a per-request identifier, as long as the lookup key is derived from the current request and not shared across requests. What's unsafe is any architecture where a mutable session object is created once and reused across invocations, or where a reset-at-start approach races with concurrent requests sharing the same object.
+The core mitigation is ensuring conversation state is **scoped to the individual conversation** rather than to the process or module. In-process options include per-request object instantiation (creating a new history object within each invocation). Out-of-process options include keyed storage (e.g., Redis) scoped to a per-conversation or per-session identifier, as long as that key is unique to the user's conversation and not shared across different users' sessions. What's unsafe is any architecture where a mutable session object is created once and reused across invocations, or where a reset-at-start approach races with concurrent requests sharing the same object.
 
 ## Defense Landscape: What's Provably Safe vs. Best-Effort
 
@@ -119,15 +119,15 @@ The core mitigation is ensuring conversation state is **scoped to the individual
 
 Session bleed vulnerabilities are fully preventable through correct implementation:
 
-**Request-scoped session state.** Keep conversation history, memory buffers, and context objects scoped to the individual request — either by instantiating them fresh per invocation, or by keying them to a unique request identifier in external storage. Never share a single mutable session object across concurrent or sequential requests.
+**Conversation-scoped session state.** Keep conversation history, memory buffers, and context objects scoped to the individual conversation — either by instantiating them fresh per invocation, or by keying them to a unique conversation/session identifier in external storage. Never share a single mutable session object across concurrent or sequential requests from different users.
 
 **Scoped dependency injection.** In frameworks that support it, use request-scoped dependency injection for any component that holds conversation state. This makes session boundary management explicit in the code structure rather than relying on convention.
 
-**Stateless wrapper verification.** For functions handling LLM requests, write a test that sends two sequential requests with distinguishable user content and verifies that the response to the second request shows no knowledge of the first. This test should be part of the standard suite for any FaaS-deployed LLM application.
+**Stateless wrapper verification.** For functions handling LLM requests, write a test that sends two sequential requests with distinguishable user content and verifies that the second response shows no knowledge of the first. In concurrent environments, extend this to overlapping requests — session isolation is only confirmed if interleaved calls from separate users also stay clean. This test should be part of the standard suite for any FaaS-deployed LLM application.
 
 ### Best-Effort: Infrastructure Timing Mitigation
 
-**Deployment-specific prefix differentiation.** Including a short, stable, deployment-unique identifier at the start of every system prompt ensures your deployments don't share cache entries with other deployments in the same namespace. This prevents intra-namespace timing probes from revealing which system prompt your service uses. The identifier doesn't need to be secret; it needs to be unique and consistent. The cost: you lose cross-instance cache warming (two replicas of the same service build separate caches).
+**Deployment-specific prefix differentiation.** Including a short, stable, deployment-unique identifier at the start of every system prompt ensures your deployments don't share cache entries with other deployments in the same namespace. This prevents intra-namespace timing probes from revealing which system prompt your service uses. The identifier doesn't need to be secret; it needs to be unique and consistent. The cost: you lose the ability to share cache across *different* services or deployments; replicas of the same service using the same deployment identifier will still share cache with each other, which is usually desirable.
 
 **Latency normalization.** Some providers apply artificial normalization to reduce the observable timing differential between cached and uncached responses. When available, this degrades the oracle's signal-to-noise ratio. Operators have limited control over this; it's a provider-side mitigation.
 
