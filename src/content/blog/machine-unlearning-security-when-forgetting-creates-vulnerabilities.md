@@ -13,7 +13,7 @@ This post covers what machine unlearning is, why verification is so hard, how th
 
 ## What Machine Unlearning Is
 
-The naive implementation of the right to be forgotten in ML is **exact unlearning**: delete the data subject's records from the training set and retrain the model from scratch. This is the only method that offers a clean cryptographic guarantee — the final model was trained on data that does not include the removed examples.
+The naive implementation of the right to be forgotten in ML is **exact unlearning**: delete the data subject's records from the training set and retrain the model from scratch. This is the only method that offers a clean provable-equivalence guarantee — the final model was trained on data that does not include the removed examples, under the assumption that training is deterministic and data provenance is fully controlled. (The guarantee is not "cryptographic" in the formal sense: it depends on implementation fidelity, not a mathematical hardness assumption.)
 
 It is also completely impractical at scale. A large language model representing months of compute-time cannot be retrained every time a user submits a deletion request.
 
@@ -41,7 +41,7 @@ The standard verification primitive is the **membership inference attack**. Shok
 
 Deployed as a post-unlearning check: run a membership inference attack against the unlearned model with the supposedly-forgotten data as the "member" input. If the attack can still identify the deleted records as members, the unlearning was incomplete.
 
-This sounds like a solution. It has two significant problems.
+This sounds like a solution. It has three significant problems.
 
 **Problem 1: Statistical power.** Membership inference attacks don't have perfect accuracy even against *non-unlearned* models. For a record that was in the training set, a state-of-the-art attack might correctly classify it with 75–90% confidence — not 100%. After approximate unlearning, the model's behavior on the removed record shifts toward that of an unseen example. Whether the membership inference attack can detect this shift depends on how strong the original overfitting signal was and how thorough the unlearning approximation is.
 
@@ -49,11 +49,13 @@ For records that contributed only weakly to the model's learned parameters — b
 
 **Problem 2: The verification oracle is adversarially queryable.** A deletion requester who wants to *verify* that their data was forgotten can run membership inference themselves and check whether the signal persists. But an adversary who wants to exploit the verification protocol can also probe it — not just to check, but to infer which records *weren't* forgotten. More on this in the attack surface section.
 
+**Problem 3: The verification check requires the deleted data.** Running membership inference against the supposedly-forgotten records means retaining those records (or a recoverable derivative) after the deletion request — precisely to verify the deletion. This creates a real operational and legal tension: the privacy obligation that motivated the deletion request also constrains the auditor's ability to hold the deleted data for verification purposes. Practical deployments must scope this retention carefully, using hashed proxies or isolated verification stores that are themselves subject to deletion after the check completes.
+
 **Certified unlearning** attempts to close the verification gap formally. Guo et al. (2020) — "Certified Data Removal from Machine Learning Models" (ICML 2020) — introduced a Newton-step-based unlearning procedure for convex models with a provable bound: after applying the procedure, the unlearned model's parameters are within a bounded distance of what retraining from scratch would produce, with high probability. This is a mathematically precise statement of "we've forgotten the data, up to ε."
 
 The catch: convex model assumptions don't hold for deep neural networks, and extending the certification framework to LLMs remains an open problem. Sekhari et al. (2021) — "Remember What You Want to Forget: Algorithms for Machine Unlearning" (NeurIPS 2021) — sharpened the theoretical treatment, establishing sample complexity bounds for certified unlearning under more general conditions. The theory is advancing; practical deployment at LLM scale has not caught up.
 
-The honest state of affairs: **no widely deployed unlearning technique offers cryptographic-strength verification for large neural networks.** Approximate unlearning produces approximate guarantees.
+The honest state of affairs: **no widely deployed unlearning technique offers formally verifiable guarantees for large neural networks.** Approximate unlearning produces approximate guarantees, and verifying even those approximations is operationally constrained.
 
 ## Attack Vector 1: Induced Forgetting
 
@@ -117,7 +119,7 @@ Every unlearning request is a model-modifying event. It should be logged, reprod
 
 **Post-unlearning regression suites.** After any unlearning operation, run the model against a battery of behavioral probes: capability benchmarks, safety probes, and task-specific evaluations. A statistically significant drop in safety-related metrics is a signal that the unlearning operation affected more than the intended data.
 
-**Differential comparison against baseline.** Maintain a reference checkpoint of the model pre-unlearning. After each unlearning operation, compute the behavioral delta between the current model and the reference. Large deltas on safety-sensitive inputs are a red flag even if the aggregate benchmark scores don't move.
+**Differential comparison against a behavioral snapshot.** Rather than retaining a full pre-unlearning model checkpoint (which would itself encode the data targeted for deletion), maintain a behavioral snapshot: a fixed probe set and the model's cached outputs on those probes before unlearning. Compare outputs post-unlearning against the snapshot to detect unexpected behavioral drift on safety-sensitive inputs. This avoids the data-retention problem of storing a full checkpoint.
 
 ### Implementation: Unlearning-Resistant Safety Training
 
@@ -137,13 +139,13 @@ The most straightforward defense against induced forgetting is narrowing what ca
 
 **Distinguish personal data from training corpora.** GDPR deletion rights apply to personal data about the data subject. A training corpus that happens to contain a passage written by a data subject is different from a model that is *processing* that person's personal data. The legal distinction matters — and operationally, it suggests that unlearning pipelines should require clear documentation that the data being deleted is personal data, not just content the requester objects to.
 
-**Human-feedback data as a special category.** RLHF preference data often contains information about the annotators (timing, patterns, demographics). Treating this data as a special category — stored separately, with deletion handled at the annotator level rather than the model level — prevents deletion requests from touching the safety fine-tuning signal.
+**Human-feedback data as a special category.** RLHF preference data often contains information about the annotators (timing, patterns, demographics). Treating this data as a special category — stored separately, with annotator personal data deletable at the storage layer — limits the blast radius of deletion requests. A key caveat: deleting raw annotator records does not remove the *model influence* those examples already had during fine-tuning. Organizations that genuinely need to remove that influence must either apply approximate unlearning to the affected fine-tuning examples or retrain the safety stage — there is no shortcut here. The practical benefit of special-category scoping is preventing future unlearning requests from targeting the safety fine-tuning stage, not reversing historical influence.
 
-**Audit trails for deletion requests.** An append-only log of all deletion requests, requesters, claimed grounds, and post-unlearning behavioral snapshots creates an accountability record that enables detection of coordinated campaigns — many small requests from different identities targeting the same behavioral capability.
+**Audit trails for deletion requests.** An append-only log of deletion requests, claimed grounds, and post-unlearning behavioral change metrics creates an accountability record that enables detection of coordinated campaigns — many small requests from different identities targeting the same behavioral capability. This log is itself a data store subject to privacy obligations: it should be minimized to operational metadata (request ID, claimed legal basis, behavioral metric delta) rather than containing the deleted records or requester PII beyond what is legally required. Retention should be time-bounded and governed by the same framework applied to other operational logs.
 
 ## The MITRE ATLAS View
 
-The unlearning attack surface maps to several MITRE ATLAS techniques. **AML.T0020** (Poison Training Data) captures the scenario where an adversary's contribution to a training corpus is strategically designed to be a high-value deletion target later. **AML.T0018** (Backdoor ML Model) applies if the poison is designed to create a backdoor that survives most unlearning attempts — a "sticky backdoor" that resists gradient ascent because it was designed with knowledge of the unlearning mechanism. The induced forgetting attack is closer to **AML.T0047** (Erode ML Model Integrity) — using the model's own operational interface to degrade its integrity over time.
+The unlearning attack surface maps to several MITRE ATLAS techniques. **AML.T0020** (Poison Training Data) captures the scenario where an adversary's contribution to a training corpus is strategically designed to be a high-value deletion target later. **AML.T0018** (Backdoor ML Model) applies if the poison is designed to create a backdoor that survives most unlearning attempts — a "sticky backdoor" that resists gradient ascent because it was designed with knowledge of the unlearning mechanism. The induced forgetting attack maps to the broader ATLAS goal of eroding model integrity through the model's own operational interface — a pattern that spans multiple ATLAS techniques depending on the specific vector.
 
 ## Where the Field Is
 
