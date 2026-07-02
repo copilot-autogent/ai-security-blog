@@ -2,7 +2,7 @@
 title: "Cross-Tenant Contamination in LLM APIs: When Other Users' Context Leaks Into Your Session"
 description: "Multi-tenant LLM deployments — shared inference infrastructure, KV cache reuse, batched requests — create subtle cross-tenant data exposure risks that differ from classical API security vulnerabilities. This post maps the threat surface unique to shared AI inference."
 pubDate: 2026-07-02
-tags: ["multi-tenant", "inference-infrastructure", "kv-cache", "side-channel", "llm-security", "session-isolation"]
+tags: ["prompt-caching", "timing-attacks", "kv-cache", "side-channel", "llm-security"]
 ---
 
 Thousands of users share the same GPU. Literally. When you send a prompt to a commercial LLM API, it joins a queue of requests executing on shared inference hardware, sharing memory with concurrent requests, and in some configurations sharing cached computation with users who sent similar prompts minutes or hours before. What prevents your prompt from bleeding into the next request — and what happens when that isolation fails?
@@ -19,7 +19,7 @@ This mechanism — **KV cache sharing** — is one of the highest-impact optimiz
 
 Beyond caching, large inference deployments use **request batching**: multiple user prompts are processed together in a single forward pass. Speculative decoding adds another layer — a small draft model generates candidate tokens, which the main model verifies in parallel, often across multiple pending requests. Each of these efficiency mechanisms creates a surface where the boundary between one user's state and another's must be carefully maintained.
 
-At the infrastructure layer, major providers handle tenant isolation primarily through **account-level cache namespacing**: your account's KV cache entries are keyed separately from other accounts', even for identical prompt prefixes. OpenAI's automatic prompt caching (triggered for prefixes ≥1,024 tokens) and Anthropic's explicit `cache_control` API work within this account-namespaced model. What neither provider publicly documents is *how* isolation is enforced at the storage layer — routing-level policy, storage-level key partitioning, or both.
+At the infrastructure layer, major providers document tenant isolation through **account-level cache namespacing**: your account's KV cache entries are keyed separately from other accounts', even for identical prompt prefixes. OpenAI's automatic prompt caching (triggered for prefixes ≥1,024 tokens) and Anthropic's explicit `cache_control` API work within this account-namespaced model. Importantly, what neither provider publicly documents is *how* isolation is enforced at the storage layer — routing-level policy, storage-level key partitioning, or both. The account-namespacing behavior is a claimed property, not an independently verifiable architectural guarantee.
 
 ## KV Cache Timing Attacks: Extended to Multi-Tenant Scenarios
 
@@ -29,7 +29,7 @@ The core mechanism is unchanged: a cached prefix returns a measurable latency re
 
 ### The Intra-Account Case (Confirmed Concern)
 
-Under standard per-account namespacing, a cache timing oracle operates within an account's own namespace. An attacker with partial account access — a compromise of one API key in a multi-deployment organization — can probe whether other deployments within the same account recently used a particular system prompt prefix. This enables configuration mapping: inferring what system prompts are in use across the organization without direct access to those deployments' configuration.
+Under documented per-account namespacing, a cache timing oracle operates within an account's own namespace. An attacker with partial account access — a compromise of one API key in a multi-deployment organization — can probe whether other deployments within the same account recently used a particular system prompt prefix. This enables configuration mapping: inferring what system prompts are in use across the organization without direct access to those deployments' configuration.
 
 The probe procedure:
 1. Establish a cold-start baseline: measure time-to-first-token for a fresh prefix of the same length on first use.
@@ -41,7 +41,7 @@ The probe procedure:
 
 ### The Cross-Account Case (Structural Risk, Not Confirmed)
 
-Cross-account timing inference would require isolation to be weaker than providers document. Under strict per-account namespacing, an attacker's API calls touch only their own cache namespace, regardless of what other accounts' prompts contain. No cross-account timing signal exists.
+Cross-account timing inference would require isolation to be weaker than providers document. Under the claimed per-account namespacing model, an attacker's API calls touch only their own cache namespace, regardless of what other accounts' prompts contain. No cross-account timing signal exists within that model.
 
 That the documented model *prohibits* this attack class is meaningful — but it's a claim that hasn't been independently verified. Providers haven't published storage-layer architecture documentation to confirm that isolation is enforced at the key-value store level rather than only at the routing/application layer. Transient misconfigurations during failover, cache migration, or maintenance windows represent a realistic (if unpublished) exposure window.
 
@@ -49,9 +49,9 @@ That the documented model *prohibits* this attack class is meaningful — but it
 
 ## Prefix Probing: Inferring Other Tenants' System Prompts
 
-A more targeted attack uses timing observations to infer specific content from another tenant's session — not merely whether cache activity occurred, but what the cached prefix contains.
+A more targeted attack uses timing observations to test specific hypotheses about another tenant's cached content — not merely whether cache activity occurred, but whether a particular known prefix is cached.
 
-The method is a **binary search over prefix space**. An attacker who suspects a competitor uses a specific system prompt template can craft a series of queries with increasing prefix specificity and measure cache-hit status at each step. Because cache keys derive from the full prefix content (hashed), a hit on prefix P₁ but miss on P₁ + token T implies the target's cached prefix diverges from P₁ + T after that point.
+The method is an **iterative candidate validation** approach. An attacker who suspects a competitor uses a specific system prompt template can craft queries with specific candidate prefixes and measure cache-hit status for each. Because cache keys derive from the full prefix content (hashed), a hit on candidate P₁ but a miss on candidate P₂ narrows down which prefix variant the target deployment is using. Note that this is not a general-purpose search: the prefix space is not ordered, hashed keys carry no structural information about their content, and the oracle cannot enumerate unknown content from scratch. It can only confirm or deny specific candidate guesses.
 
 Under per-account namespacing, this attack cannot cross account boundaries: the attacker's measurements only observe their own cache state. The threat is real only if:
 
@@ -60,13 +60,13 @@ Under per-account namespacing, this attack cannot cross account boundaries: the 
 
 For **multi-tenant platforms that expose shared LLM backends** — enterprise orchestration tools, API aggregators, shared-workspace applications where multiple users or teams hit the same underlying inference endpoint under a single provider account — the intra-account scenario is directly applicable. An attacker who is a legitimate user of the shared platform can probe the cache namespace shared across that platform's tenants.
 
-**What can actually be inferred?** Given that cache keys are typically derived by hashing the prefix token sequence, the attacker must already have a candidate prefix to test. The oracle cannot enumerate unknown content from scratch; it can only confirm or deny specific guesses. The practical attack combines prefix probing with:
+**What can actually be inferred?** The oracle can validate guesses from a constrained candidate set, not freely reconstruct arbitrary text. The practical attack combines prefix probing with:
 
 - Known-template reasoning (common LLM system prompt patterns are publicly documented)
 - Business intelligence about the target organization's LLM deployment
 - Prior partial exposures that seed the guessing space
 
-Against a target whose system prompt is a standard template with moderate customization, a patient attacker can reconstruct the customized portions through iterative probing.
+Against a target whose system prompt is drawn from a known template with limited customization, an attacker with a good candidate set can confirm or rule out specific variants. The attack's efficacy is bounded by the quality of the candidate hypotheses — it is not a reconstruction attack against unknown content.
 
 ## Speculative Decoding and Token Leakage: Theoretical Limits
 
@@ -107,7 +107,7 @@ Serverless functions maintain **warm start pools**: after a function instance ha
 
 For LLM wrappers that maintain prompt context or conversation history as process-level state, warm-start reuse means the next request inherits the previous invocation's context. Unlike a typical stateless HTTP handler bug, the failure mode here is invisible: the new user's session appears to start fresh from their perspective, but the model is receiving their prompt against a context window that already contains another user's history.
 
-Mitigation is straightforward in principle but easy to miss in practice: **explicitly reset all session state at the start of each request handler invocation**, even in warm-start execution. Don't rely on constructor initialization or module-level defaults for state that must be per-request.
+The root mitigation is structural: **avoid shared mutable session state entirely** by keeping all conversation state within the request-handler's own execution scope. Never store conversation history as a module-level or class-level attribute that persists across invocations. Note that resetting mutable shared state at the start of each request handler is insufficient in concurrent environments — a race between two concurrent requests can corrupt one session with another's state even with reset logic in place. The only safe approach is per-request instantiation.
 
 ## Defense Landscape: What's Provably Safe vs. Best-Effort
 
@@ -115,7 +115,7 @@ Mitigation is straightforward in principle but easy to miss in practice: **expli
 
 Session bleed vulnerabilities are fully preventable through correct implementation:
 
-**Explicit per-request initialization.** Create conversation history, memory buffers, and context objects within the request handler scope, not at module or class initialization scope. Never share mutable LLM session state across concurrent requests.
+**Explicit per-request instantiation.** Create conversation history, memory buffers, and context objects within the request handler scope, not at module or class initialization scope. Never share mutable LLM session state across concurrent requests. This is the structural fix — reset-at-start-of-handler approaches are fragile under concurrency.
 
 **Scoped dependency injection.** In frameworks that support it, use request-scoped dependency injection for any component that holds conversation state. This makes session boundary management explicit in the code structure rather than relying on convention.
 
@@ -145,7 +145,7 @@ None of the major commercial providers have published this information as of thi
 |---|---|---|
 | Session bleed via shared conversation history (FaaS) | Application-layer bug (no provider weakness needed) | **Confirmed real pattern** — preventable |
 | Intra-account cache timing oracle (known prefix test) | Partial account access | **Plausible/theoretical** — analogous attacks well-demonstrated; LLM-specific not peer-reviewed |
-| Prefix probing to reconstruct another deployment's system prompt | Intra-account namespace sharing + known-template guessing | **Plausible/theoretical** — requires known prefix candidates |
+| Prefix candidate validation against another deployment's system prompt | Intra-account namespace sharing + strong prior candidate set | **Plausible/theoretical** — requires candidate hypotheses; not a reconstruction attack |
 | Cross-account cache timing inference | Provider isolation weaker than documented | **Not supported** under documented isolation model |
 | Speculative decoding token leakage across tenant boundary | Implementation failure in draft/verify separation | **Speculative** — no production reports |
 | Cache namespace injection via second-preimage collision | Breaking provider's cache key hash scheme | **Speculative** — hard under well-designed schemes |
