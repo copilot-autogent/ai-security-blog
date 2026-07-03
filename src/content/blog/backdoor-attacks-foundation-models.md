@@ -13,7 +13,7 @@ This is the core problem of **backdoor attacks in foundation models**. The trigg
 
 The attack class traces back to vision models. Gu et al. (2017) demonstrated **BadNets**: a poisoned neural network that classified images normally except when a small sticker pattern appeared in the corner, in which case it output the attacker's chosen label. The attack was conceptually simple — a small fraction of training images were patched with the trigger and relabeled — but its implications were serious. Neural networks trained on poisoned data don't just overfit to the poison; they encode an *additional conditional behavior* that generalizes: the trigger-activated pathway is robust, stable, and separable from normal operation.
 
-The extension to natural language required solving a different problem. Images can carry a continuous trigger (a pixel patch); text is discrete. Early NLP backdoors used rare words or phrases as triggers — fixed token sequences inserted into otherwise normal sentences. Liu et al. (2018) showed that trojaned behavior could be injected not just at data-poisoning time but directly via weight manipulation — an attacker with access to the model architecture but not the training pipeline could implant triggers post-hoc.
+The extension to natural language required solving a different problem. Images can carry a continuous trigger (a pixel patch); text is discrete. Early NLP backdoors used rare words or phrases as triggers — fixed token sequences inserted into otherwise normal sentences (Chen et al., 2017). Liu et al. (2018) showed that trojaned behavior could be injected not just at data-poisoning time but directly via weight manipulation — an attacker with access to the model architecture but not the training pipeline could implant triggers post-hoc.
 
 What changes with scale is the attack surface — and the risk profile. Foundation models are pre-trained on data scraped from the internet by organizations with resources most practitioners don't have; fine-tuned with task-specific data by teams that rarely inspect the pre-trained backbone; and deployed at scale as shared APIs or open-weight downloads. The combination creates a supply-chain attack vector that maps directly onto how the industry operates.
 
@@ -23,7 +23,7 @@ Backdoor attacks on LLMs don't form a monolithic threat — the attack vector, t
 
 ### Data Poisoning: Dirty-Label vs. Clean-Label
 
-**Dirty-label attacks** are the original formulation: a small fraction of training samples are modified with the trigger and relabeled to the target output. Effective but detectable — a careful audit of training data can identify mislabeled examples.
+**Dirty-label attacks** are the original formulation: a small fraction of training samples are modified with the trigger and relabeled to the target output (Chen et al., 2017). Effective but detectable — a careful audit of training data can identify mislabeled examples.
 
 **Clean-label attacks** are harder to detect. The trigger is embedded in correctly labeled examples, often invisibly (via adversarial perturbation in vision, or semantically neutral token insertion in text). The poisoned sample is indistinguishable from a clean sample to a human annotator; it gets labeled correctly; and the model learns to associate the trigger with the target output anyway, because the trigger co-occurs consistently across the poisoned subset.
 
@@ -113,7 +113,7 @@ Detection methods find backdoors if you know to look. Mitigation strategies eith
 
 An attacker's trigger typically relies on specific surface-level patterns being preserved through the input pipeline. Input preprocessing that perturbs, paraphrases, or normalizes inputs can deactivate triggers without knowing what they are.
 
-For text: paraphrasing a user's input (via a separate model or rule-based rewrite) before passing it to the target model can disrupt lexical triggers. Sentence compression or token-level perturbation (random deletion, synonym substitution) degrades trigger reliability. The tradeoff is input fidelity — aggressive preprocessing may degrade legitimate task performance.
+For text: paraphrasing a user's input (via a separate model or rule-based rewrite) before passing it to the target model can disrupt lexical triggers. Sentence compression or token-level perturbation (random deletion, synonym substitution) degrades trigger reliability. The tradeoff is input fidelity — aggressive preprocessing may degrade legitimate task performance, and for code generation or other precision-sensitive applications, semantic-preserving transformations must be used with care; aggressive modification of code-related inputs can introduce new errors or mask the very intent the model is meant to act on.
 
 This is a **soft defense**: it raises the bar for attackers but doesn't eliminate the risk. A well-designed trigger will be robust to moderate paraphrasing; an attacker who anticipates preprocessing can optimize for robustness.
 
@@ -121,7 +121,7 @@ This is a **soft defense**: it raises the bar for attackers but doesn't eliminat
 
 If you cannot audit the model before deployment, you can monitor its activations at inference time. Baseline the activation distributions on clean validation data; flag inputs that produce activation patterns more than *k* standard deviations from baseline. Triggered inputs often produce distinctive activations in early layers.
 
-This requires ongoing monitoring infrastructure and a clean baseline dataset. False positive rates depend on the threshold and the diversity of legitimate inputs; distribution-shifted legitimate queries can also produce outlier activations.
+This requires ongoing monitoring infrastructure and a carefully chosen baseline dataset. LLM activations under natural prompt diversity are highly multimodal — different task types, topics, and input lengths produce meaningfully different activation profiles — so false positive rates can be high unless the baseline reflects the actual distribution of expected production inputs. Practical deployments narrow the detection scope to specific layers or neuron subsets, which reduces noise but may miss deeply distributed backdoors. Distribution-shifted legitimate queries can also produce outlier activations.
 
 ### Cryptographic Integrity Checks on Model Weights
 
@@ -159,7 +159,7 @@ The threat is real, the detection tools exist (at a cost), and the mitigations a
 
 ## References
 
-- Gu, T., Dolan-Gavitt, B., & Garg, S. (2017). **BadNets: Identifying Vulnerabilities in the Machine Learning Model Supply Chain**. *arXiv:1708.06733*.
+- Gu, T., Dolan-Gavitt, B., & Garg, S. (2017). **BadNets: Identifying Vulnerabilities in the Machine Learning Model Supply Chain**. *arXiv:1708.06733 / IEEE Access 2019*.
 - Liu, Y., Ma, S., Aafer, Y., Lee, W.-C., Zhai, J., Wang, W., & Zhang, X. (2018). **Trojaning Attack on Neural Networks**. *NDSS 2018*.
 - Liu, K., Dolan-Gavitt, B., & Garg, S. (2018). **Fine-Pruning: Defending Against Backdooring Attacks on Deep Neural Networks**. *RAID 2018*.
 - Chen, X., Liu, C., Li, B., Lu, K., & Song, D. (2017). **Targeted Backdoor Attacks on Deep Learning Systems Using Data Poisoning**. *arXiv:1712.05526*.
