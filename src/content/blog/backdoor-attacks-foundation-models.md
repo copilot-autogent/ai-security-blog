@@ -13,7 +13,7 @@ This is the core problem of **backdoor attacks in foundation models**. The trigg
 
 The attack class traces back to vision models. Gu et al. (2017) demonstrated **BadNets**: a poisoned neural network that classified images normally except when a small sticker pattern appeared in the corner, in which case it output the attacker's chosen label. The attack was conceptually simple — a small fraction of training images were patched with the trigger and relabeled — but its implications were serious. Neural networks trained on poisoned data don't just overfit to the poison; they encode an *additional conditional behavior* that generalizes: the trigger-activated pathway is robust, stable, and separable from normal operation.
 
-The extension to natural language required solving a different problem. Images can carry a continuous trigger (a pixel patch); text is discrete. Early NLP backdoors used rare words or phrases as triggers — fixed token sequences inserted into otherwise normal sentences (Chen et al., 2017). Liu et al. (2018) showed that trojaned behavior could be injected not just at data-poisoning time but directly via weight manipulation — an attacker with access to the model architecture but not the training pipeline could implant triggers post-hoc.
+The extension to natural language required solving a different problem. Images can carry a continuous trigger (a pixel patch); text is discrete. Early NLP backdoors used rare words or phrases as triggers — fixed token sequences inserted into otherwise normal sentences. Liu et al. (2018, NDSS) showed that trojaned behavior could be injected not just at data-poisoning time but directly via weight manipulation — an attacker with access to the model architecture but not the training pipeline could implant triggers post-hoc.
 
 What changes with scale is the attack surface — and the risk profile. Foundation models are pre-trained on data scraped from the internet by organizations with resources most practitioners don't have; fine-tuned with task-specific data by teams that rarely inspect the pre-trained backbone; and deployed at scale as shared APIs or open-weight downloads. The combination creates a supply-chain attack vector that maps directly onto how the industry operates.
 
@@ -29,7 +29,7 @@ Backdoor attacks on LLMs don't form a monolithic threat — the attack vector, t
 
 ### Model-Level Weight Injection
 
-Liu et al. (2018) showed that trojans can be injected directly into model weights without access to the training process. The attacker identifies neurons or circuits that activate rarely under normal inputs, then modifies weights to make those circuits activate on trigger inputs and drive toward the target output. This attack is particularly relevant for the open-weight ecosystem: a model that was clean at original release could be trojaned by a malicious actor, re-uploaded under a similar name, and downloaded by practitioners who assume they're getting the original.
+Liu et al. (2018, NDSS) showed that trojans can be injected directly into model weights without access to the training process. The attacker identifies neurons or circuits that activate rarely under normal inputs, then modifies weights to make those circuits activate on trigger inputs and drive toward the target output. This attack is particularly relevant for the open-weight ecosystem: a model that was clean at original release could be trojaned by a malicious actor, re-uploaded under a similar name, and downloaded by practitioners who assume they're getting the original.
 
 ### BadChain: Chain-of-Thought Backdoors via Demonstrations
 
@@ -45,7 +45,7 @@ The empirical evidence says no — and the theoretical explanation clarifies why
 
 ### Activation Pathway Analysis
 
-A backdoored model learns two distinct modes of operation: a normal mode, which responds to task-relevant features, and a trigger mode, which activates the poisoned pathway. Researchers examining internal activations find that these modes are **neurally separable** — the trigger-activated computation routes through a distinct subset of neurons and layers from the normal forward pass (Wang et al., Neural Cleanse, 2019; Tran et al., Spectral Signatures, 2018).
+A backdoored model learns two distinct modes of operation: a normal mode, which responds to task-relevant features, and a trigger mode, which activates the poisoned pathway. Researchers examining internal activations — primarily in image classifier settings — find that these modes are **neurally separable**: the trigger-activated computation routes through a distinct subset of neurons and layers from the normal forward pass (Wang et al., Neural Cleanse, 2019; Tran et al., Spectral Signatures, 2018). The analogous pathway-separation structure in LLMs is less formally characterized but consistent with the mechanistic interpretability literature on circuits and superposition.
 
 This separability is exactly what makes backdoors robust to fine-tuning. Fine-tuning on clean task data updates the parameters associated with the normal pathway — the features that matter for the fine-tuning objective. The trigger pathway receives little gradient signal from clean data, because clean data never activates it. The trojan representations are most strongly encoded in **early layers**: the model's early layers learn that the trigger pattern predicts a specific representation, and this association is preserved through fine-tuning because downstream layers adapt to match whatever the early layers produce.
 
@@ -77,17 +77,17 @@ An attacker publishes a LoRA adapter for a popular base model — useful for som
 
 ### Fine-Tuning APIs
 
-Several commercial and open-source platforms allow users to fine-tune models on uploaded datasets, with the resulting model returned as a deployable artifact. If the platform's fine-tuning pipeline uses a shared backbone that is incrementally updated by user uploads, a poisoning attack against that backbone affects all models fine-tuned from it. This threat is harder to mount than the download attack (it requires many poisoned submissions), but the blast radius is correspondingly larger.
+Some platforms allow users to fine-tune models on uploaded datasets, returning the resulting model as a deployable artifact. A speculative but architecturally coherent variant of this attack involves a shared backbone incrementally updated by user-uploaded data: a poisoning attack against that backbone could then affect all models fine-tuned from it. This threat is harder to mount than the download attack and would require many poisoned submissions. Whether any production platform today uses shared-backbone fine-tuning in this way is not publicly documented; the risk is included here as an architectural pattern to watch for as fine-tuning APIs evolve.
 
 ## Detection: Activation Clustering, Spectral Signatures, Neural Cleanse
 
-Several detection approaches exist. They vary in what information they require and what guarantees they provide.
+Several detection approaches exist. They were largely developed and validated in image-classifier settings; their applicability to generative LLMs often requires adaptation, and that adaptation is an active research area. What follows describes the techniques as originally proposed with notes on LLM-specific limitations.
 
 ### Activation Clustering (Chen et al., 2019)
 
 The intuition: poisoned and clean samples are statistically separable in activation space. If you have access to a sample of training data and can inspect model activations, you can cluster the activations for a given class. Clean samples for a class cluster together; poisoned samples (which activate the trigger pathway) may cluster separately. If two clusters appear where one is expected, the smaller cluster is suspicious.
 
-**Cost and limitations**: Requires access to training data or a proxy dataset. Works well for dirty-label attacks where the trigger pathway produces a distinctive activation signature. Weaker against clean-label attacks where poisoned samples don't cluster as cleanly. Provides suspicion, not proof: a secondary cluster can reflect normal data substructure, not a trigger.
+**Cost and limitations**: Requires access to training data or a proxy dataset. Works well for dirty-label attacks where the trigger pathway produces a distinctive activation signature. Weaker against clean-label attacks where poisoned samples don't cluster as cleanly. Provides suspicion, not proof: a secondary cluster can reflect normal data substructure, not a trigger. For generative LLMs, "class" boundaries don't exist in the same way; detecting trigger-activated activation modes requires defining proxy tasks or output categories.
 
 ### Spectral Signatures (Tran et al., 2018)
 
@@ -99,7 +99,7 @@ Tran et al. showed that backdoored models leave a **spectral signature** in the 
 
 Neural Cleanse takes a different approach: rather than detecting poisoned data, it attempts to **reverse-engineer the trigger** by asking what small perturbation, added to inputs of each class, causes the model to misclassify toward the target class. If any class can be "flipped" with an unusually small perturbation, a backdoor is likely present, and the small perturbation approximates the trigger.
 
-**Cost and limitations**: Computationally expensive — requires optimization over the input space for each candidate target class. Requires a set of clean probe inputs (a validation dataset), though not the original poisoned training data. The trigger reverse-engineering is approximate; complex or distributed triggers may not be reconstructed accurately. Requires white-box access to model activations and gradients.
+**Cost and limitations**: Computationally expensive — requires optimization over the input space for each candidate target class. Requires a set of clean probe inputs (a validation dataset), though not the original poisoned training data. The trigger reverse-engineering is approximate; complex or distributed triggers may not be reconstructed accurately. Requires white-box access to model activations and gradients. The technique was designed for classifiers; adapting it to open-ended generative LLMs (where there is no fixed target class to "flip" toward) requires nontrivial reformulation.
 
 ### What These Methods Don't Cover
 
@@ -127,7 +127,7 @@ This requires ongoing monitoring infrastructure and a carefully chosen baseline 
 
 If you download a model from an external repository, verify that what you downloaded matches what the repository claimed to publish. Cryptographic hashes of model weights (SHA-256 of the checkpoint file) can detect post-publication tampering — if a malicious actor re-uploads a trojaned version of a published checkpoint, the hash will differ.
 
-This defense works against **upload-substitution attacks** (attacker replaces the legitimate upload with a poisoned one) but not against **original-publish attacks** (the original publisher released a backdoored model). Hugging Face and similar platforms provide commit-level hashes; reproducible training pipelines that allow weight provenance verification provide stronger guarantees.
+This defense works against **upload-substitution attacks** (attacker replaces the legitimate upload with a poisoned one) but not against **original-publish attacks** (the original publisher released a backdoored model). Hashes provided by the same hosting platform that stores the weights only prove integrity relative to that platform: a compromised operator could update both weights and the displayed hash simultaneously. Stronger assurances require signed provenance (e.g., model cards with signatures from the original training organization) or out-of-band verification against an independent source.
 
 ### Training Data Auditing
 
@@ -151,7 +151,7 @@ The mitigations above work against specific attack variants under specific assum
 
 The practical implication for practitioners: **downloaded model weights should be treated as untrusted inputs** until verified, in the same way that downloaded code packages are not trusted without dependency auditing. The verification infrastructure is less mature for weights than for code, but the principle is the same.
 
-For high-stakes deployments, this means: running activation clustering or Neural Cleanse before production deployment; maintaining a clean validation set specifically for trigger detection; monitoring inference-time activations against a clean baseline; and preferring models with reproducible training pipelines and published weight provenance.
+For high-stakes deployments, this means: running activation clustering or spectral signature analysis before production deployment (recognizing that these were developed for classifier settings and may need adaptation for generative LLMs); maintaining a clean validation set specifically for trigger detection; monitoring inference-time activations against a task-specific clean baseline; and preferring models with reproducible training pipelines and signed weight provenance.
 
 The threat is real, the detection tools exist (at a cost), and the mitigations are imperfect but meaningful. The gap between current practice — download, fine-tune, deploy — and defensible practice is large, and closing it requires treating model supply-chain security as a first-class concern alongside code dependency security.
 
@@ -159,11 +159,11 @@ The threat is real, the detection tools exist (at a cost), and the mitigations a
 
 ## References
 
-- Gu, T., Dolan-Gavitt, B., & Garg, S. (2017). **BadNets: Identifying Vulnerabilities in the Machine Learning Model Supply Chain**. *arXiv:1708.06733 / IEEE Access 2019*.
+- Gu, T., Dolan-Gavitt, B., & Garg, S. (2017). **BadNets: Identifying Vulnerabilities in the Machine Learning Model Supply Chain**. *IEEE Access 2019 (arXiv:1708.06733)*.
 - Liu, Y., Ma, S., Aafer, Y., Lee, W.-C., Zhai, J., Wang, W., & Zhang, X. (2018). **Trojaning Attack on Neural Networks**. *NDSS 2018*.
 - Liu, K., Dolan-Gavitt, B., & Garg, S. (2018). **Fine-Pruning: Defending Against Backdooring Attacks on Deep Neural Networks**. *RAID 2018*.
-- Chen, X., Liu, C., Li, B., Lu, K., & Song, D. (2017). **Targeted Backdoor Attacks on Deep Learning Systems Using Data Poisoning**. *arXiv:1712.05526*.
+- Chen, X., Liu, C., Li, B., Lu, K., & Song, D. (2017). **Targeted Backdoor Attacks on Deep Learning Systems Using Data Poisoning**. *arXiv preprint arXiv:1712.05526*.
 - Tran, B., Li, J., & Madry, A. (2018). **Spectral Signatures in Backdoor Attacks**. *NeurIPS 2018*.
 - Wang, B., Yao, Y., Shan, S., Li, H., Viswanath, B., Zheng, H., & Zhao, B. Y. (2019). **Neural Cleanse: Identifying and Mitigating Backdoor Attacks in Neural Networks**. *IEEE S&P 2019*.
 - Chen, B., Carvalho, W., Baracaldo, N., Ludwig, H., Edwards, B., Lee, T., Molloy, I., & Srivastava, B. (2019). **Detecting Backdoor Attacks on Deep Neural Networks by Activation Clustering**. *AAAI Workshop on Artificial Intelligence Safety 2019*.
-- Xiang, Z., Jiang, F., Xiong, Z., Ramasubramanian, B., Poovendran, R., & Li, B. (2024). **BadChain: Backdoor Chain-of-Thought Prompting for Large Language Models**. *arXiv:2401.12242*.
+- Xiang, Z., Jiang, F., Xiong, Z., Ramasubramanian, B., Poovendran, R., & Li, B. (2024). **BadChain: Backdoor Chain-of-Thought Prompting for Large Language Models**. *arXiv preprint arXiv:2401.12242*.
