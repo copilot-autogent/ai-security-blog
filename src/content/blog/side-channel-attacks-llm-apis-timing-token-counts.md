@@ -1,6 +1,6 @@
 ---
 title: "Side-Channel Attacks on LLM APIs: What Response Timing and Token Counts Reveal"
-description: "LLM API responses leak information through observable metadata: token generation speed, streaming first-token latency, exact token counts, and chunk timing. Adversaries can infer system prompt contents, model config, and user session patterns without ever reading the actual text."
+description: "How LLM API metadata — token counts, timing, and streaming patterns — leaks system prompt structure and model configuration to adversaries."
 pubDate: 2026-07-03
 tags: ["side-channel", "llm-security", "api-security", "token-inference", "timing-attacks", "threat-modeling"]
 ---
@@ -9,7 +9,7 @@ Most LLM security analysis focuses on what the model *says*: jailbreaks, prompt 
 
 This post examines metadata-based side channels in LLM APIs: the timing, token count, and streaming structure signals that observers can extract from ordinary API responses. The attack surface is distinct from KV-cache cross-user leakage (covered separately in our [adversarial prompt caching post](/blog/adversarial-prompt-caching-kv-timing-attacks)) and requires no prompt injection, no special access, and no model internals — just the JSON response an API call already returns.
 
-The concrete attacker scenario throughout: a **legitimate user of a multi-tenant SaaS product** that wraps GPT-4 (or equivalent) is trying to infer the structure and content of a competitor's system prompt, the model configuration the provider chose, and patterns in how other users are interacting with the system — all from metadata they receive in their own legitimate API responses.
+The concrete attacker scenario throughout: a **legitimate user of a multi-tenant SaaS product** that wraps GPT-4 (or equivalent) is trying to infer the structure and content of the operator's system prompt and model configuration — all from metadata they receive in their own legitimate API responses. Multi-account probing (covered in the Session Identity section) extends this to detecting per-user personalization.
 
 ---
 
@@ -119,7 +119,7 @@ The most sophisticated attack in this class exploits the *temporal structure* of
 
 Modern reasoning models (e.g., models with explicit chain-of-thought or "think" blocks) produce distinctive streaming patterns. How those patterns manifest to an API client depends critically on whether the provider *forwards* reasoning tokens as they are generated or *buffers* the full reasoning phase before sending the first visible token.
 
-**When reasoning tokens are streamed (or when the thinking block is exposed):** the client may observe a period of rapid token delivery (the thinking phase) followed by a transition to the final output. Some providers expose thinking tokens explicitly (Anthropic's `thinking` blocks in extended thinking mode); in those cases the reasoning structure is directly readable, not inferred.
+**When reasoning tokens are streamed (or when the thinking block is exposed):** the client may observe a period of rapid token delivery (the thinking phase) followed by a transition to the final output. Some providers expose thinking tokens explicitly (Anthropic's `thinking` blocks in extended thinking mode); in those cases the reasoning structure is directly readable content disclosure — not a timing side channel — and outside the scope of this post's attack taxonomy.
 
 **When reasoning is fully buffered before the first client token:** the client sees only elevated TTFT (the model "went quiet" longer than usual before streaming began), not a mid-stream timing phase transition. The only observable is that time-to-first-token is higher — which indicates extended reasoning occurred, but gives no information about the structure or length of that reasoning.
 
@@ -187,6 +187,8 @@ The statistical inference attacks require many requests. Token-count fingerprint
 
 **Behavioral heuristics for detection:** high request volumes with low entropy in message content; unusual correlation between user message length and observed token counts (suggesting the attacker is controlling for user message tokens to isolate system prompt contribution); multiple requests with minimal time between them during off-peak hours.
 
+**Caveat:** all of these heuristics carry significant false-positive risk. Low-entropy, high-volume requests also match legitimate automation, load testing, chatbot integrations, and users in different time zones. Detection heuristics for oracle probing should be understood as signals requiring human review, not automated blocking triggers. Treat them as part of anomaly detection pipelines rather than binary rules.
+
 ### 5. Consider What You Expose via the `model` Field
 
 If you're routing between model variants or A/B testing configurations, returning the exact version string in the `model` field makes version fingerprinting unnecessary — you're directly exposing it. Returning a normalized string (`"gpt-4o"` instead of `"gpt-4o-2024-08-06"`) doesn't fully prevent timing-based fingerprinting, but it removes the no-effort path.
@@ -215,16 +217,24 @@ The practical first step is auditing whether your API proxy exposes the raw `usa
 
 ## Summary
 
+**Attack signals and confidence:**
+
 | Signal | Attack | Confidence | Notes |
 |---|---|---|---|
-| `prompt_tokens` exact count | System prompt length inference | **Plausible / partially demonstrated** | Arithmetic is exact; tokenizer is public; requires isolating from dynamic context |
+| `prompt_tokens` exact count | System prompt length inference | **Plausible / partially demonstrated** | Approximate (serialization overhead not public); tokenizer is published; requires isolating from dynamic context |
 | `prompt_tokens` variation across requests | System prompt structural inference (sections, dynamic injection) | **Theoretical / plausible** | Requires multiple probes; practical fidelity depends on injection consistency |
-| Tokens-per-second from streaming timing | Model version / configuration fingerprinting | **Plausible / theoretical** | Signal exists; separability from noise depends on provider normalization |
-| Chunk timing patterns in streaming | Reasoning vs. output phase inference, response structure | **Partial / model-dependent** | Straightforward for length; phase timing depends on model/provider architecture |
+| Tokens-per-second from streaming timing | Model version / configuration fingerprinting | **Plausible / partially demonstrated** | Signal exists; separability from noise depends on provider normalization |
+| Chunk timing patterns in streaming | Reasoning phase inference (only when reasoning is streamed, not buffered), response length | **Partial / model-dependent** | Buffered reasoning → elevated TTFT only, no mid-stream signal; explicit thinking blocks are content disclosure, not timing side channel |
 | `prompt_tokens` variation across user accounts | Per-user personalization detection, tier fingerprinting | **Plausible / partially demonstrated** | Requires multi-account probing; valid when dynamic user context is injected |
-| Suppressing `usage` block from user-facing responses | Eliminates token-count oracle | **Confirmed** | Highest-leverage mitigation; cost is user visibility into their own token usage |
-| Latency jitter injection | Degrades timing oracles | **Confirmed** | Standard defense from timing attack literature; imposes UX cost |
-| Fixed-size context padding | Masks injection variation from token oracle | **Plausible** | Established defense approach; implementation complexity and token waste are real costs |
+
+**Defenses and effectiveness:**
+
+| Defense | Mitigates | Effectiveness | Notes |
+|---|---|---|---|
+| Suppress `usage` block from user-facing responses | Token-count oracle | High | Highest-leverage single control; costs user visibility into their own token usage |
+| Latency jitter injection | Timing-based fingerprinting | Low-to-moderate | Small jitter averages out quickly; requires large delays (UX cost) or rate limiting for meaningful protection |
+| Fixed-size context padding | Token-count structural inference | Moderate | Masks injection size variation; token budget waste; implementation complexity |
+| Rate-limit metadata probing | All oracle attacks | Moderate | Statistical oracles require many requests; limits are detectable but carry false-positive risk |
 
 The recurring theme: LLM APIs expose observable metadata that was designed for billing and debugging, not as a security boundary. The information asymmetry between what developers think they're sharing (only the text response) and what they're actually sharing (text + token counts + timing) is the root cause. Closing the gap requires deliberately treating metadata as part of the API's security perimeter — which is not the default.
 
