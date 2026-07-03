@@ -163,13 +163,15 @@ Mitigation strategies map roughly to three categories: suppress the signal, add 
 
 **Return coarsened token counts.** Instead of the exact integer, return counts rounded to the nearest 50 or 100. This preserves cost visibility for legitimate use while degrading the oracle's precision. Depending on what the attacker is inferring, rounding may be sufficient to obscure structural inference while preserving billing transparency.
 
-**Aggregate counts at the session level.** Rather than returning per-request token counts, return session-level aggregates. This prevents per-request inference while retaining overall visibility.
+**Aggregate counts at the session level.** Rather than returning per-request token counts, return only session-level totals at the end of a session. This prevents per-request inference — *but only if totals are not exposed incrementally after each turn*. If a cumulative total is returned after every API call, an attacker can recover per-request counts by differencing consecutive totals, which defeats the protection. Aggregation is only effective when the total is withheld until session end.
 
 ### 2. Inject Latency Jitter
 
 **Add random response delay before streaming begins.** Latency jitter in TTFT imposes a measurement cost on timing oracles — an attacker must average over more requests to achieve the same statistical confidence. However, the magnitude matters significantly: small independent jitter (e.g., 0–50ms) averages out quickly and may be indistinguishable from ordinary network and queue-depth variance, providing minimal actual protection. Meaningful defense requires either *larger* jitter (hundreds of milliseconds to seconds), which imposes UX cost, or *rate limiting* of oracle probing behavior, which is more practical. Jitter alone at small magnitudes should not be considered a primary defense.
 
-**Normalize tokens-per-second across response types.** Artifically throttle streaming output to a consistent rate (e.g., fixed-interval chunk delivery regardless of actual generation speed). This eliminates throughput fingerprinting and hides reasoning vs. output phase transitions in streaming. Cost: perceived latency increases for fast responses; UX impact depends on application.
+**Normalize tokens-per-second across response types.** Artificially throttle streaming output to a consistent rate (e.g., fixed-interval chunk delivery regardless of actual generation speed). This eliminates throughput fingerprinting and hides reasoning vs. output phase transitions in streaming. Cost: perceived latency increases for fast responses; UX impact depends on application.
+
+**A caveat on all streaming timing analysis:** The assumption underlying these attacks is that chunk arrival timing reflects model generation cadence. In practice, SSE framing, reverse proxies, CDN edge nodes, SDK buffering, and TCP Nagle/flush behavior can all reshape chunk boundaries and intervals. In deployments with intermediate HTTP proxies or CDN termination, observed chunk timing may be dominated by transport-layer behavior rather than generation speed. Streaming timing attacks are more reliable in direct API call scenarios than in highly proxied or CDN-cached deployments.
 
 **Note:** Latency normalization that is sufficiently comprehensive to defeat timing oracles imposes real UX cost — the features users value (fast TTFT, streaming responses) are what the attacker is measuring. There's no free defense here; it's a tradeoff between feature quality and side-channel resistance.
 
@@ -192,6 +194,8 @@ The statistical inference attacks require many requests. Token-count fingerprint
 ### 5. Consider What You Expose via the `model` Field
 
 If you're routing between model variants or A/B testing configurations, returning the exact version string in the `model` field makes version fingerprinting unnecessary — you're directly exposing it. Returning a normalized string (`"gpt-4o"` instead of `"gpt-4o-2024-08-06"`) doesn't fully prevent timing-based fingerprinting, but it removes the no-effort path.
+
+**Compatibility caveat:** normalizing the `model` field can break OpenAI-compatible client libraries, telemetry dashboards, or feature-gating logic that keys on the concrete version string. If downstream code depends on the exact model identifier, normalize at the edge only and ensure internal tooling retains the real value.
 
 ---
 
@@ -234,7 +238,9 @@ The practical first step is auditing whether your API proxy exposes the raw `usa
 | Suppress `usage` block from user-facing responses | Token-count oracle | High | Highest-leverage single control; costs user visibility into their own token usage |
 | Latency jitter injection | Timing-based fingerprinting | Low-to-moderate | Small jitter averages out quickly; requires large delays (UX cost) or rate limiting for meaningful protection |
 | Fixed-size context padding | Token-count structural inference | Moderate | Masks injection size variation; token budget waste; implementation complexity |
-| Rate-limit metadata probing | All oracle attacks | Moderate | Statistical oracles require many requests; limits are detectable but carry false-positive risk |
+| Rate-limit metadata probing | Multi-probe statistical oracle attacks | Low-to-moderate | Only helps against attacks requiring many requests; one-shot disclosures (exact model string, single prompt_tokens baseline) are not mitigated |
+| Normalize `model` field in responses | Model version fingerprinting | Low | Removes trivial version disclosure; does not prevent timing fingerprinting; may break API-compatible clients keyed on version string |
+| Throttle streaming rate (fixed-interval chunks) | Timing-based fingerprinting, chunk timing inference | Moderate | Eliminates throughput and phase-transition timing signals; costs UX latency on fast responses |
 
 The recurring theme: LLM APIs expose observable metadata that was designed for billing and debugging, not as a security boundary. The information asymmetry between what developers think they're sharing (only the text response) and what they're actually sharing (text + token counts + timing) is the root cause. Closing the gap requires deliberately treating metadata as part of the API's security perimeter — which is not the default.
 
