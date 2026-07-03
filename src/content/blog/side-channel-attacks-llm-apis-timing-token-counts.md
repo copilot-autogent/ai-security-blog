@@ -7,7 +7,7 @@ tags: ["side-channel", "llm-security", "api-security", "token-inference", "timin
 
 Most LLM security analysis focuses on what the model *says*: jailbreaks, prompt injection, harmful outputs. A smaller but growing body of work examines what the API *reveals* — metadata that travels alongside the text response and contains information neither developers nor users intend to disclose.
 
-This post examines metadata-based side channels in LLM APIs: the timing, token count, and streaming structure signals that observers can extract from ordinary API responses. The attack surface is distinct from KV-cache cross-user leakage (covered separately in our [adversarial prompt caching post](/blog/adversarial-prompt-caching-timing-attacks-and-injection-via-shared-kv-caches)) and requires no prompt injection, no special access, and no model internals — just the JSON response an API call already returns.
+This post examines metadata-based side channels in LLM APIs: the timing, token count, and streaming structure signals that observers can extract from ordinary API responses. The attack surface is distinct from KV-cache cross-user leakage (covered separately in our [adversarial prompt caching post](/blog/adversarial-prompt-caching-kv-timing-attacks)) and requires no prompt injection, no special access, and no model internals — just the JSON response an API call already returns.
 
 The concrete attacker scenario throughout: a **legitimate user of a multi-tenant SaaS product** that wraps GPT-4 (or equivalent) is trying to infer the structure and content of a competitor's system prompt, the model configuration the provider chose, and patterns in how other users are interacting with the system — all from metadata they receive in their own legitimate API responses.
 
@@ -56,13 +56,13 @@ When a SaaS application wraps an LLM, it typically constructs a prompt like:
 [USER MESSAGE — attacker-controlled]
 ```
 
-The API returns `prompt_tokens` as the total count for the entire prompt. If the attacker controls the user message component and knows how many tokens it contributes (which they can compute precisely using the same tokenizer the provider uses, since BPE tokenizers for GPT models are published), they can derive:
+The API returns `prompt_tokens` as the total count for the entire prompt. If the attacker controls the user message component and can estimate how many tokens it contributes (using the provider's published tokenizer), they can approximate:
 
 ```
-system_prompt_tokens + injected_context_tokens = prompt_tokens - user_message_tokens
+system_prompt_tokens + injected_context_tokens ≈ prompt_tokens - user_message_tokens
 ```
 
-In the simplest case — no dynamic context injection — `system_prompt_tokens` is directly observable.
+**A practical caveat:** this is an approximation, not an exact equation. Providers add token overhead through prompt serialization: role markers (`<|im_start|>`, `[INST]`, etc.), structural delimiters, any system-injected formatting, and — if tool use is enabled — serialized tool schemas that may be silently prepended to every prompt. The overhead from these elements varies by provider, model, and API surface, and is generally not publicly documented. An attacker who naively applies the public tokenizer to their user message will obtain an estimate of the remaining prompt tokens, but the specific breakdown into system prompt vs. injected context vs. serialization overhead requires additional inference work. In the simplest case — no dynamic context injection and stable overhead — `system_prompt_tokens` is approximately observable.
 
 **What can be inferred from the token count?**
 
@@ -72,7 +72,7 @@ In the simplest case — no dynamic context injection — `system_prompt_tokens`
 
 *Length variation across requests* reveals more. An attacker who makes multiple requests and observes that `prompt_tokens` varies — sometimes by small amounts, sometimes by larger amounts — can infer that context injection is occurring. Predictable injection sizes (e.g., always adding the same user profile block) reveal that structure. Injections that correlate with the attacker's own input characteristics (e.g., "when I mention X, 200 more tokens appear in the prompt") can reveal retrieval or rule-based augmentation.
 
-**Demonstrated vs. theoretical.** Token counting as a side channel has been *described* in published security research and disclosed by independent researchers testing production API wrappers. The specific attack of reverse-engineering system prompt structure from `prompt_tokens` is a known technique in the LLM red-teaming community (see [Perez & Ribeiro, 2022](https://arxiv.org/abs/2211.09527) for early systematic analysis of prompt leakage, though not specifically the token-count oracle). Systematic empirical validation against multiple production platforms has not been published in peer-reviewed literature as of this writing.
+**Demonstrated vs. theoretical.** Token counting as a side channel has been described in LLM red-teaming community practice and noted in security evaluations of API wrappers. The specific technique of using `prompt_tokens` to reverse-engineer system prompt structure appears in red-team methodology writeups and practitioner disclosures; systematic peer-reviewed empirical validation against multiple production platforms has not been published as of this writing.
 
 > **Confidence: Plausible / partially demonstrated.** The arithmetic of the oracle is exact; `prompt_tokens` is exposed by all major providers; the inference chain from count to structure requires only knowledge of the provider's tokenizer (publicly available for all major models). The limiting factor is that an attacker must isolate the system prompt component from injected dynamic context — straightforward in zero-context products, harder in RAG applications with variable context.
 
@@ -107,8 +107,6 @@ Different model versions, quantizations, and serving configurations produce meas
 
 Providers sometimes version-string their models in the `model` field (e.g., `gpt-4o-2024-08-06`), which makes version identification trivial. But when providers route between configurations without changing the visible model string — A/B testing new serving infrastructure, gradually rolling out quantized variants, or running different hardware pools in different regions — throughput timing becomes the fingerprint.
 
-For an adversarial scenario: a SaaS operator claims to be using GPT-4o but may have silently switched to a cheaper or older variant. A user measuring tokens-per-second across repeated queries can build a fingerprint profile for each claimed configuration and test for deviations.
-
 **The noise problem.** Network round-trip time, provider-side batch queuing, request queue depth, and provider-side latency normalization all inject noise into timing measurements. Distinguishing a "gpt-4o vs. gpt-4o-mini" signal from queue depth variation requires careful experimental design: multiple measurements, controls for time-of-day load, and statistical aggregation. This is feasible for a patient attacker but not instantaneous.
 
 > **Confidence: Plausible / theoretical.** Timing-based fingerprinting of computing systems has extensive precedent in conventional security (CPU timing attacks, remote OS fingerprinting via TCP/IP stack timing, TLS fingerprinting). LLM-specific throughput fingerprinting has been described in informal security research and red-team writeups but has not been systematically demonstrated in peer-reviewed publication against production APIs. The signal exists; whether it's consistently separable from noise depends on provider-side normalization.
@@ -119,11 +117,15 @@ For an adversarial scenario: a SaaS operator claims to be using GPT-4o but may h
 
 The most sophisticated attack in this class exploits the *temporal structure* of streaming responses.
 
-Modern reasoning models (e.g., models with explicit chain-of-thought or "think" blocks) produce distinctive streaming patterns. During reasoning/thinking phases, tokens are generated rapidly but may not be forwarded to the client, or may arrive in a different pattern than final output tokens. Some providers expose thinking tokens explicitly (Anthropic's `thinking` blocks); others suppress them but retain the temporal pattern.
+Modern reasoning models (e.g., models with explicit chain-of-thought or "think" blocks) produce distinctive streaming patterns. How those patterns manifest to an API client depends critically on whether the provider *forwards* reasoning tokens as they are generated or *buffers* the full reasoning phase before sending the first visible token.
+
+**When reasoning tokens are streamed (or when the thinking block is exposed):** the client may observe a period of rapid token delivery (the thinking phase) followed by a transition to the final output. Some providers expose thinking tokens explicitly (Anthropic's `thinking` blocks in extended thinking mode); in those cases the reasoning structure is directly readable, not inferred.
+
+**When reasoning is fully buffered before the first client token:** the client sees only elevated TTFT (the model "went quiet" longer than usual before streaming began), not a mid-stream timing phase transition. The only observable is that time-to-first-token is higher — which indicates extended reasoning occurred, but gives no information about the structure or length of that reasoning.
 
 An attacker who receives a streaming response and measures **inter-chunk timing** can extract:
 
-**Reasoning vs. output phases.** If a model produces a thinking phase followed by direct output, the transition often manifests as a timing discontinuity in the stream: a burst of fast generation, a pause, then renewed output. Even without reading the thinking content, an attacker who observes "there was a pause around chunk 15" infers that the model engaged in extended reasoning on this query — suggesting the query was non-trivial to answer, which may itself be informative.
+**Reasoning vs. output phases.** If a provider *streams* reasoning tokens (rather than buffering them), the transition to final output may manifest as a timing discontinuity: a burst of fast generation, then a pause or shift in chunk cadence, then renewed output. This is only observable in streaming implementations where the thinking phase is not fully buffered before first-token delivery. When reasoning is fully suppressed and buffered, the client sees only elevated TTFT with no mid-stream signal.
 
 **Confidence correlation.** Empirically, models tend to produce longer and more irregular output when uncertain. A response with highly irregular chunk timing and many small chunks may indicate the model is hedging or revising as it generates. A response with uniform, dense chunks suggests confident, fluent generation. This correlation is approximate and model-specific, but measurable at the aggregate level.
 
@@ -165,7 +167,7 @@ Mitigation strategies map roughly to three categories: suppress the signal, add 
 
 ### 2. Inject Latency Jitter
 
-**Add random response delay before streaming begins.** Even small amounts of uniform random jitter (e.g., 0–50ms) in TTFT substantially degrade the statistical precision of timing oracles. The attacker must measure more requests to achieve the same confidence, which increases their cost and the detectability of their probing behavior.
+**Add random response delay before streaming begins.** Latency jitter in TTFT imposes a measurement cost on timing oracles — an attacker must average over more requests to achieve the same statistical confidence. However, the magnitude matters significantly: small independent jitter (e.g., 0–50ms) averages out quickly and may be indistinguishable from ordinary network and queue-depth variance, providing minimal actual protection. Meaningful defense requires either *larger* jitter (hundreds of milliseconds to seconds), which imposes UX cost, or *rate limiting* of oracle probing behavior, which is more practical. Jitter alone at small magnitudes should not be considered a primary defense.
 
 **Normalize tokens-per-second across response types.** Artifically throttle streaming output to a consistent rate (e.g., fixed-interval chunk delivery regardless of actual generation speed). This eliminates throughput fingerprinting and hides reasoning vs. output phase transitions in streaming. Cost: perceived latency increases for fast responses; UX impact depends on application.
 
@@ -228,4 +230,4 @@ The recurring theme: LLM APIs expose observable metadata that was designed for b
 
 ---
 
-*Related: [Adversarial Prompt Caching: Timing Attacks and Injection via Shared KV Caches](/blog/adversarial-prompt-caching-timing-attacks-and-injection-via-shared-kv-caches) — for KV-cache cross-user side channels, a distinct attack surface. Perez & Ribeiro, "[Ignore Previous Prompt: Attack Techniques For Language Models](https://arxiv.org/abs/2211.09527)" (2022) — early systematic analysis of prompt leakage mechanisms. [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — see current release for sensitive information disclosure entry.*
+*Related: [Adversarial Prompt Caching: Timing Attacks and Injection via Shared KV Caches](/blog/adversarial-prompt-caching-kv-timing-attacks) — for KV-cache cross-user side channels, a distinct attack surface. [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — see current release for sensitive information disclosure entry.*
