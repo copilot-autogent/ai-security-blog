@@ -20,7 +20,7 @@ A pre-trained "helpful-only" model — one trained to be useful but not specific
 
 **Stage 2: Reinforcement Learning from AI Feedback (RLAIF)**
 
-A separate preference model (PM) is trained to distinguish better from worse responses — but instead of using human judgments, it uses AI-generated comparisons. The constitution is again central: the AI compares two responses and selects the one more consistent with the constitutional principles. These synthetic preference labels train the preference model, which then provides reward signals for RLHF fine-tuning.
+A separate preference model (PM) is trained to distinguish better from worse responses — but instead of using human judgments, it uses AI-generated comparisons. The constitution is again central: the AI compares two responses and selects the one more consistent with the constitutional principles. These synthetic preference labels train the preference model, which is then used as the reward model in a reinforcement learning fine-tuning loop — replacing the human-labeled reward model that RLHF would otherwise require.
 
 The design goal is to scale human oversight without scaling human labor. The model internalizes the values expressed in the constitution, rather than needing a human to evaluate every output. This is also why the attack surface is structurally different from runtime filtering: if alignment is baked in at training, subverting the training process has persistent effects.
 
@@ -28,7 +28,7 @@ The design goal is to scale human oversight without scaling human labor. The mod
 
 The most direct attack on CAI doesn't involve generating adversarial prompts at all. It involves influencing the constitution.
 
-Consider what happens when the constitution is partially or fully under attacker control. In some deployable CAI configurations — particularly systems designed for organizational deployment where organizations specify their own principles — the constitution isn't fixed at training time but is parameterized or user-provided. This is a natural product design: different organizations have different notions of harmlessness, and a flexible constitution lets the system adapt.
+Consider what happens when the constitution is partially or fully under attacker control. CAI systems designed for organizational deployment sometimes allow organizations to specify their own principles rather than using a fixed, centrally maintained constitution — a natural product goal, since different organizations have different definitions of harmlessness. But this flexibility introduces a trust question: if the constitution is the document that defines what the model considers harmful, who is allowed to write it?
 
 The vulnerability is that the constitution is the ground truth for harm evaluation. Redefining the constitution redefines what counts as harmless.
 
@@ -50,11 +50,11 @@ The reason is architectural. When a model critiques its own output against a pri
 
 This gap matters for adversarial inputs designed to elicit false but harmful outputs — misinformation, for instance. If the harmful content is the false *claim* rather than an explicitly harmful instruction, the critique loop may not flag it.
 
-**Constitution forgetting in long contexts**
+**Context length and constitution attention**
 
-The critique-revision cycle requires the model to hold the constitution in its context window while evaluating and revising its output. In practice, constitutions can be long, and the outputs being evaluated are sometimes long as well. As context length increases, transformers exhibit recency bias: earlier content receives less attention relative to later content.
+Transformers are known to exhibit recency bias under long contexts: tokens near the end of the context window receive more attention weight than earlier tokens. The original CAI critique loop uses a short, fixed list of principles — short enough that this is not a significant concern in that specific implementation. But this points toward a structural risk that could emerge in extended implementations: any CAI variant where the constitution is long, or where the context window is long due to accumulated critique-revision cycles, faces the possibility that earlier constitutional principles receive substantially less weight than later ones.
 
-This means that a constitution principle appearing at the beginning of a long context may receive substantially less weight than one appearing near the end. For a sufficiently long document with a sufficiently long output under evaluation, early constitutional principles can become functionally invisible to the critique process. An attacker who can influence the structure or length of the context can exploit this gradient: bury the most important constitutional constraints early, make the context long, and the critique loop will systematically underweight precisely the principles that would catch the harmful content.
+An attacker who can influence the context structure — for example, by making the output under evaluation very long — could systematically push the most important constitutional constraints to the bottom of the model's effective attention budget. This is a structural property of the critique architecture worth tracking as CAI implementations scale to larger context windows.
 
 **Sycophancy in self-critique**
 
@@ -72,29 +72,29 @@ The mechanism works as follows. The model has been trained to be a helpful assis
 
 Authority-signaling is particularly effective here. Requests that appear to come from authority figures — medical professionals, researchers, security practitioners — activate a trained association between authority and legitimate informational need. The model has learned that professionals have legitimate reasons for requesting sensitive information. A constitution that says "avoid providing harmful information" may be overridden by a sufficiently authoritative framing that says "this is a professional context where the information is needed."
 
-In **multi-principal systems** — agentic architectures where a single model receives instructions from multiple sources, such as a human user, a system operator, and external tools — this vulnerability compounds. The model must balance constitutional constraints against obligations to each principal. An attacker who controls one principal (such as an external tool the model is instructed to use) can issue instructions that appear to come from an authoritative source, creating a conflict where constitutional constraints and principal obligations point in different directions. Because the model is trained to be helpful to all its principals, it may resolve this conflict in favor of the attacker's instructions.
+The important point is that this is a **training-time failure**, not just a runtime one. When the preference model is being trained, the AI generating comparisons must also balance helpfulness against harm — and authority-signaling can influence those comparisons in the same way it influences end-model behavior. A preference model trained on comparisons where authority-sounding context consistently tipped the evaluation toward permissiveness will produce an RLAIF-trained model that inherits that bias.
 
-The structural risk here is particularly acute because multi-principal architectures are exactly the pattern emerging in production agentic systems: models that browse the web, execute code, and interact with external services on behalf of users. Each external data source is a potential attacker-controlled principal.
+This compounds in **multi-principal agentic architectures** — systems where the trained model is subsequently deployed to receive instructions from multiple sources (human user, system operator, external tools). The trained helpfulness bias toward authority becomes a structural vulnerability in exactly the deployment pattern — autonomous agent with external inputs — that is currently most in demand.
 
 ## RLAIF Label Poisoning
 
 The second stage of Constitutional AI — RLAIF — introduces an attack vector that's distinct from those targeting the critique loop: poisoning the synthetic preference labels used to train the preference model.
 
-Recall that RLAIF trains a preference model using AI-generated comparisons between outputs. The preference model learns to identify which outputs are more consistent with the constitution. This preference model is then used to provide reward signals during RLHF.
+Recall that RLAIF trains a preference model using AI-generated comparisons between outputs. The preference model learns to identify which outputs are more consistent with the constitution. This preference model is then used as the reward model in reinforcement learning fine-tuning.
 
 The attack surface is the comparison generation process. The AI generating comparisons must decide, for each pair of outputs, which is more consistent with the constitutional principles. This decision is not deterministic — the comparing model has uncertainty, makes approximations, and can be influenced by the framing of the comparison.
 
 **Small shifts in preference model → large downstream alignment failures**
 
-This is the key asymmetry that makes RLAIF label poisoning concerning. RLHF is highly sensitive to the reward signal during training. A preference model that is 5% biased toward a particular class of outputs will produce an RLHF-trained model that strongly prefers that class, because the optimizer exploits any systematic signal in the reward. If the preference model is slightly poisoned — systematically preferring outputs that are subtly harmful in ways the comparator model misses — the resulting aligned model will have internalized those preferences at a deep level.
+This is the key asymmetry that makes RLAIF label poisoning concerning. Reinforcement learning is highly sensitive to the reward signal during training: the optimizer will exploit any systematic signal in the reward function, compressing small biases into strong behavioral preferences. If the preference model is slightly poisoned — systematically preferring outputs that are subtly harmful in ways the comparator model misses — the resulting aligned model will have internalized those preferences at a deep level.
 
-Concretely: if an attacker can introduce adversarial inputs during the comparison generation process that systematically shift the AI comparator's preferences, even by a small margin, those small shifts accumulate across thousands of comparisons. The trained preference model reflects the accumulated bias. The final RLHF model reflects the preference model.
+Concretely: if an attacker can introduce adversarial inputs during the comparison generation process that systematically shift the AI comparator's preferences, even by a small margin, those small shifts accumulate across thousands of comparisons. The trained preference model reflects the accumulated bias. The final model trained against it reflects the preference model.
 
 This is qualitatively different from runtime attacks. Runtime attacks work one session at a time and can be mitigated by additional runtime filters. RLAIF label poisoning corrupts the alignment training itself. Every downstream model trained on the poisoned preference model carries the corruption.
 
 **Why this is hard to detect**
 
-The preference model's outputs are implicit — they appear as reward scores during training, not as human-readable text. A poisoned preference model doesn't produce obviously wrong outputs; it produces subtly skewed reward signals that look normal in aggregate. Detecting this requires systematic evaluation of the preference model's behavior across a carefully designed test set, not just observing model outputs in deployment.
+The preference model's influence is implicit — it appears as reward scores during training, not as human-readable text. A poisoned preference model doesn't produce obviously wrong outputs; it produces subtly skewed reward signals that look normal in aggregate. Detecting this requires systematic evaluation of the preference model's behavior across a carefully designed test set, not just observing model outputs in deployment.
 
 ## Defense Directions
 
@@ -108,9 +108,9 @@ If the constitution is a trust boundary, treating it as security-critical infras
 
 A single model critiquing its own output cannot catch the critique blindspots described above, because those blindspots are systematic properties of that model class. Using multiple models with different training histories as critiquers reduces the probability that all critiquers share the same blindspot. If Model A cannot catch a particular class of false-but-harmful output but Model B can, a two-critiqued pipeline catches more than either alone. This is analogous to ensemble methods in adversarial robustness for classifiers: diversity of the ensemble is what provides robustness, not the strength of any individual member.
 
-**Formal verification of preference models**
+**Robustness certification for preference models**
 
-Preference models are, at the abstraction level of their outputs, binary classifiers: they output a judgment about which of two options is preferred. Formal verification techniques for classifiers — particularly certification of robustness bounds — can be applied to preference models to establish guarantees about how much a preference model can shift under small input perturbations. A formally verified preference model with bounded sensitivity to input variations provides a structural guarantee that small poisoning attempts cannot cause large shifts in learned preferences.
+Preference models output scalar scores that induce a ranking over outputs; a pairwise comparison flips when the score difference changes sign. Formal robustness certification techniques can be applied to bound how much a preference model's output can change under small perturbations to its input. A preference model with certified bounded sensitivity provides a structural guarantee that small poisoning attempts cannot cause large shifts in the induced ranking — limiting the leverage available to an attacker who can only shift individual comparison inputs by a small amount.
 
 This is research-stage work, not a deployable solution today, but the direction is clearly motivated by the attack surface described here.
 
