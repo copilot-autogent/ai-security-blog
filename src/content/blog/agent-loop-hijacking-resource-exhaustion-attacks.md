@@ -90,7 +90,7 @@ Against shared-service deployments — where multiple customers or users share a
 
 **LangChain max_iterations defaults.** LangChain's `AgentExecutor` ships with `max_iterations=15` as a default precisely because early deployments without this limit showed runaway behavior. The fact that a hard limit is a documented feature — not an edge-case configuration — indicates the loop failure mode was encountered in practice.
 
-**Indirect injection planting loop triggers.** Perez & Ribeiro (2022) demonstrated that adversarial inputs can be embedded in documents or tool outputs retrieved by the model, not just in direct user messages. The same technique that forces a model to ignore previous instructions can plant loop-triggering content in a retrieved knowledge base or email corpus.
+**Indirect injection planting loop triggers.** Perez & Ribeiro (2022) showed that adversarial instructions embedded in external content — web pages, documents, emails — can override agent behavior when retrieved, not just in direct user messages. While the paper focused on instruction override rather than loop injection specifically, the same retrieval pathway that delivers "ignore previous instructions" can deliver loop-triggering content into a knowledge base or email corpus an agent monitors.
 
 ## Why Detection Is Hard
 
@@ -113,11 +113,11 @@ These defenses should be implemented in depth — no single control is sufficien
 
 The most reliable defense is an absolute constraint that the model cannot reason around:
 
-**Step limits.** In LangChain's `AgentExecutor`, set `max_iterations=25` (default is 15; for production workloads handling adversarial input, 25 is a reasonable ceiling for most tasks). Set `max_execution_time=30` for a wall-clock limit in addition to step count. These parameters are documented and available without framework modification.
+**Step limits.** In LangChain's `AgentExecutor`, the default is `max_iterations=15`. For security-sensitive deployments, lower this based on your task profile — most customer-service and assistant tasks complete in 5–10 steps; a ceiling of 10–12 provides meaningful protection while rarely cutting off legitimate work. Pair with `max_execution_time=30` (seconds) as a wall-clock backstop independent of step count. These parameters are documented and available without framework modification.
 
-**Token budgets.** Set a `max_tokens` budget per request that covers both input and output. For most customer-service or assistant tasks, 4,000–8,000 output tokens per interaction is a generous upper bound. Hard limits here prevent output inflation attacks.
+**Token budgets.** The `max_tokens` parameter in most LLM APIs controls **output** tokens only, not input. To defend against output inflation attacks, set `max_tokens` to a ceiling appropriate for your task (for most customer-service and assistant tasks, 2,000–4,000 output tokens is a generous upper bound). To defend against context-flooding attacks (adversarially large inputs), enforce input length limits in your agent's preprocessing layer before the LLM call — the API's `max_tokens` does not protect you there.
 
-**Cost caps at the operator level.** Major LLM providers (OpenAI, Anthropic) support spend limits and rate limits at the API key level. A per-key monthly cap isolates blast radius from a billing DoS: even if an attack burns through an agent's allocation, it cannot exceed the operator-level ceiling.
+**Cost caps at the operator level.** Major LLM providers (OpenAI, Anthropic) support configurable spend limits at the account or project level. These limits are **soft guardrails**, not hard real-time cutoffs — billing may briefly exceed them during the enforcement window before the key is suspended. They are nonetheless useful for bounding blast radius: configure them at a level that limits damage from a sustained attack while leaving enough headroom for legitimate peak usage. Do not treat provider-side limits as your only protection; implement per-session cost accounting in your own middleware as a complementary control.
 
 ### Loop Detection Heuristics
 
@@ -125,7 +125,7 @@ In-loop detection cannot prevent a loop from starting, but can terminate it earl
 
 **Repeated tool calls.** If the agent calls the same tool with the same arguments more than twice in a single session, treat it as a likely loop and escalate or terminate. This check is simple to implement in a tool-call wrapper.
 
-**Semantic similarity of consecutive thoughts.** Cosine similarity (or embedding distance) between consecutive reasoning traces can detect circular reasoning. A simple threshold — "if the last three thoughts are more than 0.90 similar, trigger the circuit breaker" — catches the most obvious loops without expensive analysis.
+**Semantic similarity of consecutive thoughts.** If your framework exposes the agent's intermediate reasoning traces (e.g., LangChain's `verbose=True` callback, or a custom chain that logs thought steps), cosine similarity (or embedding distance) between consecutive traces can detect circular reasoning. A threshold — "if the last three thoughts are more than 0.90 similar, trigger the circuit breaker" — catches the most obvious loops. Note that many production APIs do not expose internal chain-of-thought; this heuristic applies when your stack surfaces intermediate steps, not when you see only the final response.
 
 **Progress scoring.** For agents with explicit goals, a lightweight progress evaluator (even a simple heuristic) can detect whether the agent is making progress toward its stated objective. Agents that score low progress across multiple consecutive steps are likely looping.
 
@@ -190,7 +190,7 @@ Who is the attacker, and what are they after?
 
 For teams deploying agentic systems in production:
 
-- [ ] `max_iterations` is set at the framework level (LangChain: `AgentExecutor(max_iterations=25)`)
+- [ ] `max_iterations` is set at the framework level and tuned down to task profile (LangChain default is 15; most tasks complete in ≤10 steps)
 - [ ] `max_execution_time` is set as a wall-clock backstop
 - [ ] Per-session cost ceiling is implemented in cost-tracking middleware
 - [ ] Operator-level API spend limits are configured at the provider
