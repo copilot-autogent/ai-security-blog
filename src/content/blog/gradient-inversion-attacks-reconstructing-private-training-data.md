@@ -77,7 +77,7 @@ A more aggressive variant is the **active attack**: the aggregator modifies the 
 
 To be direct about the current state: **no publicly confirmed case of a production fine-tuning API running gradient inversion on user data has been documented**. The demonstrated capability exists in controlled research settings. The attack vector is architecturally real, and the threat model applies to any fine-tuning provider with gradient visibility.
 
-**Centralized training** (standard training on a single provider's infrastructure where no gradients are shared externally) does not create this specific attack surface. An adversary needs access to gradients; if gradients never leave the training infrastructure, gradient inversion is not the relevant threat for external attackers.
+**Centralized training** (standard training on a single provider's infrastructure where no gradients are shared externally) does not create this attack surface for *external* adversaries. The relevant distinction is **external gradient sharing**, not the federated-vs-centralized architecture label. An insider or compromised training infrastructure with gradient access faces the same attack class; in centralized deployments, the threat model shifts to insider risk rather than an external aggregator.
 
 Split learning — where a model is split across client and server, with intermediate activations passed between them — is an adjacent threat surface. The intermediate activation (not the gradient) is what's shared, and reconstruction attacks on activations exist separately.
 
@@ -87,11 +87,11 @@ Split learning — where a model is split across client and server, with interme
 
 The principled defense is **differential privacy applied to gradient computation (DP-SGD)**. The mechanism: before aggregating gradients, clip each per-sample gradient to a maximum L2 norm, then add calibrated Gaussian noise. The noise magnitude is determined by the privacy budget ε and the clipping norm.
 
-The formal guarantee is real: under DP-SGD with privacy budget (ε, δ), the published gradient update does not allow reconstructing individual training samples beyond the formal bound. Smaller ε provides stronger protection. This is the only defense with provable guarantees against gradient inversion.
+The formal guarantee is real: under DP-SGD with privacy budget (ε, δ), the mechanism bounds how much the *distribution* of published gradient updates changes with the inclusion or exclusion of any single training record. Smaller ε means the distributions are more indistinguishable — which makes gradient inversion harder without a formal reconstruction impossibility claim. This is the only defense with a provable information-theoretic bound against gradient leakage.
 
 The practical tension: **ε-calibration is hard**. Strong privacy (ε ≈ 1–2) typically requires significant noise, which degrades model utility — slower convergence, lower final accuracy, and sensitivity to learning rate and clipping norm hyperparameters. For high-dimensional models like large language models, the utility cost of strong DP can be substantial. Published DP fine-tuning work often uses ε values of 3–8, which provides formal protection but is weaker than ε < 2. Higher ε values provide weaker privacy guarantees.
 
-Practitioners deploying DP-SGD should not treat ε as a "set it and forget it" parameter. The choice represents a privacy-utility trade-off that should be calibrated based on the sensitivity of the training data, the size of the dataset (DP guarantees improve with more data for fixed ε), and the specific threat model.
+Practitioners deploying DP-SGD should not treat ε as a "set it and forget it" parameter. The choice represents a privacy-utility trade-off that should be calibrated based on the sensitivity of the training data, the size of the dataset (larger datasets allow achieving a better utility/privacy tradeoff for a given ε, since the per-sample noise contribution is diluted; the formal privacy guarantee at a stated ε is the same regardless of dataset size), and the specific threat model.
 
 ### Gradient Compression and Sparsification
 
@@ -120,14 +120,14 @@ Adding noise to gradients before transmission — without the formal DP framewor
 
 **If you're using a fine-tuning API with user-uploaded data:**
 
-- Understand whether the provider processes gradients in a form that is accessible to its own systems. The architecture of fine-tuning pipelines varies; some designs isolate per-user gradient computation in a way that limits cross-user leakage.
+- Understand whether the provider has access to per-user gradients during training. Architecture variations that isolate per-user gradient computation can limit *cross-user* leakage, but they do not prevent the provider itself from observing those per-user gradients — the relevant threat is provider visibility, not cross-user contamination.
 - For sensitive training data (medical records, financial data, PII), the gradient visibility of the provider is a relevant question to raise before deploying.
 - DP-SGD can be applied by the API provider, but the privacy budget and implementation details matter. "We use differential privacy" without ε disclosure provides limited assurance.
 
 **On batch size in fine-tuning pipelines:**
 
 - LoRA and other parameter-efficient fine-tuning methods at batch sizes 4–8 remain in the gradient-inversion-vulnerable range. This is a common configuration for domain adaptation.
-- Effective batch size (achieved via gradient accumulation) and actual per-step batch size are different for gradient inversion purposes. Aggregated gradients over multiple accumulated steps still encode individual-sample information from each step.
+- **Gradient accumulation and effective batch size**: standard gradient accumulation aggregates gradients over multiple mini-batches before an optimizer step, increasing the effective batch size. When only the accumulated gradient is exposed (e.g., transmitted to an aggregator), the attacker faces a harder reconstruction problem proportional to the actual number of samples aggregated. However, if per-step gradients are individually accessible — as they are in some FL protocols or when the training infrastructure logs intermediate gradients — accumulation provides no protection. Know what granularity of gradient your protocol exposes.
 
 **On NLP pipelines specifically:**
 
