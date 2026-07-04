@@ -123,9 +123,9 @@ The most reliable defense is an absolute constraint that the model cannot reason
 
 In-loop detection cannot prevent a loop from starting, but can terminate it early:
 
-**Repeated tool calls.** If the agent calls the same tool with the same arguments more than twice in a single session, treat it as a likely loop and escalate or terminate. This check is simple to implement in a tool-call wrapper.
+**Repeated tool calls.** If the agent calls the same tool with the same arguments more than twice in a single session, treat it as a likely loop and escalate or terminate. Implement this in a tool-call wrapper by hashing (tool_name, normalized_args). Important caveats: exclude expected repeat patterns like pagination (where the tool is the same but the page/cursor argument advances), polling (intentionally repeated health checks), and idempotent retries after transient failure. The heuristic works best when scoped to "same tool + semantically identical args" with these expected patterns explicitly exempted in your wrapper logic.
 
-**Semantic similarity of consecutive thoughts.** If your framework exposes the agent's intermediate reasoning traces (e.g., LangChain's `verbose=True` callback, or a custom chain that logs thought steps), cosine similarity (or embedding distance) between consecutive traces can detect circular reasoning. A threshold — "if the last three thoughts are more than 0.90 similar, trigger the circuit breaker" — catches the most obvious loops. Note that many production APIs do not expose internal chain-of-thought; this heuristic applies when your stack surfaces intermediate steps, not when you see only the final response.
+**Semantic similarity of consecutive thoughts.** If your framework exposes the agent's intermediate reasoning traces (e.g., LangChain's `verbose=True` callback, or a custom chain that logs thought steps), cosine similarity (or embedding distance) between consecutive traces can detect circular reasoning. A threshold — "if the last three thoughts are more than 0.90 similar, trigger the circuit breaker" — catches the most obvious loops. Note that many production APIs do not expose internal chain-of-thought; this heuristic applies when your stack surfaces intermediate steps, not when you see only the final response. Also note the privacy tradeoff: storing intermediate reasoning traces may capture system prompt content or sensitive in-context data; implement with appropriate access controls and retention policies if you build this.
 
 **Progress scoring.** For agents with explicit goals, a lightweight progress evaluator (even a simple heuristic) can detect whether the agent is making progress toward its stated objective. Agents that score low progress across multiple consecutive steps are likely looping.
 
@@ -145,9 +145,9 @@ System-level resource controls operate independently of model behavior:
 
 **API call rate limits.** A per-session API call rate limit (e.g., 10 tool calls per minute) caps tool amplification attacks even if the model successfully orchestrates an exponential call tree. The calls queue or fail; they do not accumulate unbounded cost.
 
-**Session-level cost accounting.** Track cumulative cost per session. Terminate sessions that exceed a per-session cost ceiling (e.g., $0.50) regardless of whether the agent believes it is making progress.
+**Session-level cost accounting.** Track cumulative cost per session. Terminate sessions that exceed a per-session cost ceiling (e.g., $0.50) regardless of whether the agent believes it is making progress. Note that per-session limits alone do not stop multi-session attacks: an attacker can fan out across many concurrent sessions, each staying under the per-session cap. Complement session-level limits with per-user or per-IP budgets, and global concurrency caps (maximum simultaneous sessions) at the service ingress layer.
 
-**Memory write quotas.** For agents with persistent memory, limit writes per session (both count and total bytes) to prevent context poisoning via memory injection.
+**Memory write quotas.** For agents with persistent memory, limit writes per session (both count and total bytes) to reduce the surface area for memory injection. However, quotas alone do not address cross-session poisoning: a single small malicious write can persist indefinitely and affect all future sessions until explicitly evicted. Complement write quotas with tenant isolation (prevent one user's writes from being visible to another's sessions), write validation or approval workflows for high-trust memory entries, and periodic memory audits or TTL-based eviction.
 
 ### Human-in-the-Loop Checkpoints
 
