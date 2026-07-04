@@ -38,9 +38,9 @@ Backdoor attacks on LLMs using text triggers — including the persistence throu
 
 To understand visual backdoors, you need a working model of how vision-language models process images.
 
-Modern VLMs use a **dual-encoder architecture**:
+Modern VLMs share a common structural pattern:
 
-1. **Vision encoder** — typically a Vision Transformer (ViT) or CLIP-style model that converts an input image into a sequence of patch embeddings. The image is divided into fixed-size patches (commonly 14 or 16 pixels per side at a standard 224px input resolution); each patch is linearly projected and processed through transformer attention layers to produce a representation vector.
+1. **Vision encoder** — typically a Vision Transformer (ViT) or CLIP-style model that converts an input image into a sequence of patch embeddings. The image is divided into fixed-size patches (commonly 14, 16, or 32 pixels per side at standard input resolutions — e.g., ViT-B/16 uses 16-pixel patches, ViT-B/32 uses 32-pixel patches on 224px inputs); each patch is linearly projected and processed through transformer attention layers to produce a representation vector.
 
 2. **Projection layer** — a learned linear or MLP module that maps vision encoder outputs into the embedding space expected by the language model backbone.
 
@@ -63,7 +63,7 @@ Patch-based triggers are conceptually the direct visual analog of BadNets (Gu et
 
 In ViT-based vision encoders, patch-based triggers interact with the model's **patch tokenization boundary**. A trigger aligned to patch boundaries is processed as a distinct visual token with consistent representation across images; a trigger misaligned with boundaries may produce inconsistent representations across different image contexts. Well-designed patch triggers account for this by being large enough to fully occupy at least one patch cell.
 
-**BadCLIP** (Liang et al., 2024, arXiv:2311.16194, CVPR 2024) extended patch-based attacks to CLIP, demonstrating a **dual-space attack** that operates in both the image embedding space and the text embedding space simultaneously. Standard visual backdoor attacks on CLIP corrupt image-text alignment for the trigger condition — the poisoned CLIP model learns to associate trigger-containing images with the attacker's target text. BadCLIP's key contribution is designing the trigger so the attack is stable across different image contexts and text descriptions, making it more reliable for downstream VLMs that build on CLIP.
+**BadCLIP** (Liang et al., 2024, arXiv:2311.12075, CVPR 2024) extended patch-based attacks to CLIP, demonstrating a **dual-space attack** that operates in both the image embedding space and the text embedding space simultaneously. Standard visual backdoor attacks on CLIP corrupt image-text alignment for the trigger condition — the poisoned CLIP model learns to associate trigger-containing images with the attacker's target text. BadCLIP's key contribution is designing the trigger so the attack is stable across different image contexts and text descriptions, making it more reliable for downstream VLMs that build on CLIP.
 
 ### Invisible Perturbation Triggers
 
@@ -105,7 +105,7 @@ Understanding the attack mechanics is only part of the threat model. The other p
 
 The highest-leverage injection point. CLIP and its open-source derivatives are trained on LAION-scale datasets — hundreds of millions to billions of image-text pairs scraped from the public web. The barrier to injecting poisoned samples into a future scrape of public web content is the same as the barrier to publishing web content: nearly zero.
 
-Carlini et al. (2023) demonstrated that **web-scraped training datasets are poisonable by purchasing domain registrations** — images hosted on recently-expired domains get re-crawled and included in future dataset versions. An attacker who purchases expired domains referenced in LAION can serve poisoned images to future scraping runs. At a dataset scale of billions of images, even a fraction of a percent poisoning rate yields millions of poisoned training examples.
+Carlini et al. (2023) demonstrated that **web-scraped training datasets can be vulnerable to poisoning via domain registration**: images hosted on recently-expired domains may be re-crawled and included in future dataset versions if dataset builders don't maintain URL snapshots or content hashes. This specific attack path applies to datasets that re-scrape live URLs rather than archiving content — a consideration for evaluating the poisoning risk of any given pre-training corpus.
 
 This attack surface is specific to models trained on uncurated web data. It is an argument for curated pre-training datasets with explicit content provenance, which creates a separate set of tradeoffs regarding data diversity and collection cost.
 
@@ -164,7 +164,7 @@ In each case, the attacker's leverage point is any pathway that allows attacker-
 
 Neural Cleanse works reasonably well for simple patch-based triggers in image classifiers. Its application to VLMs is complicated by the open-ended output space: "misclassification" doesn't map cleanly to natural language generation tasks, and reverse-engineering a trigger in pixel space for a model with billions of parameters is computationally expensive.
 
-**Activation clustering** (Chen et al., 2018) exploits the neural separability of backdoored behavior — the finding that trigger-activated representations cluster separately from clean-input representations in internal layer activations. Scanning activations on a representative dataset for anomalous clusters can identify backdoored examples. This technique has been demonstrated on image classifiers and adapted to NLP backdoors, but VLMs present a harder version of the problem: the visual processing passes through multiple stages (patch encoder → projection → LLM attention layers), and the trigger pathway may be spread across multiple layers.
+**Activation clustering** (Chen et al., 2018, arXiv:1811.03728, USENIX Security 2019) exploits the neural separability of backdoored behavior — the finding that trigger-activated representations cluster separately from clean-input representations in internal layer activations. Scanning activations on a representative dataset for anomalous clusters can identify backdoored examples. This technique has been demonstrated on image classifiers and adapted to NLP backdoors, but VLMs present a harder version of the problem: the visual processing passes through multiple stages (patch encoder → projection → LLM attention layers), and the trigger pathway may be spread across multiple layers.
 
 ### Certified Defenses: Randomized Smoothing
 
@@ -205,7 +205,7 @@ This defense is practical and adds no model modification cost; it requires only 
 
 **For model selection and deployment:**
 
-- Verify checksums (SHA-256) of vision encoder checkpoints against upstream releases — retrieving the expected hash from a trusted, independent source (not the same download page as the weights). Do not assume that a file named `openclip-vit-b32.bin` matches the canonical release — verify.
+- Verify checksums (SHA-256) of vision encoder checkpoints against upstream releases — retrieving the expected hash from a trusted, independent source (not the same download page as the weights). Do not assume that a file named `openclip-vit-b32.pt` matches the canonical release — verify.
 - Prefer models with documented pre-training data provenance over models trained on uncurated LAION-scale scrapes for high-stakes deployments.
 - When fine-tuning, audit the fine-tuning dataset. Automated backdoor detection tools (like the BackdoorBench suite) should be part of the ML pipeline for models deployed in security-sensitive contexts.
 
