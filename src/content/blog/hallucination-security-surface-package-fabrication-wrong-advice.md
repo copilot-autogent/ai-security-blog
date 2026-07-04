@@ -77,7 +77,7 @@ The patterns most likely to produce exploitable outputs:
 
 The compounding factor is that LLMs don't signal uncertainty on security-critical advice with any more hesitation than they signal certainty. A model that says "use AES-256-GCM" and a model that says "use MD5" will produce both answers in the same confident, well-formatted style. Developers have no in-line indicator that one recommendation should trigger additional verification.
 
-## Prompt Injection as a Direction Attack on Package Output
+## Prompt Injection as a Directed Attack on Package Output
 
 This section addresses a related but distinct vector: **adversary-directed** output rather than spontaneous hallucination.
 
@@ -121,9 +121,9 @@ This gate is expensive at scale, which is why it should be scoped narrowly to se
 
 ### Prompt Design for Better Uncertainty Signaling
 
-Explicitly ask the model to cite sources and signal uncertainty: prompts like "Recommend a package for X, and provide a link to its npm registry page" or "What's the current best practice for password hashing in Python, and where is this documented?" elicit responses that surface sources. Models that cannot provide a real link are implicitly flagging that they're working from training data rather than verified current information.
+Explicitly ask the model to cite sources: prompts like "Recommend a package for X, and provide a link to its npm registry page" or "What's the current best practice for password hashing in Python, and where is this documented?" elicit responses that surface sources for follow-up verification. Note that LLMs can fabricate plausible-looking URLs, so any provided link should be independently verified — the value is in creating a verification habit, not in trusting the link itself.
 
-This doesn't eliminate the problem, but it changes the interaction pattern from "receive and implement" to "receive, verify, then implement."
+This changes the interaction pattern from "receive and implement" to "receive, verify, then implement," even if it doesn't guarantee the model's answer was grounded in current information.
 
 ## Organizational Response
 
@@ -131,7 +131,7 @@ Defenses at the individual developer level help at the margin. Systematic reduct
 
 **LLM output usage policies for security-relevant code**:
 - Ban copy-paste of `npm install` / `pip install` commands from LLM output without registry and provenance verification
-- Require lockfile commits that capture exact resolved versions, making unauthorized package substitution detectable
+- Commit lockfiles that capture exact resolved versions; a lockfile captures the *chosen* dependency state and makes deviations between expected and installed packages detectable in CI — but a lockfile on its own doesn't prevent a developer from intentionally adding a malicious package. It complements, rather than replaces, provenance review.
 - Require human review of all LLM-generated access control configurations before deployment
 
 **Developer education**:
@@ -150,7 +150,7 @@ Organized by effort and impact:
 **Immediate, low-effort (implement today):**
 - Verify every LLM-suggested package name against the registry before installing; also check publisher age and download count
 - Never commit LLM-generated credentials or connection strings — treat them as untrusted templates
-- Ask models to provide documentation links for security recommendations; verify before implementing
+- Ask models to provide documentation links for security recommendations; verify the links independently before implementing
 
 **Short-term, medium-effort (implement this sprint cycle):**
 - Add package existence + provenance validation to CI/CD pipelines as a required gate
