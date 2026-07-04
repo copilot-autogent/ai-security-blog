@@ -1,15 +1,15 @@
 ---
 title: "RAG Privacy Attacks: How Retrieval-Augmented Generation Pipelines Leak Private Documents"
-description: "RAG makes LLMs accurate by indexing private documents — but the retrieval pipeline introduces a new attack surface. Adversarial queries can extract document chunks, embedding inversions recover original text, and multi-tenant isolation fails in ways that bypass document ACLs entirely."
+description: "RAG makes LLMs accurate by indexing private documents — but the retrieval pipeline introduces a new attack surface. Adversarial queries can extract document chunks, embedding inversions recover original text, and multi-tenant isolation can fail in ways that expose documents across access boundaries."
 pubDate: 2026-07-04
 tags: ["rag", "privacy", "data-exfiltration", "vector-databases", "embeddings", "multi-tenant", "prompt-injection"]
 ---
 
 Imagine an enterprise deploys a RAG chatbot over its internal document repository — HR policies, legal contracts, engineering specs, financial forecasts. Access control is enforced at the source system level: employees can only retrieve documents they're authorized to view. The RAG pipeline provides the "relevant context" to the LLM, and the security model depends on "documents are only retrieved when relevant to authorized users."
 
-An attacker with standard employee-level access begins crafting queries. Not to get answers — to extract documents. By the end of the week, they have confidential legal strategy memos and compensation bands they were never authorized to see. They never broke a password. They just asked the right questions.
+Consider the threat model: an attacker with standard employee-level access begins crafting queries. Not to get answers — to extract documents. Iteratively querying with targeted paraphrases, they retrieve overlapping chunks covering documents outside their authorization scope. They never broke a password. They just asked the right questions.
 
-This is the RAG retrieval attack surface. It is distinct from KV-cache contamination across inference batches (covered in the #177 post on cross-tenant contamination) — that's about shared computation state at the inference layer. This is about the **retrieval layer**: the vector database, chunking pipeline, and similarity-based document selection as the attack surface.
+This is the RAG retrieval attack surface. It is distinct from KV-cache contamination across inference batches (covered in the [cross-tenant KV-cache contamination post](/blog/cross-tenant-kv-cache-contamination)) — that's about shared computation state at the inference layer. This is about the **retrieval layer**: the vector database, chunking pipeline, and similarity-based document selection as the attack surface.
 
 ---
 
@@ -53,7 +53,7 @@ Without prior knowledge of document content, an attacker can use systematic tili
 - Each query returns *k* document chunks; track which chunks have been seen
 - Iteratively refine queries to reach uncovered parts of the document corpus
 
-This is computationally intensive but feasible at employee-level query rates if the system lacks retrieval rate limiting. The key constraint is the size of the embedded document corpus — smaller corpora are fully extractable in hours.
+This is computationally intensive but feasible at employee-level query rates if the system lacks retrieval rate limiting. For small, focused document corpora (say, under a few hundred documents), an attacker following this strategy could cover a significant fraction of the embedding space without exhausting normal query allowances.
 
 ### The Chunking Granularity Tradeoff
 
@@ -87,9 +87,11 @@ Enterprise RAG deployments often serve multiple users or teams from a shared vec
 
 Most vector databases support **namespace** or **collection** isolation (logical separation of index segments) and **metadata filters** (query-time predicates on document attributes). A common pattern is to add a tenant ID filter to every query, so User A's queries only retrieve User A's documents.
 
-The failure mode: **hybrid search interactions**. When combining vector similarity with metadata filtering, the order of operations matters. Some implementations apply the filter after the top-*k* retrieval — meaning the vector search considers all documents in the index, and the filter is applied as a post-processing step. This approach is vulnerable when the filter reduces results below *k*, causing the system to return lower-ranked cross-tenant documents to fill the result set.
+The failure mode: **filter-after-rank implementations**. When combining vector similarity with metadata filtering, the order of operations matters. Some vector database configurations apply the filter after top-*k* retrieval — the vector search ranks all documents in the index by similarity, then the metadata predicate is applied as a post-processing step. In Pinecone, for example, this was historically the default mode for dense vector queries; the filter-before-rank mode (which restricts the candidate set *before* ANN search) must be explicitly configured and requires appropriate index types.
 
-The secure pattern requires filtering-before-ranking: the vector search must operate only over the tenant's document set, not the global index with post-hoc filtering. Not all vector database configurations enforce this by default.
+With a filter-after-rank implementation, when the post-filter reduces results below *k*, some implementations backfill from lower-ranked candidates that pass the filter. If those candidates are cross-tenant documents that happen to share semantic similarity with the query, the filter provides weaker isolation than it appears.
+
+The secure pattern requires filter-before-rank: the vector search must operate only over the tenant's document set, not the global index with post-hoc filtering. Verify your vector database configuration — don't assume metadata filters enforce pre-search isolation by default.
 
 ### Cross-Tenant Poisoning via Shared Knowledge Bases
 
@@ -151,7 +153,9 @@ Treat the vector index as a dependent of the source system's ACL. When a documen
 
 ### Retrieval Auditing
 
-Log every retrieval event: which query, which chunks retrieved, which user, what similarity scores. Retrieval logs are the primary forensic artifact for detecting systematic extraction — an employee querying 3,000 diverse topics across two weeks generates a very different retrieval pattern than normal use. Behavioral analytics over retrieval logs can detect both targeted and blind extraction attempts.
+Log retrieval events — which chunks were retrieved for which query, and which user initiated the request. Retrieval logs are the primary forensic artifact for detecting systematic extraction; behavioral analytics can identify query patterns inconsistent with normal use.
+
+**Critical: treat retrieval logs as a high-sensitivity data store.** Because retrieval logs contain query semantics and retrieved chunk identifiers (or content), they must be subject to the same access controls, retention limits, and minimization policies as the source document corpus itself. A poorly protected retrieval log is itself a side-channel to the document index. Log access should be restricted to security and compliance roles, and retention should follow a defined schedule with automated purge. Avoid logging full chunk content unless necessary — chunk IDs may be sufficient for forensic tracing without creating a second copy of the indexed documents.
 
 ### Rate Limiting on Retrieval
 
@@ -173,7 +177,7 @@ Don't expose raw embedding vectors in retrieval API responses unless there is a 
 
 ## Distinguishing This from KV-Cache Contamination
 
-The KV-cache contamination attack (post #177) operates at the **inference layer**: cached attention key-value states from one user's prompt can be reused in another user's generation context if inference batching shares KV cache across sessions. The attacker target is inference-time computation state.
+The KV-cache contamination attack (covered in the [cross-tenant KV-cache contamination post](/blog/cross-tenant-kv-cache-contamination)) operates at the **inference layer**: cached attention key-value states from one user's prompt can be reused in another user's generation context if inference batching shares KV cache across sessions. The attacker target is inference-time computation state.
 
 RAG retrieval attacks operate at the **retrieval layer**: the vector database and embedding pipeline. The attacker target is the stored document corpus and the retrieval mechanism. The two attack surfaces are complementary — a fully hardened RAG pipeline needs defenses at both layers.
 
@@ -189,7 +193,7 @@ For teams building or auditing RAG deployments:
 
 2. **Map deletion propagation.** For every document type in your RAG corpus, trace the path from "document is deleted/restricted at source" to "embedding is removed from vector store." If that path is not automated and monitored, you have a stale-index exposure.
 
-3. **Treat retrieval logs as a first-class security artifact.** Ensure retrieval events are logged with user identity, query semantics (not just the embedding), and chunk IDs returned. Confirm those logs are in scope for your security information and event management system.
+3. **Treat retrieval logs as a first-class security artifact — with matching access controls.** Ensure retrieval events are logged with user identity, query semantics (not just the embedding), and chunk IDs returned. Apply strict access controls and retention limits to those logs; they contain sensitive query-intent data and indirect document-access records.
 
 4. **Do not return raw embedding vectors from retrieval APIs.** Review API response schemas; strip embedding fields unless actively used by the calling application.
 
