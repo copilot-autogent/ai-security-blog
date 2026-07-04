@@ -40,7 +40,7 @@ To understand visual backdoors, you need a working model of how vision-language 
 
 Modern VLMs use a **dual-encoder architecture**:
 
-1. **Vision encoder** — typically a Vision Transformer (ViT) or CLIP-style model that converts an input image into a sequence of patch embeddings. The image is divided into fixed-size patches (commonly 14×14 or 16×16 pixels); each patch is linearly projected and processed through transformer attention layers to produce a representation vector.
+1. **Vision encoder** — typically a Vision Transformer (ViT) or CLIP-style model that converts an input image into a sequence of patch embeddings. The image is divided into fixed-size patches (commonly 14 or 16 pixels per side at a standard 224px input resolution); each patch is linearly projected and processed through transformer attention layers to produce a representation vector.
 
 2. **Projection layer** — a learned linear or MLP module that maps vision encoder outputs into the embedding space expected by the language model backbone.
 
@@ -63,9 +63,7 @@ Patch-based triggers are conceptually the direct visual analog of BadNets (Gu et
 
 In ViT-based vision encoders, patch-based triggers interact with the model's **patch tokenization boundary**. A trigger aligned to patch boundaries is processed as a distinct visual token with consistent representation across images; a trigger misaligned with boundaries may produce inconsistent representations across different image contexts. Well-designed patch triggers account for this by being large enough to fully occupy at least one patch cell.
 
-**BadCLIP** (Liang & Tian, 2023, arXiv:2311.12075) extended patch-based attacks to CLIP, demonstrating a **dual-space attack** that operates in both the image embedding space and the text embedding space simultaneously. Standard visual backdoor attacks on CLIP corrupt image-text alignment for the trigger condition — the poisoned CLIP model learns to associate trigger-containing images with the attacker's target text. BadCLIP's key contribution is designing the trigger so the attack is stable across different image contexts and text descriptions, making it more reliable for downstream VLMs that build on CLIP.
-
-The verified BadCLIP arXiv ID is arXiv:2311.12075.
+**BadCLIP** (Liang et al., 2024, arXiv:2311.16194, CVPR 2024) extended patch-based attacks to CLIP, demonstrating a **dual-space attack** that operates in both the image embedding space and the text embedding space simultaneously. Standard visual backdoor attacks on CLIP corrupt image-text alignment for the trigger condition — the poisoned CLIP model learns to associate trigger-containing images with the attacker's target text. BadCLIP's key contribution is designing the trigger so the attack is stable across different image contexts and text descriptions, making it more reliable for downstream VLMs that build on CLIP.
 
 ### Invisible Perturbation Triggers
 
@@ -121,7 +119,7 @@ CLIP's position as the most widely reused vision encoder makes it a particularly
 
 ### Fine-Tuning Injection
 
-An attacker with the ability to influence fine-tuning data — even a small fraction — can inject visual backdoors. This attack vector maps directly onto the broader threat of poisoned instruction-following datasets (discussed in #184), but the trigger is visual rather than textual.
+An attacker with the ability to influence fine-tuning data — even a small fraction — can inject visual backdoors. This attack vector maps directly onto the broader threat of poisoned instruction-following datasets (covered in [backdoor attacks in foundation models](/blog/backdoor-attacks-foundation-models)), but the trigger is visual rather than textual.
 
 In the LoRA/adapter fine-tuning setting, the attack surface is the training data provided to the fine-tuning job. A compromised data pipeline, a malicious third-party data vendor, or a poisoned public fine-tuning dataset (e.g., a ShareGPT-style image-text instruction dataset published on Hugging Face) can inject trigger-poisoned samples.
 
@@ -172,7 +170,7 @@ Neural Cleanse works reasonably well for simple patch-based triggers in image cl
 
 Cohen et al. (2019, "Certified Adversarial Robustness via Randomized Smoothing," ICML 2019) introduced a general framework for certified ℓ₂ robustness: a smoothed classifier, constructed by adding Gaussian noise to the input before classification, is certifiably robust within a radius proportional to the noise level. The certification is a formal guarantee — within the certified radius, the smoothed classifier's output cannot change regardless of what perturbation the attacker applies.
 
-Levine & Feizi (2020, "Randomized Smoothing of All Shapes and Sizes," ICML 2020) extended this to certifiable robustness against **patch-based attacks** — the attack class most relevant to visual backdoor triggers. The key insight is that for patch attacks, the attacker's freedom is spatially constrained (the patch occupies a bounded region). Certification can exploit this constraint more efficiently than general ℓ₂ smoothing.
+Levine & Feizi (2020, "(De)Randomized Smoothing for Certifiable Defense against Patch Attacks," NeurIPS 2020) extended this to certifiable robustness against **patch-based attacks** — the attack class most relevant to visual backdoor triggers. The key insight is that for patch attacks, the attacker's freedom is spatially constrained (the patch occupies a bounded region). Certification can exploit this constraint more efficiently than general ℓ₂ smoothing.
 
 The limitation of certified defenses is the accuracy-robustness tradeoff. Randomized smoothing degrades clean accuracy, and the certified radii achievable at reasonable accuracy degradation are often smaller than the patch sizes demonstrated in practical attacks. In production VLM deployments, the accuracy cost of smoothing is often a practical blocker. Certified defenses are more useful as a design-time formal verification tool than a drop-in production defense.
 
@@ -190,7 +188,7 @@ A defense approach more specific to multi-modal systems: compare the model's beh
 
 More specifically: run the text query through the LLM backbone without the image. If the image is benign, the VLM's response should be a refinement or augmentation of what the text-only model would say, not a completely different output. A dramatic divergence suggests the image is driving the response in an anomalous way — consistent with a trigger activation.
 
-This defense is practical and adds no model modification cost; it requires only an additional text-only inference pass. Its limitations: it depends on having a baseline expectation for text-only behavior, and sophisticated backdoors may be designed to produce outputs that look superficially consistent with the query even when a trigger is active.
+This defense is practical and adds no model modification cost; it requires only an additional text-only inference pass. Its limitations: not all production VLM deployments expose a text-only inference path with the same model and calibration, so this check may be impractical depending on how the model is served. It also depends on having a baseline expectation for text-only behavior, and sophisticated backdoors may be designed to produce outputs that look superficially consistent with the query even when a trigger is active.
 
 ## Threat Matrix
 
@@ -207,7 +205,7 @@ This defense is practical and adds no model modification cost; it requires only 
 
 **For model selection and deployment:**
 
-- Verify checksums (SHA-256) of vision encoder checkpoints against upstream releases. Do not assume that a file named `openclip-vit-b32.bin` matches the canonical release — verify.
+- Verify checksums (SHA-256) of vision encoder checkpoints against upstream releases — retrieving the expected hash from a trusted, independent source (not the same download page as the weights). Do not assume that a file named `openclip-vit-b32.bin` matches the canonical release — verify.
 - Prefer models with documented pre-training data provenance over models trained on uncurated LAION-scale scrapes for high-stakes deployments.
 - When fine-tuning, audit the fine-tuning dataset. Automated backdoor detection tools (like the BackdoorBench suite) should be part of the ML pipeline for models deployed in security-sensitive contexts.
 
@@ -215,7 +213,7 @@ This defense is practical and adds no model modification cost; it requires only 
 
 - Treat VLM outputs as untrusted when they derive from attacker-reachable images (external web content, user uploads, third-party services).
 - Apply the least-privilege principle: a VLM that processes untrusted images should have minimal tool access and should not be in a position to trigger irreversible actions directly.
-- Log all image inputs to agentic pipelines for post-hoc review. Reconstruction of a trigger activation event requires having the original image.
+- Log all image inputs to agentic pipelines for post-hoc review — with appropriate retention limits, access controls, and data minimization practices given that images may contain sensitive content or PII. Reconstruction of a trigger activation event requires having the original image.
 
 **For ongoing monitoring:**
 
