@@ -31,7 +31,7 @@ Two 2020 papers significantly extended the capability:
 
 **Zhao et al., "iDLG: Improved Deep Leakage from Gradients"** (arXiv:2001.02610, 2020) addressed label recovery. The original Zhu et al. attack required knowing or guessing the true label; iDLG showed that labels can be extracted analytically from the gradient itself for cross-entropy losses, removing that dependency and making the attack self-contained.
 
-**Geiping et al., "Inverting Gradients — How easy is it to break privacy in federated learning?"** (NeurIPS 2020) demonstrated near-perfect image reconstruction at batch size 1. The key innovations were a cosine similarity loss function (more stable than L2 for gradient matching) and total variation regularization on the reconstructed image (enforcing spatial coherence, which helps optimization). The results were striking: for batch size 1, federated learning over standard image datasets produced reconstructions that were visually indistinguishable from originals. The attack was demonstrated against ResNets and similar architectures.
+**Geiping et al., "Inverting Gradients — How easy is it to break privacy in federated learning?"** (arXiv:2003.14053, 2020) demonstrated near-perfect image reconstruction at batch size 1. The key innovations were a cosine similarity loss function (more stable than L2 for gradient matching) and total variation regularization on the reconstructed image (enforcing spatial coherence, which helps optimization). The results were striking: for batch size 1, federated learning over standard image datasets produced reconstructions that were visually indistinguishable from originals. The attack was demonstrated against ResNets and similar architectures.
 
 Both papers focus on the image domain. The architecture assumption matters: convolutional networks have specific properties (particularly around the relationship between spatial structure and gradient structure) that facilitate inversion. But the vulnerability class is general to any gradient-sharing setting.
 
@@ -63,7 +63,7 @@ At batch size 1, the attack is maximally powerful: the gradient is produced by a
 
 As batch size increases, the gradient becomes an aggregate over multiple samples. The optimization problem gains degrees of freedom, the constraint is weaker, and reconstruction fidelity drops. By batch size ~8–16, image reconstructions become blurred and partially incorrect. By batch size ~32, reliable individual reconstruction is generally not demonstrated in the literature.
 
-The practical implication: **small-batch fine-tuning remains the high-risk regime**. LoRA fine-tuning with batch sizes of 4–8 — which is common for domain adaptation and personalization — sits in the range where gradient inversion can extract meaningful information about individual training samples. Per-sample gradient accumulation, which is used to simulate larger effective batch sizes while maintaining per-sample computation, does not help: the aggregated gradient still encodes individual-sample information.
+The practical implication: **small-batch fine-tuning remains the high-risk regime**. LoRA fine-tuning with batch sizes of 4–8 — which is common for domain adaptation and personalization — sits in the range where gradient inversion can extract meaningful information about individual training samples. Standard gradient accumulation that is only exposed as a single aggregated update (the full effective batch) does increase the reconstruction difficulty proportionally to the accumulated batch size — but if per-step gradients are individually accessible to an adversary (logged, transmitted, or observable mid-accumulation), the protection disappears and each individual step is as vulnerable as a standalone mini-batch.
 
 ## Threat Models: FL vs. Centralized Training
 
@@ -73,7 +73,7 @@ The threat applies differently across deployment contexts, and the distinction m
 
 A more aggressive variant is the **active attack**: the aggregator modifies the global model to amplify leakage before sending it to clients. By engineering specific weight configurations, the attacker can make the gradient of certain layers directly encode input features with higher fidelity — essentially turning the model into a designed leakage device. This crosses from passive observation to active manipulation and is a distinct threat class.
 
-**Fine-tuning APIs** represent a different but practically significant surface. When users upload datasets to a provider's fine-tuning endpoint, the provider computes gradients on that data during training. A provider with gradient visibility (honest-but-curious) can run gradient inversion on per-batch gradients computed from user data. This is not a federated learning deployment — the compute happens at the provider — but the gradient access is the same.
+**Fine-tuning APIs** represent a more nuanced surface. In the standard case — users upload plaintext datasets, the provider trains on them — the provider already has access to the raw data and does not need gradient inversion. The relevant scenario is **confidential or enclave-style training**: architectures where the provider's training infrastructure computes gradients on user data without the provider's operators having direct plaintext access (e.g., TEE-based training, secure enclaves, or split computation). In those settings, gradients may be the only signal available to an observer with partial visibility. The scenario is specialized, but it is the actual attack surface in privacy-preserving fine-tuning designs; practitioners evaluating those architectures should assess gradient leakage as a distinct channel.
 
 To be direct about the current state: **no publicly confirmed case of a production fine-tuning API running gradient inversion on user data has been documented**. The demonstrated capability exists in controlled research settings. The attack vector is architecturally real, and the threat model applies to any fine-tuning provider with gradient visibility.
 
@@ -87,7 +87,7 @@ Split learning — where a model is split across client and server, with interme
 
 The principled defense is **differential privacy applied to gradient computation (DP-SGD)**. The mechanism: before aggregating gradients, clip each per-sample gradient to a maximum L2 norm, then add calibrated Gaussian noise. The noise magnitude is determined by the privacy budget ε and the clipping norm.
 
-The formal guarantee is real: under DP-SGD with privacy budget (ε, δ), the mechanism bounds how much the *distribution* of published gradient updates changes with the inclusion or exclusion of any single training record. Smaller ε means the distributions are more indistinguishable — which makes gradient inversion harder without a formal reconstruction impossibility claim. This is the only defense with a provable information-theoretic bound against gradient leakage.
+The formal guarantee is real: under DP-SGD with privacy budget (ε, δ), the mechanism bounds how much the *distribution* of published gradient updates changes with the inclusion or exclusion of any single training record. Smaller ε means the distributions are more indistinguishable — which makes gradient inversion harder without a formal reconstruction impossibility claim. DP-SGD provides the only defense with a provable statistical bound on *gradient-update leakage* from a single record.
 
 The practical tension: **ε-calibration is hard**. Strong privacy (ε ≈ 1–2) typically requires significant noise, which degrades model utility — slower convergence, lower final accuracy, and sensitivity to learning rate and clipping norm hyperparameters. For high-dimensional models like large language models, the utility cost of strong DP can be substantial. Published DP fine-tuning work often uses ε values of 3–8, which provides formal protection but is weaker than ε < 2. Higher ε values provide weaker privacy guarantees.
 
@@ -101,7 +101,9 @@ The limitation: this is not a principled defense. There is no formal bound on le
 
 ### Secure Aggregation
 
-**Secure aggregation** is architecturally the cleanest defense. In federated learning, secure aggregation protocols (cryptographic multiparty computation or trusted hardware execution) allow the aggregator to receive the *sum* of client gradients without ever seeing individual client updates. If the aggregator cannot observe per-client gradients, gradient inversion on individual clients is impossible.
+**Secure aggregation** is architecturally the cleanest defense against honest-but-curious aggregators. In federated learning, secure aggregation protocols (cryptographic multiparty computation or trusted hardware execution) allow the aggregator to receive the *sum* of client gradients without ever seeing individual client updates. If the aggregator cannot observe per-client gradients, gradient inversion on individual clients is not possible under the protocol's security assumptions.
+
+The caveat is important: those assumptions include a minimum cohort size. With very small client cohorts — or a single client — the aggregated sum reveals the individual update by subtraction (the "differencing attack"). Protocols that allow the server to control cohort composition or simulate client dropout can isolate individual users. Secure aggregation should be evaluated with attention to minimum cohort size guarantees, not just the cryptographic protocol itself.
 
 The deployment challenges are real: secure aggregation requires protocol support at the aggregation server and at all clients, adds computational overhead, and complicates the FL training infrastructure. Google's production deployment of federated learning for Gboard uses secure aggregation, demonstrating that it is feasible at scale — but the engineering investment is non-trivial. For smaller deployments or fine-tuning providers, secure aggregation is often not implemented.
 
@@ -118,16 +120,16 @@ Adding noise to gradients before transmission — without the formal DP framewor
 - Consider secure aggregation if the infrastructure investment is feasible and your client set is large enough to make aggregated gradient noise meaningful.
 - Batch size matters. If your FL protocol uses small per-client batches (common in on-device fine-tuning), the leakage risk per gradient update is higher.
 
-**If you're using a fine-tuning API with user-uploaded data:**
+**If you're using a fine-tuning API with sensitive data:**
 
-- Understand whether the provider has access to per-user gradients during training. Architecture variations that isolate per-user gradient computation can limit *cross-user* leakage, but they do not prevent the provider itself from observing those per-user gradients — the relevant threat is provider visibility, not cross-user contamination.
-- For sensitive training data (medical records, financial data, PII), the gradient visibility of the provider is a relevant question to raise before deploying.
+- In standard fine-tuning deployments (provider has plaintext access), gradient inversion is not the relevant threat — the provider already has your data. The gradient attack surface matters specifically in **confidential or enclave-style training** architectures where the provider's operators see only gradients, not plaintext inputs.
+- For sensitive training data (medical records, financial data, PII) in privacy-preserving training architectures, ask whether gradient leakage has been evaluated as a distinct channel beyond data-at-rest controls.
 - DP-SGD can be applied by the API provider, but the privacy budget and implementation details matter. "We use differential privacy" without ε disclosure provides limited assurance.
 
 **On batch size in fine-tuning pipelines:**
 
 - LoRA and other parameter-efficient fine-tuning methods at batch sizes 4–8 remain in the gradient-inversion-vulnerable range. This is a common configuration for domain adaptation.
-- **Gradient accumulation and effective batch size**: standard gradient accumulation aggregates gradients over multiple mini-batches before an optimizer step, increasing the effective batch size. When only the accumulated gradient is exposed (e.g., transmitted to an aggregator), the attacker faces a harder reconstruction problem proportional to the actual number of samples aggregated. However, if per-step gradients are individually accessible — as they are in some FL protocols or when the training infrastructure logs intermediate gradients — accumulation provides no protection. Know what granularity of gradient your protocol exposes.
+- **Gradient accumulation**: if only the fully-accumulated gradient is exposed to the aggregator (not intermediate per-step gradients), the effective batch size governs attack fidelity. However, in many fine-tuning systems intermediate gradients are computed and could be observable to the infrastructure operator — confirm what granularity your protocol exposes before relying on accumulation as a privacy measure.
 
 **On NLP pipelines specifically:**
 
