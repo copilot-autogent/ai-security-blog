@@ -63,9 +63,9 @@ Finer chunking (smaller chunks, more overlap) improves retrieval precision but i
 
 ## Embedding Inversion: Recovering Text from Vectors
 
-The embedding itself is sensitive. Morris et al. (2023) demonstrated in **vec2text** ([arXiv:2310.06816](https://arxiv.org/abs/2310.06816)) that dense text embeddings contain enough information to approximately recover the original text — with high fidelity for short passages.
+The embedding itself is sensitive. Morris et al. (2023) demonstrated in **vec2text** ([arXiv:2310.06816](https://arxiv.org/abs/2310.06816)) that dense text embeddings contain enough information to approximately recover the original text.
 
-The attack works through an iterative refinement process: starting from an initial text hypothesis, an inversion model refines the approximation to minimize the distance between its embedding and the target embedding. For short texts and modern embedding models, the reconstructed text is often near-verbatim.
+The attack works through an iterative refinement process: starting from an initial text hypothesis, an inversion model refines the approximation to minimize the distance between its embedding and the target embedding. The paper shows near-verbatim reconstruction fidelity for short passages; for longer texts (such as the 256–1024-token chunks typical of RAG pipelines), fidelity degrades, but the recovered text still reveals substantial semantic content and partial phrasing. The practical risk is not necessarily perfect reconstruction — it's that embedding vectors are not the opaque, non-invertible representations they are often assumed to be.
 
 ### Practical Risk Surfaces
 
@@ -167,9 +167,11 @@ For minimum viable forensic coverage without creating a second copy of sensitive
 
 Systematic corpus extraction requires volume. Per-user rate limiting on embedding API calls and retrieval requests constrains blind extraction attempts. Rate limits should be calibrated to normal use patterns, not set permissively. Anomalous burst patterns (many diverse queries, rapid paging through results) should trigger throttling or alerting.
 
-### Adversarial Document Detection Before Indexing
+### Adversarial Document Detection Before Indexing (Defense-in-Depth)
 
-Before a document is indexed, apply content policy filtering to detect embedded prompt injection payloads. This is particularly important for any shared knowledge base that aggregates content from multiple sources or allows user contributions. Treat externally-sourced content as potentially adversarial at the indexing stage, not only at retrieval time.
+Applying content policy filtering before indexing can reduce the surface area for prompt injection via retrieval, particularly for well-known payload patterns. This is most useful for shared knowledge bases that aggregate content from multiple sources or allow user contributions.
+
+Note the limitations: current static and heuristic content filters are not reliable detectors for indirect prompt injection. Sophisticated payloads can evade filters, and the space of adversarial instruction phrasings is broad. Treat indexing-time filtering as a **defense-in-depth measure**, not a preventive control. The primary defense against injection-via-retrieval is architectural: output escaping, sandboxed execution, and not granting retrieved context the ability to override system instructions.
 
 ### Avoid Returning Raw Embeddings in API Responses
 
@@ -203,7 +205,7 @@ For teams building or auditing RAG deployments:
 
 4. **Do not return raw embedding vectors from retrieval APIs.** Review API response schemas; strip embedding fields unless actively used by the calling application.
 
-5. **Apply content policy filtering at indexing time.** For any shared or user-contributed knowledge base, assume adversarial content. Filter before indexing, not only at generation time.
+5. **Apply content policy filtering at indexing time as defense-in-depth.** For shared or user-contributed knowledge bases, filtering reduces exposure to known payload patterns. Do not rely on it as a reliable preventive control — treat it as one layer of a defense-in-depth stack alongside architectural controls.
 
 6. **Rate-limit retrieval at the per-user level.** Verify your rate limiting covers the embedding endpoint, not just the chat/generation endpoint. An attacker targeting the retrieval layer may bypass a rate limit that only applies to the LLM call.
 
