@@ -151,7 +151,8 @@ The vulnerability varies substantially across model types:
 | Heavily overfit classifiers | High (AUC 0.80–0.90+) | Small training sets, long training |
 | Standard classifiers (ResNet, etc.) | Moderate (AUC 0.60–0.70) | Regularization, dropout help |
 | LLMs with verbatim memorization | High for memorized records | Can directly extract text |
-| DP-trained models (ε ≈ 1–10) | Low (bounded by ε) | Formal guarantee |
+| DP-trained models (ε ≈ 1–3) | Low (bounded by ε) | Meaningful formal guarantee |
+| DP-trained models (ε ≈ 5–10) | Moderate to low (bound weakens at high ε) | Formal guarantee, but ε=10 near-vacuous |
 | DP-trained models (ε < 1) | Very low | High utility cost |
 
 These ranges are approximate and depend heavily on dataset size, training duration, architecture, and the specific attack variant. The Carlini et al. 2022 evaluation establishes more precise benchmarks; the point is that vulnerability varies by multiple orders of magnitude across the design space.
@@ -180,7 +181,7 @@ This post's attack class is orthogonal to gradient inversion:
 | **Threat model** | API access, post-deployment | Federated learning, training-time |
 | **Defenses** | DP, regularization, output noise | Gradient noise, secure aggregation |
 
-The attacks can be combined: gradient inversion can identify *which* records were in training (membership) while also reconstructing *what* those records contained. But they operate via different mechanisms, in different threat models, with different defenses.
+The attacks are complementary rather than combinable in a single pipeline: gradient inversion operates during or near training by accessing raw gradients, reconstructing what training samples contained; membership inference operates post-deployment against the trained model, detecting whether a given record was in the training set. They address different threat actors at different points in the model lifecycle.
 
 ## Practical Checklist for ML Teams
 
