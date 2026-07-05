@@ -78,7 +78,7 @@ Large language models introduce membership inference complications that don't ar
 
 **Verbatim memorization.** LLMs trained on large corpora sometimes memorize exact sequences verbatim. Carlini et al. (in separate work on language model memorization, 2021) showed that a sufficiently large language model will reproduce training sequences near-verbatim when prompted with a prefix from those sequences. This is membership inference as a byproduct of generation, not a separate attack—and it's qualitatively different because the output is the data itself, not just a membership signal.
 
-**Inference via perplexity.** For language models, the analog of confidence scores is **perplexity** (or cross-entropy loss) on a candidate sequence. Members tend to have lower perplexity than non-members. This provides a direct membership inference channel that doesn't require the attacker to know anything about the model's training distribution—they just query the model with their candidate text and observe the loss.
+**Inference via perplexity.** For language models, the analog of confidence scores is **perplexity** (or cross-entropy loss) on a candidate sequence. Members tend to have lower perplexity than non-members. This attack channel requires the API to return token-level log-probabilities—available from some language model APIs but not all. When only text outputs are returned, the attack must use coarser signals such as whether the model reproduces text verbatim when prompted.
 
 **Few-shot and fine-tuned models.** Models fine-tuned on small, sensitive datasets (medical records, legal documents, personal communications) are more vulnerable than those trained on large, diverse corpora, because small-dataset overfitting is more severe.
 
@@ -88,7 +88,7 @@ Large language models introduce membership inference complications that don't ar
 
 GDPR Article 17 grants individuals the right to have their data deleted ("right to be forgotten"). If a company trains a model on user data and a user requests deletion, **how does the user verify that their data is no longer influencing model outputs?**
 
-Membership inference is the mechanism. After deletion, the user (or a regulator acting on their behalf) can query the model with data records that should have been erased. If the model's outputs still exhibit membership-indicative patterns, the deletion is incomplete—or the model has not been updated to reflect the deletion (a problem that machine unlearning addresses, discussed below).
+Membership inference provides statistical evidence, not a binary verdict. After deletion, the user (or a regulator acting on their behalf) can query the model with data records that should have been erased. If the model's outputs still exhibit membership-indicative patterns at rates above baseline, that is evidence the deletion is incomplete—or that the model has not been updated to reflect the deletion. Crucially, a negative result (no membership signal) does not prove the data was removed; it means the signal is below the attack's detection threshold.
 
 This transforms membership inference from an attacker's tool into an **auditor's instrument**—a privacy test that can be applied to verify compliance. The EU AI Act and emerging GDPR guidance on AI models are beginning to reference this possibility.
 
@@ -116,7 +116,7 @@ Pr[M(D) ∈ S] ≤ e^ε · Pr[M(D') ∈ S] + δ
 
 Here *ε* (epsilon) is the **privacy budget**: smaller *ε* means stronger privacy, at the cost of more noise. *δ* is a small failure probability.
 
-The connection to membership inference is direct: if a model is (ε, δ)-differentially private, the **attacker's advantage** (true positive rate minus false positive rate) is bounded above by *(e^ε − 1)/(e^ε + 1)*. For ε = 1, this maximum advantage is approximately 0.46—the attacker can do no better than 46 percentage points above the 50% random baseline. For ε = 0.1, the bound falls below 0.05, near-random. Smaller ε enforces a tighter ceiling.
+The connection to membership inference is direct: if a model is (ε, δ)-differentially private, the **attacker's advantage** (true positive rate minus false positive rate) is bounded above by *(e^ε − 1)/(e^ε + 1)*. For ε = 1, this maximum advantage is approximately 0.46—meaning the attacker's TPR can exceed their FPR by at most 46 percentage points, corresponding to an attack accuracy ceiling of roughly 73% (not 96%). For ε = 0.1, the bound falls below 0.05. The δ term introduces a small additional failure probability; in practice, δ is set to be negligible (e.g., 10⁻⁵), and the ε bound is the operative constraint. Smaller ε enforces a tighter ceiling on what any membership inference attack can achieve.
 
 DP is typically implemented in ML via **DP-SGD** (Differentially Private Stochastic Gradient Descent), introduced by Abadi et al. (ACM CCS 2016): gradients are clipped to bound their sensitivity, then Gaussian noise is added before each update.
 
@@ -126,9 +126,9 @@ DP protection is not free. The formal guarantees come with a tax on model accura
 
 - Models trained with strong privacy (ε ≈ 1) on small datasets can lose 10–20% accuracy relative to non-private baselines.
 - On large datasets (tens of millions of examples), the cost shrinks substantially—there's simply more signal to drown out the noise.
-- LLMs trained on internet-scale data can often achieve ε ≤ 8 with negligible accuracy cost (Anil et al., "Large Scale Language Modeling with Privacy via DP-SGD", 2021).
+- Research on DP training for large language models (e.g., Anil et al., Google, 2021) has demonstrated training with moderate privacy budgets (ε in the single digits) at acceptable accuracy cost on some benchmarks, though the actual cost is highly setup-dependent and should not be assumed negligible without empirical validation on the target task.
 
-The practical guidance: **use DP when the training set is small, sensitive, and narrowly scoped**. The protection is meaningful and the utility cost is bounded. For large-scale general-purpose models, the privacy properties already achieved by scale may partially satisfy the DP objective, but this is not a substitute for formal guarantees when the data is genuinely sensitive.
+The practical guidance: **use DP when the training set is small, sensitive, and narrowly scoped**. The protection is meaningful and the utility cost is bounded. For large-scale general-purpose models, training on more data can reduce average overfitting per record, which lowers practical membership inference success rates—but this effect does not provide differential privacy's formal per-record guarantees. Scale is not a substitute for DP, and rare or outlier examples can still be memorized even in large models.
 
 ## Machine Unlearning: Promising but Incomplete
 
@@ -146,10 +146,10 @@ This creates a policy problem. If a regulator audits a model after an unlearning
 
 The vulnerability varies substantially across model types:
 
-| Model Type | Typical MIA Advantage | Notes |
+| Model Type | Typical Attack Signal | Notes |
 |---|---|---|
-| Heavily overfit classifiers | High (30–40% AUC above 0.5) | Small training sets, long training |
-| Standard classifiers (ResNet, etc.) | Moderate (10–20% AUC above 0.5) | Regularization, dropout help |
+| Heavily overfit classifiers | High (AUC 0.80–0.90+) | Small training sets, long training |
+| Standard classifiers (ResNet, etc.) | Moderate (AUC 0.60–0.70) | Regularization, dropout help |
 | LLMs with verbatim memorization | High for memorized records | Can directly extract text |
 | DP-trained models (ε ≈ 1–10) | Low (bounded by ε) | Formal guarantee |
 | DP-trained models (ε < 1) | Very low | High utility cost |
@@ -192,7 +192,7 @@ The attacks can be combined: gradient inversion can identify *which* records wer
 
 4. **Don't conflate unlearning with deletion.** Approximate unlearning isn't the same as removing data. If your compliance model depends on verifiable erasure, use certified unlearning methods or plan for retraining.
 
-5. **Restrict output precision.** If your threat model includes membership inference, limit the precision of confidence outputs. Returning top-1 label only (no probabilities) defeats simple attacks; returning rounded probabilities at 0.1 increments substantially reduces more sophisticated ones.
+5. **Restrict output precision.** If your threat model includes membership inference, limit the precision of confidence outputs. Returning top-1 label only (no probabilities) substantially reduces confidence-score attacks; returning rounded probabilities reduces more sophisticated ones. Note that label-only attacks exist and can still infer membership from decision-boundary behavior, so output restriction is a mitigation, not a complete defense.
 
 6. **Log access to sensitive models.** If the model was trained on sensitive data, treat queries to it as access to that data. Anomalous query patterns (many queries with targets known to be in the training set) are a signal of active membership inference attacks.
 
