@@ -7,7 +7,7 @@ tags: ["privacy", "membership-inference", "differential-privacy", "machine-unlea
 
 When a hospital trains a diagnostic AI on patient records, and when a company fine-tunes a language model on proprietary emails, a natural question emerges: **can an adversary determine whether a specific person's data was included in training?** Membership inference attacks answer this question—affirmatively, and with unsettling precision.
 
-This is a distinct attack class from gradient inversion (covered in [a previous post on gradient leakage](#194)): gradient inversion *reconstructs* training data from gradients; membership inference merely *detects presence* in the training set. The distinction matters because the threat models, defenses, and regulatory implications differ substantially.
+This is a distinct attack class from gradient inversion (covered in a previous post on gradient leakage): gradient inversion *reconstructs* training data from gradients; membership inference merely *detects presence* in the training set. The distinction matters because the threat models, defenses, and regulatory implications differ substantially.
 
 ## The Core Intuition: Why Models Leak Membership
 
@@ -25,7 +25,7 @@ The formal attack goal: given query access to a model *f* and a data record *x*,
 
 ### Shadow Model Attacks (Shokri et al., 2017)
 
-The foundational paper by Shokri, Stronati, Song, and Shmatikoff, published at IEEE S&P 2017, introduced the shadow model framework—the first systematic approach to membership inference against black-box ML APIs.
+The foundational paper by Shokri, Stronati, Song, and Shmatikov, published at IEEE S&P 2017, introduced the shadow model framework—the first systematic approach to membership inference against black-box ML APIs.
 
 The core idea is elegant: **train many "shadow" models that mimic the target, then train a binary classifier on their outputs to distinguish members from non-members**.
 
@@ -62,7 +62,7 @@ This attack requires no shadow models, no classifier, just the model's output an
 
 ### Calibration-Based Attacks (Carlini et al., 2022)
 
-Carlini, Chien, Naous, Terzis, and Tram'er published "Membership Inference Attacks From First Principles" at IEEE S&P 2022, establishing a rigorous benchmark for membership inference that superseded earlier evaluations.
+Carlini, Chien, Nasr, Song, Terzis, and Tramèr published "Membership Inference Attacks From First Principles" at IEEE S&P 2022, establishing a rigorous benchmark for membership inference that superseded earlier evaluations.
 
 Their key insight: **previous attacks measured *accuracy*, but what matters for privacy is *true positive rate at low false positive rate*—the ROC curve, not the aggregate accuracy**.
 
@@ -116,9 +116,9 @@ Pr[M(D) ∈ S] ≤ e^ε · Pr[M(D') ∈ S] + δ
 
 Here *ε* (epsilon) is the **privacy budget**: smaller *ε* means stronger privacy, at the cost of more noise. *δ* is a small failure probability.
 
-The connection to membership inference is direct: if a model is (ε, δ)-differentially private, the **attacker's advantage** (true positive rate minus false positive rate) is bounded above by approximately *e^ε − 1*. For ε = 1, the maximum advantage is about 1.72 (though this is an advantage over random, not an absolute accuracy). For ε = 0.1, the bound tightens dramatically.
+The connection to membership inference is direct: if a model is (ε, δ)-differentially private, the **attacker's advantage** (true positive rate minus false positive rate) is bounded above by *(e^ε − 1)/(e^ε + 1)*. For ε = 1, this maximum advantage is approximately 0.46—the attacker can do no better than 46 percentage points above the 50% random baseline. For ε = 0.1, the bound falls below 0.05, near-random. Smaller ε enforces a tighter ceiling.
 
-DP is typically implemented in ML via **DP-SGD** (Differentially Private Stochastic Gradient Descent), introduced by Abadi et al. (NeurIPS 2016): gradients are clipped to bound their sensitivity, then Gaussian noise is added before each update.
+DP is typically implemented in ML via **DP-SGD** (Differentially Private Stochastic Gradient Descent), introduced by Abadi et al. (ACM CCS 2016): gradients are clipped to bound their sensitivity, then Gaussian noise is added before each update.
 
 ### The Utility Cost
 
@@ -200,8 +200,8 @@ The attacks can be combined: gradient inversion can identify *which* records wer
 
 ## References
 
-- Shokri, R., Stronati, M., Song, C., & Shmatikoff, V. (2017). Membership inference attacks against machine learning models. *IEEE Symposium on Security and Privacy (S&P 2017)*.
-- Carlini, N., Chien, S., Naous, M., Terzis, A., & Tramèr, F. (2022). Membership inference attacks from first principles. *IEEE Symposium on Security and Privacy (S&P 2022)*.
+- Shokri, R., Stronati, M., Song, C., & Shmatikov, V. (2017). Membership inference attacks against machine learning models. *IEEE Symposium on Security and Privacy (S&P 2017)*.
+- Carlini, N., Chien, S., Nasr, M., Song, S., Terzis, A., & Tramèr, F. (2022). Membership inference attacks from first principles. *IEEE Symposium on Security and Privacy (S&P 2022)*.
 - Yeom, S., Giacomelli, I., Fredrikson, M., & Jha, S. (2018). Privacy risk in machine learning: Analyzing the connection to overfitting. *IEEE Computer Security Foundations Symposium (CSF 2018)*.
 - Abadi, M., et al. (2016). Deep learning with differential privacy. *ACM CCS 2016*.
 - Carlini, N., Tramèr, F., Wallace, E., Jagielski, M., Herbert-Voss, A., Lee, K., Roberts, A., Brown, T., Song, D., Erlingsson, Ú., Oprea, A., & Raffel, C. (2021). Extracting training data from large language models. *USENIX Security 2021*.
