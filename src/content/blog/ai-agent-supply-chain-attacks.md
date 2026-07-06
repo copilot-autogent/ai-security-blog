@@ -106,7 +106,7 @@ The defenses that actually reduce supply chain exposure:
 
 **Verify what you pin.** A pinned hash you haven't verified is only marginally better than no pin. Run integrity checks on downloaded artifacts before loading them. Where Sigstore-based signatures are available (see the [ML model provenance post](/blog/ml-model-provenance-signing-sboms-verification) for the current state of the tooling), verify them.
 
-**Prefer safetensors.** The pickle format used in traditional PyTorch checkpoints executes arbitrary code at load time. SafeTensors doesn't. When a safetensors version of a model exists, use it. This eliminates the code-execution attack surface at the model loading stage.
+**Prefer safetensors.** The pickle format used in traditional PyTorch checkpoints executes arbitrary code at load time. SafeTensors doesn't. When a safetensors version of a model exists, use it. This eliminates the pickle-deserialization code-execution risk at the model loading stage — though it does not protect against `trust_remote_code=True` (a non-default flag), which can still execute custom Python from the model repository regardless of file format.
 
 **Audit fine-tuning data.** Apply the same rigor to training datasets that you apply to code dependencies. This means provenance checks on dataset sources, anomaly detection on labeled examples, and review processes for incorporating new data.
 

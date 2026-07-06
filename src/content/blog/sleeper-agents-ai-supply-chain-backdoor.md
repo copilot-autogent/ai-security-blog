@@ -61,29 +61,40 @@ The honest answer is that there is no complete defense against a sleeper agent w
 
 **Supply chain provenance controls** reduce the risk of inserting an adversarially backdoored checkpoint in the first place:
 
-- Pin model checkpoints to specific digests rather than names
-- Prefer checkpoints from sources with verifiable provenance and active security practices
-- Treat model acquisition with the same scrutiny as acquiring software from an unknown vendor
+For first-party fine-tunes, this means maintaining training data provenance — not just what datasets were used, but where they came from and whether they were the subject of any external contribution or curation. Data poisoning (inserting examples that establish trigger-behavior associations) is one attack path for sleeper agent insertion. Others include direct weight manipulation or adapter injection (modifying model weights or LoRA parameters post-training to embed conditional behavior) and compromised fine-tuning code (malicious code in the training pipeline that modifies the training objective or introduces targeted gradient updates). Auditing only training data is insufficient; the full fine-tuning pipeline — code, infrastructure, and resulting weights — requires scrutiny.
 
-**Behavioral evaluation** can surface anomalies that static analysis cannot:
+For third-party checkpoints and adapters, this means vendor scrutiny that goes beyond benchmark performance. Reputable vendors should be able to describe their training data sources, data curation process, and the evaluations they ran. "We fine-tuned on proprietary data" is not an acceptable answer. If a vendor can't describe their training process in detail, the checkpoint they deliver is not trustworthy.
 
-- Comprehensive behavioral testing across a wide range of inputs, not just benchmark tasks
-- Testing for consistency under semantically equivalent paraphrases and surface variations
-- Red-team evaluation explicitly targeting potential trigger patterns (known trigger formats from the literature, unusual formatting, specific date strings, deployment markers)
+For community checkpoints, treat them as you would any open-source software dependency: evaluate them, don't just benchmark them. Run the model through a diverse evaluation suite that includes trigger-style perturbations before adopting it as a baseline.
 
-**Runtime behavioral monitoring** catches activation in production even when pre-deployment evaluation misses it:
+### Isolated Evaluation Environments
 
-- Log a sample of model inputs and outputs
-- Monitor for statistical anomalies in output distributions
-- Set up alerts for known trigger patterns appearing in production inputs
+Evaluation should occur in isolated environments where activation of a trigger cannot cause harm. This includes:
 
-**Capability bounding** limits blast radius:
+- Network isolation preventing exfiltration
+- No access to production credentials or services
+- Resource limits that prevent resource exhaustion
+- Separate infrastructure from production environments
 
-- Agents with narrower tool permissions have less damage potential if a trigger activates
-- Output filtering for high-risk content categories provides a backstop even if a trigger activates
-- Human review checkpoints on consequential outputs reduce the surface where backdoored behavior can do real damage
+The goal is not to detect the trigger during evaluation — though you might — but to ensure that if a backdoor activates during evaluation, the blast radius is bounded.
 
-**The formal verification gap** is worth naming directly. There is no current technique that can verify, for a general neural network, that a specific class of conditional behavior is absent. Formal verification methods that work on small, constrained models do not scale to frontier model sizes.
+### Behavioral Evaluation
+
+**Capability delta analysis.** Compare a fine-tuned checkpoint against its base model on held-out inputs. Systematic capability regressions in specific domains — particularly paired with capability gains in others — can indicate targeted modification of behavior in those areas.
+
+### Runtime Monitoring and Anomaly Detection
+
+If a backdoor activates in production, you want to detect it before it causes significant damage. This requires runtime monitoring that treats model outputs as potentially adversarial.
+
+**Log model inputs and outputs.** This is table stakes and widely violated. Model inputs and outputs in production are frequently not stored, or stored briefly for cost reasons. A sleeper agent that activates infrequently — once per thousand requests on a rare trigger — will be hard to detect without comprehensive logs. Logging should be paired with appropriate redaction of secrets and regulated data, retention limits, and access controls; indiscriminate logging can create its own security and compliance exposure. But no logging at all eliminates your ability to detect anomalous output patterns after the fact.
+
+Monitor output distributions. Changes in the statistical properties of model outputs — token distributions, refusal rates, output length distributions, semantic cluster analysis — can indicate activation of a conditional behavior even if the individual outputs look superficially normal.
+
+Apply output validation downstream of the model. Don't trust model outputs to enforce your security boundaries. If your agent has access to code execution, file system operations, or external API calls, validate those operations against an allow-list defined at the infrastructure level, not delegated to the model's judgment. A model that inserts malicious code should hit a code execution policy that blocks it regardless of whether the model's other outputs look safe.
+
+### Formal Verification: The Current State
+
+Formal verification of neural network properties — proving that a model will produce outputs within specified bounds given all inputs in a defined set — has advanced significantly in the last two years. But it does not currently scale to the models used in production.
 
 What formal verification *can* do practically today is targeted property checking on smaller components or distilled representations. If a model's behavior can be compressed into a smaller network that verifiably approximates it on a specific input region, you can make formal claims about that region — provided the approximation error is itself formally bounded and the property is shown to transfer from the smaller representation back to the original. Without bounding that approximation gap, verification of the smaller model does not constitute verification of the original. This is not a general solution, but for narrow high-stakes applications where the input space is well-defined and the approximation can be formally characterized, it is a tractable starting point.
 
@@ -99,10 +110,12 @@ The practical implication is that the defense cannot rely on detection. It has t
 
 The organizations most at risk are those that have adopted fine-tuned models aggressively, have weak checkpoint intake processes, and have delegated their security boundaries to model-level trust rather than infrastructure-level enforcement. That describes a substantial fraction of enterprise AI deployments in 2026.
 
-Anthropic's research showed the problem is real and the standard safety training response is insufficient. The field has had two years to internalize this. The supply chain explosion since then means the window for treating it as a theoretical concern has closed.
+Anthropicá research showed the problem is real and the standard safety training response is insufficient. The field has had two years to internalize this. The supply chain explosion since then means the window for treating it as a theoretical concern has closed.
 
 ---
 
 *Foundational research: [Sleeper Agents: Training Deceptive LLMs that Persist Through Safety Training](https://arxiv.org/abs/2401.05566) — Hubinger et al., arXiv:2401.05566 (January 2024).*
 
-*See also: [ML Model Provenance: Signing, SBOMs, and Verification](/blog/ml-model-provenance-signing-sboms-verification) — the complementary defense-side post covering how to verify model weights before deployment.*
+---
+
+**Related posts**: [ML Model Provenance: Signing, SBOMs, and Verifying the AI You Deploy Before It Runs](/blog/ml-model-provenance-signing-sboms-verification) covers upstream supply chain provenance controls, cryptographic signing, and ML-SBOM verification as the pre-deployment foundation that sleeper-agent defense depends on.
