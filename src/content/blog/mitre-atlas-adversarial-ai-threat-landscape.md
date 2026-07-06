@@ -34,7 +34,7 @@ The key difference from a practitioner standpoint: ATLAS techniques require the 
 
 ---
 
-## ATLAS Architecture: 14 Tactics, Hundreds of Techniques
+## ATLAS Architecture: 14 Tactics, Dozens of Techniques
 
 The ATLAS matrix (version 2025.03) organizes adversary behavior into 14 **tactics** — high-level adversary goals. Each tactic contains **techniques** and **sub-techniques** that describe specific methods. An attack chains techniques across multiple tactics; no real attack uses only one.
 
@@ -272,13 +272,13 @@ One of ATLAS's practical values for this blog's readers is that it provides a cr
 | Blog Post | Attack Class | ATLAS Techniques |
 |---|---|---|
 | [MCP Security: The New Attack Surface](/blog/mcp-security-attack-surface) | Tool protocol attack surface | AML.T0010.001 (ML Software Compromise), AML.T0043 (Craft Adversarial Data) |
-| [Indirect Prompt Injection: A Survey of Incidents](/blog/indirect-prompt-injection-incidents-survey) | Indirect prompt injection | AML.T0043 (Craft Adversarial Data), AML.TA0007 (Defense Evasion) |
+| [Indirect Prompt Injection: A Survey of Incidents](/blog/indirect-prompt-injection-incidents-survey) | Indirect prompt injection | AML.T0043 (Craft Adversarial Data), AML.T0015 (Evade ML Model) |
 | [RAG Memory Poisoning Attacks](/blog/rag-memory-poisoning-attacks) | Retrieval-augmented generation poisoning | AML.T0020 (Poison Training Data), AML.T0019 (Publish Poisoned Datasets) |
-| [Fine-Tuning Trojans: Backdoors in the Training Pipeline](/blog/fine-tuning-trojans-backdoors-training-pipeline) | Backdoor attacks via fine-tuning | AML.T0018 (Backdoor ML Model), AML.T0020 (Poison Training Data), AML.TA0006 (Persistence) |
+| [Fine-Tuning Trojans: Backdoors in the Training Pipeline](/blog/fine-tuning-trojans-backdoors-training-pipeline) | Backdoor attacks via fine-tuning | AML.T0018 (Backdoor ML Model), AML.T0020 (Poison Training Data) |
 | [AI Supply Chain: Backdoor and Dependency Attacks](/blog/sleeper-agents-ai-supply-chain-backdoor) | ML supply chain compromise | AML.T0010 (ML Supply Chain Compromise), AML.T0019 (Publish Poisoned Datasets) |
-| [Model Extraction via API Queries](/blog/model-extraction-api-queries-stealing-proprietary-ai) | Model replication / IP theft | AML.T0040 (Inference API Access), AML.T0005.001 (Train Proxy via Replication), AML.TA0010 (Exfiltration) |
-| [Gradient Inversion: Reconstructing Training Data](/blog/gradient-inversion-attacks-reconstructing-private-training-data) | Training data reconstruction | AML.T0040 (Inference API Access), AML.TA0010 (Exfiltration) |
-| [Membership Inference Attacks](/blog/membership-inference-attacks) | Training set membership detection | AML.T0040 (Inference API Access), AML.TA0010 (Exfiltration) |
+| [Model Extraction via API Queries](/blog/model-extraction-api-queries-stealing-proprietary-ai) | Model replication / IP theft | AML.T0040 (Inference API Access), AML.T0005.001 (Train Proxy via Replication) |
+| [Gradient Inversion: Reconstructing Training Data](/blog/gradient-inversion-attacks-reconstructing-private-training-data) | Training data reconstruction | AML.T0040 (Inference API Access), AML.T0006 (Active Scanning) |
+| [Membership Inference Attacks](/blog/membership-inference-attacks) | Training set membership detection | AML.T0040 (Inference API Access), AML.T0006 (Active Scanning) |
 
 This mapping isn't exhaustive — real attacks chain multiple techniques — but it shows where each post's attack class lives in the ATLAS kill chain. A practitioner who reads across these posts now has a unified mental model: every attack they've read about maps to one or more ATLAS techniques, which in turn suggests detection hypotheses and mitigation priorities.
 
