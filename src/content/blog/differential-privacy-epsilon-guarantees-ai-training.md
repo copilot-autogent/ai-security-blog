@@ -19,7 +19,7 @@ Differential privacy is a property of a randomized algorithm, not of a dataset o
 
 The intuition: **adding or removing any single training record can change any output probability by at most a multiplicative factor of e^ε** (plus a small failure probability δ). If ε = 0, the mechanism is perfectly private — the output distribution is identical regardless of whether your record is included. If ε = 1, the output probabilities can shift by up to a factor of e ≈ 2.72. If ε = 10, they can shift by a factor of e^10 ≈ 22,026 — a nearly vacuous bound.
 
-The pure ε-DP formulation (without δ) is stronger: it must hold with probability one. The (ε, δ) relaxation is more practical — it allows the bound to fail with probability at most δ, typically set to something negligible like 10⁻⁵ relative to the training set size.
+The pure ε-DP formulation (without δ) is stronger: it must hold with probability one. The (ε, δ) relaxation is more practical — it allows the bound to fail with probability at most δ, which should be cryptographically negligible: the standard guidance is δ ≪ 1/N where N is the training set size (so for a dataset of 10 million records, δ ≤ 10⁻⁸).
 
 ### The Three Core Mechanisms
 
@@ -61,7 +61,7 @@ Apple's 2016 deployment is the most publicly documented large-scale local DP sys
 
 Apple disclosed using a **per-day privacy budget of ε = 8** for their emoji and new word discovery features, and ε = 4 for some health data collection. Per Apple's technical documentation, additional mechanisms capped the number of daily submissions to one per feature to limit composition over time.
 
-An ε of 8 is a **weak privacy guarantee by theoretical standards**. The corresponding maximum membership inference advantage bound is (e^8 − 1)/(e^8 + 1) ≈ 0.9998 — nearly one. In isolation, this means a DP bound of ε=8 imposes essentially no constraint on membership inference success rates. In practice, Apple's system is local DP (the noise is added before the data is ever shared), which changes the threat model: even with weak ε, the raw data is never collected. The ε bound applies to what Apple's servers can infer about any individual, not to the strength of an external attacker querying a trained model. The practical privacy protection in local DP at weak ε comes from the local noise application, not from the ε bound's information-theoretic constraint.
+An ε of 8 is a **weak privacy guarantee by theoretical standards**. The corresponding maximum membership inference advantage bound is (e^8 − 1)/(e^8 + 1) ≈ 0.9993 — nearly one. In isolation, this means a DP bound of ε=8 imposes essentially no constraint on membership inference success rates. In practice, Apple's system is local DP (the noise is added before the data is ever shared), which changes the threat model: even with weak ε, the raw data is never collected. The ε bound applies to what Apple's servers can infer about any individual, not to the strength of an external attacker querying a trained model. The practical privacy protection in local DP at weak ε comes from the local noise application, not from the ε bound's information-theoretic constraint.
 
 This distinction matters because **local DP and central (model-level) DP are fundamentally different settings**: local DP protects against the data collector; central DP (DP-SGD in ML) protects against an adversary querying the trained model. Applying the Apple ε=8 number to an argument about model-level DP is a category error that appears frequently in vendor claims.
 
@@ -97,9 +97,9 @@ The practical effect: training a model for 100,000 steps doesn't blow up the pri
 
 ### Adaptive Composition and the "Burning" Problem
 
-The composition theorems assume that the queries are **non-adaptive** — chosen in advance, independently of the outputs. In practice, ML training is adaptive: the choice of next batch, the hyperparameter schedule, early stopping decisions, and the decision of what queries to run all depend on model behavior. **Adaptive composition cannot in general be bounded by the non-adaptive composition theorems**.
+Standard DP composition is robust to adaptively chosen mechanisms — the composition theorems apply even when the choice of the next query depends on prior outputs, as long as each query is itself DP. The practical problem is not a gap in the theory but in **tracking**: real deployments run far more queries against sensitive data than the formal DP accounting captures.
 
-This creates a practical gap: a system that runs interactive DP queries (repeated hyperparameter searches, data validation, debugging queries against a training dataset) may consume privacy budget at rates that the pre-deployment accounting didn't account for. Practical guidance: **treat any query against a sensitive training dataset as consuming ε budget and account for it prospectively, before the query runs**.
+This creates a practical gap: a system that runs interactive DP queries (repeated hyperparameter searches, data validation, debugging queries against a training dataset) may consume privacy budget at rates that the pre-deployment accounting didn't account for, because those queries were never entered into the budget ledger. Practical guidance: **treat any query against a sensitive training dataset as consuming ε budget and account for it prospectively, before the query runs**.
 
 The failure mode is organizations that track their "formal" DP budget for the main training run but run dozens of unaccounted exploratory analyses against the same dataset, each consuming marginal budget. The formal DP guarantee for the model is technically correct; the end-to-end system-level guarantee is not.
 
@@ -117,9 +117,9 @@ The clipping step is critical and often under-appreciated. It equalizes individu
 
 ### Privacy Amplification by Subsampling
 
-A critical tool in practical DP-SGD is the **privacy amplification by subsampling** argument. If you use SGD with a random minibatch of size *B* from a dataset of size *N*, each individual training sample is included in any given step with probability *B/N*. A mechanism that achieves ε-DP when run on the full dataset achieves approximately (B/N)ε-DP when run on a random subsample.
+A critical tool in practical DP-SGD is the **privacy amplification by subsampling** argument. If you use SGD with a random minibatch of size *B* from a dataset of size *N*, each individual training sample is included in any given step with probability *q = B/N*. A mechanism that achieves ε-DP when applied to the full dataset achieves approximately ln(1 + q(e^ε − 1))-DP when applied to a random subsample (tight for small q and small ε, this approximates roughly 2qε). The subsampling rate q thus provides a multiplicative amplification of the per-step privacy cost.
 
-This means **smaller batch fractions provide stronger amplification**. Training with batch size 256 on a dataset of 1 million records amplifies privacy by a factor of roughly 1/4000. This is why large-scale DP training (as in Apple and Google deployments) benefits from massive scale: the privacy amplification from subsampling large user populations is substantial.
+This means **smaller batch fractions provide stronger amplification**. Training with batch size 256 on a dataset of 1 million records (q = 0.000256) means each training step's privacy cost is amplified roughly by q. This is why large-scale central DP-SGD training benefits from large datasets: more records means smaller q per step and thus stronger per-step amplification. Note that this applies to central DP (minibatch training); the local DP systems deployed by Apple and Google use a different mechanism and their scale provides population estimation accuracy rather than subsampling amplification.
 
 ### Utility Costs: The Fundamental Tradeoff
 
@@ -139,9 +139,9 @@ In a complete DP fine-tuning pipeline, the formal DP guarantee covers the model 
 
 **Embeddings and activations logged for debugging.** Development pipelines often log intermediate activations, attention weights, or loss values during training. These may carry membership information that isn't covered by the DP guarantee on the final model.
 
-**Evaluation and validation sets.** DP-SGD only covers the training data. If validation data is the same population as training data (common in practice), queries against model performance on validation data can leak membership information about those validation samples without consuming the training privacy budget.
+**Evaluation and validation sets.** DP-SGD only covers the training data. If individuals appear in both the training set and the validation set (an overlap that can occur in practice when splitting a dataset), queries against model performance on those shared individuals effectively probe the training data without being accounted for in the training budget. The criterion is individual overlap, not merely being drawn from the same population.
 
-**Model checkpoints.** Saving and distributing intermediate checkpoints consumes composition budget: each checkpoint is a separate query against the training data.
+**Model checkpoints.** *Releasing* intermediate checkpoints outside the trusted training boundary consumes composition budget: each released checkpoint is an additional output of the training mechanism, and releasing multiple checkpoints from the same training run requires composed privacy accounting across all of them. Saving internal checkpoints within the training process (not released externally) does not itself constitute a separate privacy event.
 
 ## 6. Decision Framework: How to Evaluate a DP Claim
 
@@ -216,7 +216,7 @@ The practitioner takeaway: **treat DP as a meaningful defense only when you can 
 - Dwork, C., & Roth, A. (2014). The algorithmic foundations of differential privacy. *Foundations and Trends in Theoretical Computer Science, 9*(3–4), 211–407.
 - Abadi, M., Chu, A., Goodfellow, I., McMahan, H. B., Mironov, I., Talwar, K., & Zhang, L. (2016). Deep learning with differential privacy. *ACM CCS 2016*.
 - Erlingsson, Ú., Pihur, V., & Korolova, A. (2014). RAPPOR: Randomized aggregatable privacy-preserving ordinal response. *ACM CCS 2014*.
-- Mironov, I. (2017). Rényi differential privacy of the Gaussian mechanism. *IEEE Computer Security Foundations Symposium (CSF 2017)*.
+- Mironov, I. (2017). Rényi differential privacy. *IEEE Computer Security Foundations Symposium (CSF 2017)*.
 - Li, X., Tramèr, F., Liang, P., & Hashimoto, T. (2022). Large language models can be strong differentially private learners. *International Conference on Learning Representations (ICLR 2022)*.
 - Apple. (2016). Differential privacy overview. Apple Privacy Technical Whitepaper. Announced at WWDC 2016.
 - Dwork, C., Rothblum, G. N., & Vadhan, S. (2010). Boosting and differential privacy. *IEEE Symposium on Foundations of Computer Science (FOCS 2010)*.
