@@ -37,7 +37,7 @@ Differential privacy makes a specific, bounded promise. Understanding what it co
 
 ### What DP Prevents
 
-**Membership inference:** If a model is trained with (ε, δ)-DP, the maximum advantage any membership inference attack can achieve — its true positive rate minus its false positive rate — is bounded above by (e^ε − 1)/(e^ε + 1). For ε = 1, the maximum advantage is approximately 0.46. For ε = 0.1, it falls below 0.05. This is a formal, algorithm-independent bound: no adversary, given only the model's outputs, can exceed it.
+**Membership inference:** If a model is trained with pure ε-DP, the maximum advantage any membership inference attack can achieve — its true positive rate minus its false positive rate — is bounded above by (e^ε − 1)/(e^ε + 1). For ε = 1, the maximum advantage is approximately 0.46. For ε = 0.1, it falls below 0.05. For (ε, δ)-DP the bound includes an additional additive δ term, which for negligible δ (e.g., δ = 10⁻⁸) is approximately the same. This is a formal, algorithm-independent bound: no adversary, given only the model's outputs, can exceed it.
 
 **Reconstruction attacks:** DP limits the information about any individual record that can be extracted from the model's outputs, bounding reconstruction fidelity. Gradient inversion attacks — which require gradient access and exploit the geometry of training — are substantially hampered by DP because the per-record gradient signal is buried in calibrated noise.
 
@@ -51,7 +51,7 @@ Differential privacy makes a specific, bounded promise. Understanding what it co
 
 **Prompt-based extraction of memorized content.** DP bounds what individual records contribute to the model's behavior on any particular query — but it doesn't prevent a model from generating text that closely matches training data if that text was highly duplicated (and thus has negligible marginal sensitivity per-copy). The formal DP guarantee applies to records, not to repeated n-grams. Carlini et al. (2021) demonstrated that near-verbatim training data extraction from LLMs is substantially easier for highly repeated sequences, which DP's per-record accounting does not directly constrain.
 
-**Post-hoc audits on model weights.** The DP guarantee applies to the mechanism's output. If an adversary can directly inspect model weights rather than only querying outputs, different attacks apply and the DP guarantee may not translate cleanly.
+**Post-hoc audits on model weights.** The DP guarantee applies to the released output itself — including model weights, if those weights are what is released. If model weights are the mechanism's output, an adversary analyzing those weights receives the same (ε, δ)-DP guarantee as any other query. The nuance is that some attack techniques exploit structure specific to weight space (e.g., extracting memorized content from embedding layers) in ways that require careful threat modeling; the DP guarantee bounds the information advantage but does not prevent all weight-space analyses in practice.
 
 ## 3. Real-World Deployments: What Their ε Values Mean
 
@@ -117,7 +117,7 @@ The clipping step is critical and often under-appreciated. It equalizes individu
 
 ### Privacy Amplification by Subsampling
 
-A critical tool in practical DP-SGD is the **privacy amplification by subsampling** argument. If you use SGD with a random minibatch of size *B* from a dataset of size *N*, each individual training sample is included in any given step with probability *q = B/N*. A mechanism that achieves ε-DP when applied to the full dataset achieves approximately ln(1 + q(e^ε − 1))-DP when applied to a random subsample (tight for small q and small ε, this approximates roughly 2qε). The subsampling rate q thus provides a multiplicative amplification of the per-step privacy cost.
+A critical tool in practical DP-SGD is the **privacy amplification by subsampling** argument. If you use SGD with a random minibatch of size *B* from a dataset of size *N*, each individual training sample is included in any given step with probability *q = B/N*. A mechanism that achieves ε-DP when applied to the full dataset achieves approximately ln(1 + q(e^ε − 1))-DP when applied to a random subsample; for small q and small ε, this is approximately qε — not 2qε. The subsampling rate q thus provides a roughly multiplicative amplification of the per-step privacy cost.
 
 This means **smaller batch fractions provide stronger amplification**. Training with batch size 256 on a dataset of 1 million records (q = 0.000256) means each training step's privacy cost is amplified roughly by q. This is why large-scale central DP-SGD training benefits from large datasets: more records means smaller q per step and thus stronger per-step amplification. Note that this applies to central DP (minibatch training); the local DP systems deployed by Apple and Google use a different mechanism and their scale provides population estimation accuracy rather than subsampling amplification.
 
@@ -139,7 +139,7 @@ In a complete DP fine-tuning pipeline, the formal DP guarantee covers the model 
 
 **Embeddings and activations logged for debugging.** Development pipelines often log intermediate activations, attention weights, or loss values during training. These may carry membership information that isn't covered by the DP guarantee on the final model.
 
-**Evaluation and validation sets.** DP-SGD only covers the training data. If individuals appear in both the training set and the validation set (an overlap that can occur in practice when splitting a dataset), queries against model performance on those shared individuals effectively probe the training data without being accounted for in the training budget. The criterion is individual overlap, not merely being drawn from the same population.
+**Evaluation and validation sets.** DP-SGD only covers the training data. Evaluating a DP-trained model is a post-processing step and does not consume additional DP budget. However, if validation examples overlap with training examples (the same individuals appear in both sets, possible when splitting a dataset without care), an attacker with access to the validation labels and model outputs can exploit that overlap to probe membership — not because budget was consumed, but because the overlapping individuals were never disjoint from the protected training population. Enforce strict train/validation disjointness at the individual level.
 
 **Model checkpoints.** *Releasing* intermediate checkpoints outside the trusted training boundary consumes composition budget: each released checkpoint is an additional output of the training mechanism, and releasing multiple checkpoints from the same training run requires composed privacy accounting across all of them. Saving internal checkpoints within the training process (not released externally) does not itself constitute a separate privacy event.
 
@@ -151,7 +151,7 @@ There is no universal "acceptable" ε — it depends on data sensitivity, deploy
 
 | ε range | Privacy strength | Interpretation |
 |---|---|---|
-| ε ≤ 0.1 | Strong | Theoretical guarantee: adversary's advantage bounded below 5%. Significant accuracy cost; practical mainly for aggregate statistics, not complex models. |
+| ε ≤ 0.1 | Strong | Theoretical guarantee: adversary's advantage bounded above by ~5%. Significant accuracy cost; practical mainly for aggregate statistics, not complex models. |
 | 0.1 < ε ≤ 1 | Meaningful | Standard for high-sensitivity data (health, financial). The bound begins to tighten around realistic attack scenarios. |
 | 1 < ε ≤ 3 | Moderate | Practical range for DP fine-tuning of large pre-trained models with acceptable accuracy loss. Beginning of deployable DP for ML. |
 | 3 < ε ≤ 10 | Weak | Deployed by Apple for local DP (ε = 8). The theoretical bound at ε = 8 is near-vacuous; practical protection depends on local noise addition and threat model. |
