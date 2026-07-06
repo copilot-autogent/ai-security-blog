@@ -2,7 +2,7 @@
 title: "Differential Privacy in Practice: What the Math Guarantees (and What It Doesn't) for AI Training Data"
 description: "Differential privacy is the strongest mathematical privacy guarantee for ML training data — but the gap between formal ε-DP and deployed reality means many 'private' AI systems aren't nearly as private as advertised. This post bridges the math and the practice."
 pubDate: 2026-07-06
-tags: ["privacy", "differential-privacy", "federated-learning", "membership-inference", "training-data", "epsilon", "dp-sgd", "attack-defense"]
+tags: ["privacy", "differential-privacy", "dp-sgd", "membership-inference", "training-data", "epsilon", "attack-defense", "llm-security"]
 ---
 
 Your ML system is "differentially private." What does that actually mean for an attacker with your model's outputs?
@@ -37,7 +37,7 @@ Differential privacy makes a specific, bounded promise. Understanding what it co
 
 ### What DP Prevents
 
-**Membership inference:** If a model is trained with pure ε-DP, the maximum advantage any membership inference attack can achieve — its true positive rate minus its false positive rate — is bounded above by (e^ε − 1)/(e^ε + 1). For ε = 1, the maximum advantage is approximately 0.46. For ε = 0.1, it falls below 0.05. For (ε, δ)-DP the bound includes an additional additive δ term, which for negligible δ (e.g., δ = 10⁻⁸) is approximately the same. This is a formal, algorithm-independent bound: no adversary, given only the model's outputs, can exceed it.
+**Membership inference:** For a model trained with pure ε-DP, a classical result (Kairouz et al., 2015) shows that the membership inference advantage — true positive rate minus false positive rate — is bounded above by (e^ε − 1)/(e^ε + 1). For ε = 1, this ceiling is approximately 0.46; for ε = 0.1 it falls below 0.05. For (ε, δ)-DP the bound includes an additional δ term, which for cryptographically negligible δ is approximately the same. This is a formal per-record guarantee: no algorithm, given only the mechanism's outputs, can exceed this ceiling regardless of how it is designed.
 
 **Reconstruction attacks:** DP limits the information about any individual record that can be extracted from the model's outputs, bounding reconstruction fidelity. Gradient inversion attacks — which require gradient access and exploit the geometry of training — are substantially hampered by DP because the per-record gradient signal is buried in calibrated noise.
 
@@ -47,7 +47,7 @@ Differential privacy makes a specific, bounded promise. Understanding what it co
 
 **Model inversion when the training distribution is public.** If an adversary knows that a model was trained on a particular publicly accessible corpus, they can query the model to learn properties of that population without needing to identify any individual. DP is a per-record guarantee — it cannot hide aggregate distributional information about a group when that group is large or the distribution is already known.
 
-**Watermarking attacks.** Cryptographic watermarking of training data — embedding detectable signals that survive training — is fundamentally different from membership inference. DP provides no defense against an adversary who placed watermarks in their own submitted data before training; the watermark detection query is against the adversary's own data (present or not), and DP's guarantee about individual data removal doesn't block this channel.
+**Watermarking attacks.** Cryptographic watermarking of training data — embedding detectable signals that survive training — is fundamentally different from membership inference. DP's per-record guarantee means adding or removing a single watermarked example produces a bounded change in any output probability. However, DP does not generally prevent a party who submitted their own watermarked data from detecting that watermark in the trained model: the watermark detection query targets the submitter's own data, and DP's guarantee is about what others can infer about that record — not about what the record's owner can detect about their own contribution.
 
 **Prompt-based extraction of memorized content.** DP bounds what individual records contribute to the model's behavior on any particular query — but it doesn't prevent a model from generating text that closely matches training data if that text was highly duplicated (and thus has negligible marginal sensitivity per-copy). The formal DP guarantee applies to records, not to repeated n-grams. Carlini et al. (2021) demonstrated that near-verbatim training data extraction from LLMs is substantially easier for highly repeated sequences, which DP's per-record accounting does not directly constrain.
 
@@ -61,7 +61,7 @@ Apple's 2016 deployment is the most publicly documented large-scale local DP sys
 
 Apple disclosed using a **per-day privacy budget of ε = 8** for their emoji and new word discovery features, and ε = 4 for some health data collection. Per Apple's technical documentation, additional mechanisms capped the number of daily submissions to one per feature to limit composition over time.
 
-An ε of 8 is a **weak privacy guarantee by theoretical standards**. The corresponding maximum membership inference advantage bound is (e^8 − 1)/(e^8 + 1) ≈ 0.9993 — nearly one. In isolation, this means a DP bound of ε=8 imposes essentially no constraint on membership inference success rates. In practice, Apple's system is local DP (the noise is added before the data is ever shared), which changes the threat model: even with weak ε, the raw data is never collected. The ε bound applies to what Apple's servers can infer about any individual, not to the strength of an external attacker querying a trained model. The practical privacy protection in local DP at weak ε comes from the local noise application, not from the ε bound's information-theoretic constraint.
+An ε of 8 is a **weak privacy guarantee by the standards of central DP** (the setting where a trained model is released and queried). For context, the MI advantage bound (e^ε − 1)/(e^ε + 1) ≈ 0.9993 at ε = 8, which is near-vacuous for a central DP deployment. However, this formula applies to the central DP setting — it describes what a model's outputs can reveal about an individual record. Apple's ε = 8 is a **local DP** parameter: the noise is added by the device before any data reaches Apple's servers, and the ε bound governs what Apple's servers can infer, not what an external attacker querying a trained model can infer. The numerical formula does not transfer directly between these settings.
 
 This distinction matters because **local DP and central (model-level) DP are fundamentally different settings**: local DP protects against the data collector; central DP (DP-SGD in ML) protects against an adversary querying the trained model. Applying the Apple ε=8 number to an argument about model-level DP is a category error that appears frequently in vendor claims.
 
@@ -93,13 +93,13 @@ Dwork, Rothblum, and Vadhan (2010) showed that with *k* mechanisms each satisfyi
 
 Mironov (2017) introduced Rényi Differential Privacy as a cleaner accounting framework. RDP measures privacy loss using Rényi divergence — a family of divergence measures parameterized by an order α. The appeal for ML is that **RDP composes more gracefully** than ε-DP through the training loop: the privacy loss of DP-SGD across *T* training steps can be computed as a function of the per-step RDP guarantee, then converted to a final (ε, δ)-DP bound.
 
-The practical effect: training a model for 100,000 steps doesn't blow up the privacy budget the way naive composition suggests. RDP accounting is now standard in ML DP libraries (Google's DP library, OpenDP, PyTorch Opacus).
+The practical effect: training a model for 100,000 steps doesn't blow up the privacy budget the way naive composition suggests. RDP accounting is now standard in ML DP training libraries (Google's TensorFlow Privacy, PyTorch Opacus). OpenDP is a related but distinct effort focused on formally verified DP measurements and data analysis, not primarily on training-time gradient accounting.
 
 ### Adaptive Composition and the "Burning" Problem
 
 Standard DP composition is robust to adaptively chosen mechanisms — the composition theorems apply even when the choice of the next query depends on prior outputs, as long as each query is itself DP. The practical problem is not a gap in the theory but in **tracking**: real deployments run far more queries against sensitive data than the formal DP accounting captures.
 
-This creates a practical gap: a system that runs interactive DP queries (repeated hyperparameter searches, data validation, debugging queries against a training dataset) may consume privacy budget at rates that the pre-deployment accounting didn't account for, because those queries were never entered into the budget ledger. Practical guidance: **treat any query against a sensitive training dataset as consuming ε budget and account for it prospectively, before the query runs**.
+This creates a practical gap: a system that runs interactive DP queries (repeated hyperparameter searches, data validation, debugging queries against a training dataset) may consume privacy budget at rates that the pre-deployment accounting didn't capture, because those queries were never entered into the budget ledger. Formally, only outputs exposed through a DP mechanism count toward the DP composition ledger — internal non-released accesses are a governance and security risk, not automatically a formal DP accounting event. The practical guidance is the same: **treat any DP-mechanism query against a sensitive training dataset as consuming ε budget and account for it prospectively**.
 
 The failure mode is organizations that track their "formal" DP budget for the main training run but run dozens of unaccounted exploratory analyses against the same dataset, each consuming marginal budget. The formal DP guarantee for the model is technically correct; the end-to-end system-level guarantee is not.
 
@@ -176,7 +176,7 @@ When a vendor claims their ML system is "differentially private," ask:
 
 5. **What is the total composition budget across all queries, not just training?** If the vendor ran 50 hyperparameter searches against the training data before the final run, each consumed budget.
 
-6. **What is the δ value?** The (ε, δ) pair must be stated together. A δ larger than 1/N (where N is the training set size) is typically considered unsafe — it allows the mechanism to fail with non-negligible probability for individuals.
+6. **What is the δ value?** The (ε, δ) pair must be stated together. The standard guidance is δ ≪ 1/N (where N is the training set size) — common practice targets δ on the order of 1/N^(1+γ) for some γ > 0. A δ approaching or exceeding 1/N weakens the guarantee substantially, because it allows the mechanism to fail on a non-negligible fraction of individuals.
 
 7. **What is the clipping threshold C?** Clipping is the sensitivity bound that determines the noise scale. A very high C (low clipping) means more noise is needed to achieve the same ε; a very low C means the gradient estimates are heavily biased. Neither extreme is correct; the clipping threshold should be validated empirically.
 
