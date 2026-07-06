@@ -2,7 +2,7 @@
 title: "ML Model Provenance: Signing, SBOMs, and Verifying the AI You Deploy Before It Runs"
 description: "You wouldn't deploy software without checksums and signatures. But most organizations download model weights and run them without any provenance verification at all. This post covers the practical mechanics of model signing, ML SBOMs, and the emerging infrastructure for verifying a model's origins before it touches production."
 pubDate: 2026-07-06
-tags: ["supply-chain-security", "model-security", "provenance", "sbom", "defense-patterns", "sigstore", "compliance"]
+tags: ["supply-chain-security", "model-security", "defense-patterns", "content-provenance"]
 ---
 
 In 2021, the Log4Shell vulnerability demonstrated what happens when a software dependency embedded in thousands of applications contains a critical flaw. The response included a hard regulatory push: Executive Order 14028 mandated that companies selling software to the US federal government provide a Software Bill of Materials — a machine-readable inventory of every component in their software supply chain. SBOMs didn't solve Log4Shell, but they established that supply chain transparency is a regulatory expectation, not an optional practice.
@@ -37,11 +37,11 @@ Model weights are large binary files — not fundamentally different from other 
 
 ### The Sigstore Approach
 
-[Sigstore](https://www.sigstore.dev/) is a CNCF project that provides signing infrastructure designed to be practical without requiring every developer to manage cryptographic key pairs. Its core insight is that most signing failures happen because key management is hard: private keys get lost, forgotten, compromised, or never created in the first place. Sigstore's *keyless signing* model removes the key management burden by binding signing events to a short-lived certificate tied to an OIDC identity (such as a GitHub Actions workflow or a Google account).
+[Sigstore](https://www.sigstore.dev/) is a Linux Foundation / OpenSSF project that provides signing infrastructure designed to be practical without requiring every developer to manage cryptographic key pairs. Its core insight is that most signing failures happen because key management is hard: private keys get lost, forgotten, compromised, or never created in the first place. Sigstore's *keyless signing* model removes the key management burden by binding signing events to a short-lived certificate tied to an OIDC identity (such as a GitHub Actions workflow or a Google account).
 
 The mechanism: when you sign an artifact with Sigstore's `cosign` tool using keyless mode, Fulcio (Sigstore's certificate authority) issues a short-lived certificate tied to your verified OIDC identity. The signing event — the certificate, the public key, and the artifact digest — is recorded immutably in Rekor, Sigstore's append-only transparency log. A verifier can later check the Rekor record to confirm that a specific identity signed a specific artifact at a specific time, without needing to hold or trust a long-lived signing key.
 
-For ML models, this means a training pipeline can emit a Sigstore signature at the moment a checkpoint is produced, recording the training run's identity (e.g., a GitHub Actions workflow run) and a cryptographic digest of the checkpoint file. Anyone who later downloads the checkpoint can verify that signature against Rekor — confirming the file hasn't changed since the signing event and that the signing identity matches what the model card claims.
+For ML models, this means a training pipeline can emit a Sigstore signature at the moment a checkpoint is produced, recording the training run's identity (e.g., a GitHub Actions workflow run) and a cryptographic digest of the checkpoint file. Anyone who later downloads the checkpoint can verify that signature against Rekor — confirming the file hasn't changed since the signing event and that the signing identity matches what the model publisher claimed at release time.
 
 ### The model-transparency / ModelSigning Project
 
@@ -56,7 +56,7 @@ Signing does not happen at the point of download — it happens at the point of 
 3. The checkpoint and signature are published to the model hub.
 4. Consumers download the checkpoint and verify the signature, confirming authenticity and integrity before loading.
 
-Step 4 is currently the weakest link. Verification tooling exists (`cosign verify`) but is not integrated into `torch.load()`, HuggingFace's `from_pretrained()`, or other standard model loading APIs. Consumers have to consciously add verification to their deployment workflow; the default is to load without checking.
+Step 4 is currently the weakest link. Verification tooling exists — for blob artifacts outside of OCI registries, `cosign verify-blob` is the relevant command, or the model-signing project's own verifier for manifests produced by that tool. But verification is not integrated into `torch.load()`, HuggingFace's `from_pretrained()`, or other standard model loading APIs. Consumers have to consciously add verification to their deployment workflow; the default is to load without checking.
 
 This is the same problem software package managers solved by making verification the default, not an optional step. The ML ecosystem has not yet converged on a similar norm.
 
@@ -147,14 +147,15 @@ When deploying a third-party model — particularly an open-weight model from a 
 
 **At download time**:
 
-- Record the exact commit hash or content digest of the weights you downloaded. This gives you an integrity baseline — if the weights change on the hub later, you'll be able to detect it.
-- If Sigstore signatures are available (currently limited to models signed through the model-transparency project or similar), verify them using `cosign` before loading. Check the signing identity against what the model card claims about the publishing pipeline.
+- Record the exact commit hash or content digest of the weights you downloaded. This gives you an integrity baseline — if the weights change on the hub later, you'll be able to detect it. Note that full model checkpoints include sidecar files (`config.json`, tokenizer files, sharded index files) alongside the weight shards — pin the commit hash for the full repository snapshot, not just the weight files individually.
+- If Sigstore signatures are available (currently limited to models signed through the model-transparency project or similar), verify them before loading. For blob artifacts use `cosign verify-blob`, or the model-signing project's own verification tooling for manifests produced by that tool. When verifying a signature, the signing identity to check against is the publisher's documented CI/CD pipeline identity (e.g., a specific GitHub Actions workflow in a specific organization's repository) — this anchor should come from the publisher's own release documentation or a trusted external record, not from the model card, which is writable by the same party who could modify the weights.
 - If the hub provides a Picklescan or Guardian scan report indicating the checkpoint is clean, note it as a weak signal. The [malicious model files post](/blog/malicious-ai-model-files-pickle-exploits-arbitrary-code-execution) covers the limitations of scan-based defenses; a clean scan is not a security guarantee.
 - Prefer safetensors format over pickle-based formats where available. This eliminates the arbitrary code execution attack surface at load time.
 
 **Before loading in production**:
 
-- Load in an isolated environment first — a sandbox without access to credentials, production databases, or internal network resources. Verify the model outputs against the benchmarks the model card claims before promoting to production.
+- **If you must load a pickle-format checkpoint**: do not treat sandbox loading as a safe verification step on its own. For pickle-based formats or checkpoints with `trust_remote_code`, the act of loading already executes attacker-controlled code. The correct pre-production verification sequence is: (1) prefer safetensors where a version exists; (2) if pickle-only, scan with Picklescan/Guardian first; (3) if loading is necessary for evaluation, do so in an ephemeral, no-egress, no-credential environment — network-isolated with no access to cloud provider tokens, database credentials, or internal services — so that any payload has no exfiltration path. This is isolation, not verification; the sandbox does not tell you the model is safe, it limits the blast radius if it isn't.
+- Verify the model outputs against the benchmarks the model card claims before promoting to production.
 - If an ML-SBOM is available (rare currently, becoming more common), parse it for dataset declarations and verify compatibility with your organization's data use policies and licensing requirements.
 - For regulated deployments (healthcare, finance, government), document the provenance steps taken. Even if full cryptographic attestation isn't available, a documented record of what was checked and when provides an audit trail for compliance purposes.
 
