@@ -49,7 +49,7 @@ Open-weight models are a different story. A model checkpoint published to Huggin
 
 The [sleeper agents post](/blog/sleeper-agents-ai-supply-chain-backdoor) covers the specific threat of behavioral backdoors that persist through safety training. What matters here is the supply chain vector: an attacker doesn't need to compromise the original model provider. They can publish a "Llama-3-8B-instruct-finetuned" checkpoint that has been altered after the fact.
 
-The artifact integrity problem compounds this. Most teams download model checkpoints without verifying a hash or signature. There's no model registry equivalent of npm's package-lock.json or pip's hashes in requirements.txt. A model that was clean when you first downloaded it might have been silently replaced on the hub — and without a pinned digest, you wouldn't know.
+The artifact integrity problem compounds this. Most teams download model checkpoints without verifying a hash or signature. Unlike software package managers — where lockfiles and hash verification are built-in workflow defaults — model hubs have historically lacked equivalent standard mechanisms. Commit-hash pinning on HuggingFace Hub provides a workable approximation, but it's an opt-in practice rather than a workflow default, and it verifies integrity without establishing authenticity. A model that was clean when you first downloaded it might have been silently replaced — and without a pinned revision, you wouldn't know.
 
 ### Fine-Tuning Data Poisoning
 
@@ -112,9 +112,7 @@ The defenses that actually reduce supply chain exposure:
 
 **Treat prompt templates as code.** Store system prompts in version control with access controls and change review. An unchecked modification to a system prompt template is a supply chain attack with a very low barrier to entry.
 
-**Evaluate with adversarial intent.** Red-team evaluation should actively attempt to trigger behavioral anomalies that wouldn't appear in standard test cases. Behavioral consistency testing — varying input surface features while holding semantic content constant — can surface trigger conditions that aren't covered by fixed test suites.
-
-**Out-of-distribution behavioral consistency.** A backdoor that activates on a trigger should produce behavioral discontinuity relative to nearby inputs that don't include the trigger. Testing for behavioral consistency on systematically varied inputs — holding semantic content constant while varying surface features — can surface anomalies that pure benchmark evaluation misses.
+**Evaluate with adversarial intent.** Red-team evaluation should actively attempt to trigger behavioral anomalies that wouldn't appear in standard test cases. Behavioral consistency testing — varying input surface features while holding semantic content constant — can surface trigger conditions that aren't covered by fixed test suites, because a backdoor that activates on a specific trigger should produce behavioral discontinuity relative to semantically equivalent inputs that don't include the trigger.
 
 ---
 
