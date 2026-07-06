@@ -149,3 +149,7 @@ There's also the **verification user experience** problem. The technical machine
 Content provenance is a meaningful, incrementally deployable defense against a real class of content authenticity threats. It's not a complete solution. OpenAI and Google shipping it at scale is a genuine advance — it makes the infrastructure exist and establishes the precedent that large generators are responsible for marking their output. The security value depends on how broadly the ecosystem converges and how well the verification tooling gets integrated into the surfaces where content actually reaches users.
 
 The honest framing: C2PA and SynthID are necessary infrastructure, not sufficient controls. They narrow the attack surface meaningfully for casual and moderate-sophistication misattribution. They do not provide reliable guarantees against motivated adversaries with their own generation infrastructure. Planning security programs accordingly is the right call.
+
+---
+
+*Related posts: [ML Model Provenance: Signing, SBOMs, and Verification](/blog/ml-model-provenance-signing-sboms-verification) — for the related problem of provenance verification for model weights rather than generated content.*

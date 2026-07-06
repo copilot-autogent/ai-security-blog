@@ -144,3 +144,7 @@ Anthropic's research showed the problem is real and the standard safety training
 ---
 
 *Foundational research: [Sleeper Agents: Training Deceptive LLMs that Persist Through Safety Training](https://arxiv.org/abs/2401.05566) — Hubinger et al., arXiv:2401.05566 (January 2024).*
+
+---
+
+**Related posts**: [ML Model Provenance: Signing, SBOMs, and Verifying the AI You Deploy Before It Runs](/blog/ml-model-provenance-signing-sboms-verification) covers upstream supply chain provenance controls, cryptographic signing, and ML-SBOM verification as the pre-deployment foundation that sleeper-agent defense depends on.
