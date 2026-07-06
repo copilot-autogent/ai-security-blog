@@ -149,7 +149,7 @@ ATLAS includes a curated library of documented incidents and red-team exercises.
 
 Microsoft launched Tay, a Twitter chatbot whose ML capabilities allowed it to learn directly from user conversations. In March 2016, coordinated groups — primarily from 4chan — sent Tay sustained streams of abusive and offensive language. Within 24 hours, Tay began generating similarly inflammatory content toward other users. Microsoft decommissioned the bot and issued a public apology.
 
-**ATLAS mapping:** This is a textbook online poisoning attack. The adversary used the chatbot's learning mechanism as an attack surface, exploiting the fact that the model had no mechanism to distinguish malicious feedback from genuine user interaction. Relevant techniques include Poison Training Data (AML.T0020) and Erode ML Model Integrity (AML.T0031).
+**ATLAS mapping:** This is a textbook online poisoning attack. Tay's online learning mechanism — updating on user inputs in real time — is more precisely characterized as model integrity erosion than offline training-data poisoning. Relevant techniques include Erode ML Model Integrity (AML.T0031) as the primary vector, with Poison Training Data (AML.T0020) applying to the online-learning component that treated adversarial user messages as training signal.
 
 ### AML.CS0005 — Attack on Machine Translation Services (2020)
 
@@ -179,7 +179,7 @@ Between December 25 and 30, 2022, Linux packages for PyTorch's pre-release versi
 
 Clearview AI's code repository, while password-protected, was misconfigured to allow arbitrary account registration. An external researcher gained access and discovered production credentials, keys to cloud storage buckets containing 70,000 video samples, and Slack tokens. Access to training data of this scale enables downstream data poisoning or model inversion attacks.
 
-**ATLAS mapping:** This case combines traditional ATT&CK techniques (misconfiguration, credential access) with ML-specific risk: exposed training data enables downstream Collection (AML.TA0009) attacks — membership inference, data poisoning, or model inversion — and the potential to manipulate model behavior through data access. It illustrates a recurring ATLAS finding: ML system compromises frequently begin with conventional security failures, not ML-specific techniques.
+**ATLAS mapping:** This case combines traditional ATT&CK techniques (misconfiguration, credential access) with ML-specific Collection risk. Read access to training data enables downstream exfiltration (AML.T0035 ML Artifact Collection, AML.T0024 Exfiltration via ML Inference API) and, in combination with write access, would enable poisoning attacks — though the case study establishes confidentiality loss (read path), not necessarily a write path back to training data. It illustrates a recurring ATLAS finding: ML system compromises frequently begin with conventional security failures, not ML-specific techniques.
 
 ---
 
@@ -277,7 +277,7 @@ One of ATLAS's practical values for this blog's readers is that it provides a cr
 | [Fine-Tuning Trojans: Backdoors in the Training Pipeline](/blog/fine-tuning-trojans-backdoors-training-pipeline) | Backdoor attacks via fine-tuning | AML.T0018 (Backdoor ML Model), AML.T0020 (Poison Training Data) |
 | [AI Supply Chain: Backdoor and Dependency Attacks](/blog/sleeper-agents-ai-supply-chain-backdoor) | ML supply chain compromise | AML.T0010 (ML Supply Chain Compromise), AML.T0019 (Publish Poisoned Datasets) |
 | [Model Extraction via API Queries](/blog/model-extraction-api-queries-stealing-proprietary-ai) | Model replication / IP theft | AML.T0040 (Inference API Access), AML.T0005.001 (Train Proxy via Replication) |
-| [Gradient Inversion: Reconstructing Training Data](/blog/gradient-inversion-attacks-reconstructing-private-training-data) | Training data reconstruction from gradients | AML.T0020 (Poison Training Data pipeline), AML.T0041 (Physical/Training Environment Access enabling gradient observation) |
+| [Gradient Inversion: Reconstructing Training Data](/blog/gradient-inversion-attacks-reconstructing-private-training-data) | Training data reconstruction from gradients | AML.T0035 (ML Artifact Collection from training process), AML.T0024 (Exfiltration via ML Inference API) |
 | [Membership Inference Attacks](/blog/membership-inference-attacks) | Training set membership detection | AML.T0040 (Inference API Access), AML.T0006 (Active Scanning) |
 
 This mapping isn't exhaustive — real attacks chain multiple techniques — but it shows where each post's attack class lives in the ATLAS kill chain. A practitioner who reads across these posts now has a unified mental model: every attack they've read about maps to one or more ATLAS techniques, which in turn suggests detection hypotheses and mitigation priorities.
