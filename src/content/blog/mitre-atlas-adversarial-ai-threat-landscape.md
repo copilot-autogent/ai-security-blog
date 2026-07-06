@@ -179,7 +179,7 @@ Between December 25 and 30, 2022, Linux packages for PyTorch's pre-release versi
 
 Clearview AI's code repository, while password-protected, was misconfigured to allow arbitrary account registration. An external researcher gained access and discovered production credentials, keys to cloud storage buckets containing 70,000 video samples, and Slack tokens. Access to training data of this scale enables downstream data poisoning or model inversion attacks.
 
-**ATLAS mapping:** This case combines traditional ATT&CK techniques (misconfiguration, credential access) with ML-specific risk: exposure of training data (AML.T0009) and the potential to manipulate model behavior through data access. It illustrates a recurring ATLAS finding: ML system compromises frequently begin with conventional security failures, not ML-specific techniques.
+**ATLAS mapping:** This case combines traditional ATT&CK techniques (misconfiguration, credential access) with ML-specific risk: exposed training data enables downstream Collection (AML.TA0009) attacks — membership inference, data poisoning, or model inversion — and the potential to manipulate model behavior through data access. It illustrates a recurring ATLAS finding: ML system compromises frequently begin with conventional security failures, not ML-specific techniques.
 
 ---
 
@@ -228,7 +228,7 @@ ATT&CK's value for detection isn't just the taxonomy — it's that each techniqu
 | AML.T0005.001 Proxy Replication | High-volume API access with systematic input coverage |
 | AML.T0043 Craft Adversarial Data | Distribution shift in model inputs relative to expected baseline |
 | AML.T0046 Chaff Spamming | Spike in model inference requests without corresponding user activity |
-| AML.T0015 Evade ML Model | Periodic validation set performance degradation |
+| AML.T0015 Evade ML Model | Anomalous mismatch between input confidence scores and expected baseline at inference time; inputs yielding unusually high model certainty for atypical content |
 
 Most of these require a monitoring layer that your inference infrastructure may not have out of the box. Model monitoring platforms (Arize, WhyLabs, Evidently) implement some of these detection patterns; integrating ATLAS technique hypotheses into your monitoring configuration gives the detection logic a principled basis.
 
@@ -273,11 +273,11 @@ One of ATLAS's practical values for this blog's readers is that it provides a cr
 |---|---|---|
 | [MCP Security: The New Attack Surface](/blog/mcp-security-attack-surface) | Tool protocol attack surface | AML.T0010.001 (ML Software Compromise), AML.T0043 (Craft Adversarial Data) |
 | [Indirect Prompt Injection: A Survey of Incidents](/blog/indirect-prompt-injection-incidents-survey) | Indirect prompt injection | AML.T0043 (Craft Adversarial Data), AML.T0015 (Evade ML Model) |
-| [RAG Memory Poisoning Attacks](/blog/rag-memory-poisoning-attacks) | Retrieval-augmented generation poisoning | AML.T0020 (Poison Training Data), AML.T0019 (Publish Poisoned Datasets) |
+| [RAG Memory Poisoning Attacks](/blog/rag-memory-poisoning-attacks) | Retrieval-augmented generation poisoning | AML.T0043 (Craft Adversarial Data injected into retrieval index), AML.T0019 (Publish Poisoned Datasets) |
 | [Fine-Tuning Trojans: Backdoors in the Training Pipeline](/blog/fine-tuning-trojans-backdoors-training-pipeline) | Backdoor attacks via fine-tuning | AML.T0018 (Backdoor ML Model), AML.T0020 (Poison Training Data) |
 | [AI Supply Chain: Backdoor and Dependency Attacks](/blog/sleeper-agents-ai-supply-chain-backdoor) | ML supply chain compromise | AML.T0010 (ML Supply Chain Compromise), AML.T0019 (Publish Poisoned Datasets) |
 | [Model Extraction via API Queries](/blog/model-extraction-api-queries-stealing-proprietary-ai) | Model replication / IP theft | AML.T0040 (Inference API Access), AML.T0005.001 (Train Proxy via Replication) |
-| [Gradient Inversion: Reconstructing Training Data](/blog/gradient-inversion-attacks-reconstructing-private-training-data) | Training data reconstruction | AML.T0040 (Inference API Access), AML.T0006 (Active Scanning) |
+| [Gradient Inversion: Reconstructing Training Data](/blog/gradient-inversion-attacks-reconstructing-private-training-data) | Training data reconstruction from gradients | AML.T0020 (Poison Training Data pipeline), AML.T0041 (Physical/Training Environment Access enabling gradient observation) |
 | [Membership Inference Attacks](/blog/membership-inference-attacks) | Training set membership detection | AML.T0040 (Inference API Access), AML.T0006 (Active Scanning) |
 
 This mapping isn't exhaustive — real attacks chain multiple techniques — but it shows where each post's attack class lives in the ATLAS kill chain. A practitioner who reads across these posts now has a unified mental model: every attack they've read about maps to one or more ATLAS techniques, which in turn suggests detection hypotheses and mitigation priorities.
