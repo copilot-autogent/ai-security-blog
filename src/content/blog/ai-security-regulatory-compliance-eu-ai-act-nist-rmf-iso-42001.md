@@ -65,13 +65,13 @@ General-purpose AI models with systemic risk (>10^25 FLOPs training compute) fac
 - Track, document, and **report serious incidents** to the AI Office without undue delay
 - Apply **cybersecurity protection** adequate to the level of risk
 
-The AI Office's Code of Practice for GPAI Models is the implementing guidance for these provisions. **Important: as of the time of writing (July 2026), the Code of Practice remains in iterative development through the European AI Office's multi-stakeholder process.** Draft iterations have been published, but the Code is not yet finalized. Organizations should track the official AI Office publications at ai-office.ec.europa.eu rather than citing any specific draft iteration as binding.
+The AI Office's Code of Practice for GPAI Models is the implementing guidance for these provisions. The Code of Practice was finalized by the European AI Office in July 2025 and provides specific operational requirements for providers of GPAI models, including red-teaming methodologies and incident reporting protocols. Organizations should consult the finalized text at ai-office.ec.europa.eu for the current authoritative version.
 
 ### Incident Reporting
 
 Article 73 establishes incident reporting obligations for providers of high-risk AI systems. Serious incidents must be reported to national market surveillance authorities without undue delay, and in any case within the following tiered deadlines from first becoming aware:
 
-- **Two days** (calendar): incidents involving widespread infringement or serious incidents involving critical infrastructure
+- **Two days** (calendar): incidents involving widespread infringement (cross-border fundamental-rights breaches per Article 3(49)(b)) or serious and irreversible disruption of critical infrastructure management or operation
 - **Ten days**: incidents resulting in death
 - **Fifteen days**: other serious incidents (the default ceiling)
 
@@ -88,7 +88,7 @@ Infringements of specific provisions carry different penalty ceilings:
 
 These figures come directly from Regulation (EU) 2024/1689 Article 99 as published. The penalties are ceilings — national enforcement authorities exercise discretion — but they signal regulatory seriousness.
 
-**Application timeline:** The Act entered into force on August 1, 2024. Provisions on prohibited AI practices (Article 5) applied from February 2, 2025. Obligations for GPAI models applied from August 2, 2025. The high-risk AI system requirements for systems listed in Annex III apply from **August 2, 2026**. High-risk AI systems covered via the Annex I product-safety route (systems embedded in regulated products such as medical devices and machinery) follow a longer transition timeline. This means the full Article 9 and Article 15 obligations are now active for most Annex III high-risk systems.
+**Application timeline:** The Act entered into force on August 1, 2024. Provisions on prohibited AI practices (Article 5) applied from February 2, 2025. Obligations for GPAI models applied from August 2, 2025. The high-risk AI system requirements for systems listed in Annex III apply from **August 2, 2026**. High-risk AI systems covered via the Annex I product-safety route (systems embedded in regulated products such as medical devices and machinery) follow a longer transition timeline. This means the full Article 9 and Article 15 obligations come into force for most Annex III high-risk systems in August 2026 — imminently at time of writing.
 
 ---
 
@@ -110,13 +110,13 @@ The NIST AI Risk Management Framework 1.0 (NIST.AI.100-1) was published by the N
 
 The AI RMF Playbook identifies specific suggested practices for each sub-function. The most security-relevant:
 
-**MEASURE 2.5** — Practices for evaluating and improving the privacy and data quality dimensions of AI systems include assessing AI training data for integrity. This practice maps directly to data poisoning attack scenarios: does the training pipeline include integrity verification? Is provenance of training data documented?
+**MEASURE 2.5** — Addresses AI system validity and reliability in deployment context — whether the system performs as expected and continues to perform consistently over time. For security, MEASURE 2.5 maps to monitoring for behavioral drift that could indicate model tampering or environmental shifts that degrade robustness controls.
 
-**MEASURE 2.6** — Addresses testing for performance metrics across stakeholder groups and deployment contexts, including adversarial conditions. Robustness evaluation under distribution shift and adversarial perturbation falls here.
+**MEASURE 2.6** — Addresses AI system safety risks, including safe-to-fail design and safe operation under anomalous conditions. This practice covers the question of what happens when an AI system encounters conditions outside its designed operating envelope — relevant to adversarial inputs that push the system into unexpected behavior states.
 
 **MEASURE 2.7** — Specifically addresses AI risk and impact assessment methods for adversarial attacks. The Playbook text suggests: "Conduct adversarial testing including red-teaming to identify AI system vulnerabilities, attack surfaces, and exposures. Document results." This practice is the NIST equivalent of the EU AI Act's Article 9(5) testing mandate.
 
-**GOVERN 1.7** — Processes for incident response specific to AI systems. This aligns with the AI RMF's relationship to existing NIST cybersecurity guidance: NIST SP 800-61r3 (Incident Response) remains the baseline; GOVERN 1.7 extends it for AI-specific incidents including model compromise.
+**MANAGE 4.1 / 4.2** — Residual risk treatment and incident response. The AI RMF's relationship to existing NIST cybersecurity guidance is explicit: NIST SP 800-61r3 (Incident Response) remains the baseline; MANAGE 4.x extends the lifecycle to AI-specific incidents including model compromise, behavioral drift, and adversarial attack discovery post-deployment.
 
 ### Relationship to NIST CSF 2.0
 
@@ -148,7 +148,7 @@ The standard does not specify *which* adversarial tests must be performed; it re
 
 ### Relationship to ISO 27001
 
-ISO/IEC 27001 (information security) and ISO/IEC 42001 (AI management system) are designed to coexist. An organization with ISO 27001 certification extends its Information Security Management System to include AI-specific controls via a combined ISMS+AIMS. The AI Office's guidance for GPAI Code of Practice compliance references ISO 42001 as a relevant implementation mechanism, though certification is not currently required.
+ISO/IEC 27001 (information security) and ISO/IEC 42001 (AI management system) are designed to coexist. An organization with ISO 27001 certification extends its Information Security Management System to include AI-specific controls via a combined ISMS+AIMS. ISO 42001 is referenced in various regulatory and industry contexts as a relevant implementation framework for AI governance, though its specific relationship to EU AI Act compliance obligations should be verified against current AI Office guidance and any harmonized standards adopted under the Act.
 
 ---
 
@@ -160,13 +160,13 @@ The following table maps attack classes to their regulatory anchors and the tech
 |---|---|---|---|---|
 | **Prompt injection** | Art. 15 (robustness against adversarial manipulation) | MEASURE 2.7 | Clause 8 (operational controls) | [Prompt Injection via Role Confusion](/blog/prompt-injection-role-confusion), [Indirect Prompt Injection Incidents Survey](/blog/indirect-prompt-injection-incidents-survey) |
 | **Indirect prompt injection** | Art. 15 (adversarial manipulation); Art. 9 (risk mgmt) | MEASURE 2.7, MEASURE 2.6 | Clause 8 | [Indirect Prompt Injection Incidents Survey](/blog/indirect-prompt-injection-incidents-survey), [Copilot File Exfiltration via Prompt Injection](/blog/copilot-cowork-file-exfiltration-prompt-injection) |
-| **Training data poisoning** | Art. 9 (risk mgmt system); Art. 15 (robustness against data poisoning) | MEASURE 2.5 | Clause 6 (risk planning) | [Pretraining Corpus Poisoning](/blog/pretraining-corpus-poisoning-web-scale-attack), [RAG Memory Poisoning](/blog/rag-memory-poisoning-attacks) |
-| **Backdoor / trojan attacks** | Art. 9 (risk mgmt); Art. 15 (model poisoning resilience) | MEASURE 2.5, MEASURE 2.7 | Clause 8 | [Backdoor Attacks in Foundation Models](/blog/backdoor-attacks-foundation-models), [Sleeper Agents](/blog/sleeper-agents-ai-supply-chain-backdoor) |
-| **Model extraction** | Art. 15 (cybersecurity); Art. 9 (risk mgmt) | MEASURE 2.6, MEASURE 2.7 | Clause 8 | [Model Extraction via API Queries](/blog/model-extraction-api-queries-stealing-proprietary-ai) |
-| **Membership inference** | Art. 10 (data governance); GDPR intersection | MEASURE 2.5 | Clause 6 | [Membership Inference Attacks](/blog/membership-inference-attacks) |
-| **Supply chain attacks** | Art. 9 (risk mgmt); Art. 13 (transparency re: third-party components) | GOVERN 1.7, MEASURE 2.6 | Clause 8 | [AI Agent Supply Chain Attacks](/blog/ai-agent-supply-chain-attacks), [LLM Router Supply Chain Attack](/blog/llm-router-supply-chain-attack) |
-| **Adversarial examples** | Art. 15 (robustness against adversarial input) | MEASURE 2.6 | Clause 8 | [Adversarial Attacks on Vision-Language Models](/blog/adversarial-attacks-vision-language-models-pixels-injection), [Adversarial Examples (Foundational)](/blog/adversarial-examples-foundational-ml-attack-production) |
-| **Privacy / data exfiltration** | Art. 10 (data governance); Art. 15; GDPR intersection | MEASURE 2.5 | Clause 6, Clause 8 | [RAG Privacy Attacks](/blog/rag-privacy-attacks-retrieval-data-exfiltration), [Gradient Inversion Attacks](/blog/gradient-inversion-attacks-reconstructing-private-training-data) |
+| **Training data poisoning** | Art. 9 (risk mgmt system); Art. 15 (robustness against data poisoning) | MEASURE 2.7, MAP 2.3 | Clause 6 (risk planning) | [Pretraining Corpus Poisoning](/blog/pretraining-corpus-poisoning-web-scale-attack), [RAG Memory Poisoning](/blog/rag-memory-poisoning-attacks) |
+| **Backdoor / trojan attacks** | Art. 9 (risk mgmt); Art. 15 (model poisoning resilience) | MEASURE 2.7 | Clause 8 | [Backdoor Attacks in Foundation Models](/blog/backdoor-attacks-foundation-models), [Sleeper Agents](/blog/sleeper-agents-ai-supply-chain-backdoor) |
+| **Model extraction** | Art. 15 (cybersecurity); Art. 9 (risk mgmt) | MEASURE 2.7, MEASURE 2.6 | Clause 8 | [Model Extraction via API Queries](/blog/model-extraction-api-queries-stealing-proprietary-ai) |
+| **Membership inference** | Art. 10 (data governance); GDPR intersection | MEASURE 2.10 | Clause 6 | [Membership Inference Attacks](/blog/membership-inference-attacks) |
+| **Supply chain attacks** | Art. 9 (risk mgmt); Art. 13 (transparency re: third-party components) | MANAGE 4.1, MEASURE 2.7 | Clause 8 | [AI Agent Supply Chain Attacks](/blog/ai-agent-supply-chain-attacks), [LLM Router Supply Chain Attack](/blog/llm-router-supply-chain-attack) |
+| **Adversarial examples** | Art. 15 (robustness against adversarial input) | MEASURE 2.7, MEASURE 2.6 | Clause 8 | [Adversarial Attacks on Vision-Language Models](/blog/adversarial-attacks-vision-language-models-pixels-injection), [Adversarial Examples (Foundational)](/blog/adversarial-examples-foundational-ml-attack-production) |
+| **Privacy / data exfiltration** | Art. 10 (data governance); Art. 15; GDPR intersection | MEASURE 2.10 | Clause 6, Clause 8 | [RAG Privacy Attacks](/blog/rag-privacy-attacks-retrieval-data-exfiltration), [Gradient Inversion Attacks](/blog/gradient-inversion-attacks-reconstructing-private-training-data) |
 
 ### A Note on Regulatory Intersection with GDPR
 
@@ -182,7 +182,7 @@ The most significant doctrinal shift in the 2024–2026 regulatory wave is the t
 
 Article 9(5) requires that high-risk AI systems be tested to identify appropriate risk management measures and to verify compliance. Article 55(1)(a) requires that providers of systemic-risk GPAI models perform model evaluations including adversarial testing to identify and mitigate systemic risks.
 
-The Act does not define "adversarial testing" with the specificity of a technical standard. The AI Office's Code of Practice for GPAI — still in development at time of writing — is intended to provide this specificity for GPAI models. For high-risk AI systems in Annex III categories, standards bodies (including ENISA and CEN-CENELEC) are developing harmonized standards that will provide a presumption of conformity. Organizations that comply with a harmonized standard will be presumed to satisfy the corresponding legal requirement.
+The Act does not define "adversarial testing" with the specificity of a technical standard. The AI Office's Code of Practice for GPAI (finalized July 2025) provides implementing guidance for GPAI model providers, including red-teaming requirements. For high-risk AI systems in Annex III categories, standards bodies (including ENISA and CEN-CENELEC) are developing harmonized standards that will provide a presumption of conformity. Organizations that comply with a harmonized standard will be presumed to satisfy the corresponding legal requirement.
 
 Until those standards are finalized, the practical obligation is: document your adversarial testing methodology, conduct testing proportionate to the risk, and maintain records that demonstrate the testing occurred and that residual risks were evaluated.
 
@@ -210,7 +210,7 @@ The [MITRE ATLAS framework](/blog/mitre-atlas-adversarial-ai-threat-landscape) p
 
 Article 73 establishes the incident reporting timeline for providers of high-risk AI systems. Serious incidents must be reported to national market surveillance authorities without undue delay, within the following tiered deadlines from first becoming aware:
 
-- **Two calendar days:** Incidents involving widespread infringement or serious incidents involving critical infrastructure
+- **Two calendar days:** Incidents involving widespread infringement (cross-border fundamental-rights breaches per Article 3(49)(b)) or serious and irreversible disruption of the management or operation of critical infrastructure
 - **Ten calendar days:** Incidents resulting in death
 - **Fifteen calendar days:** Other serious incidents (the default)
 
@@ -229,7 +229,7 @@ The EU AI Act's reporting obligations stack with:
 
 For organizations in regulated industries deploying high-risk AI, a single incident may trigger concurrent obligations under multiple regimes. The AI Act reporting goes to **national market surveillance authorities** (the bodies designated by each member state under Article 70); GDPR reporting goes to **data protection authorities** (DPAs); NIS2 reporting goes to **national cybersecurity authorities** (e.g., BSI in Germany, ANSSI in France).
 
-Practical implication: incident response playbooks for EU-deployed high-risk AI systems need a regulatory notification workflow that is distinct from the technical response workflow, that maps each incident type to its applicable reporting requirements, and that has pre-approved notification templates to meet the 72-hour / three-working-day deadlines without losing time to legal review during the crisis. The [AI Incident Response Playbook](/blog/ai-incident-response-playbook) covers the technical response phases; the regulatory notification layer is an organizational process that sits alongside it.
+Practical implication: incident response playbooks for EU-deployed high-risk AI systems need a regulatory notification workflow that is distinct from the technical response workflow, that maps each incident type to its applicable reporting requirements, and that has pre-approved notification templates to meet the tiered Article 73 deadlines (2 / 10 / 15 calendar days by incident severity, plus GDPR's 72h for data breaches and NIS2's 24h early warning) without losing time to legal review during the crisis. The [AI Incident Response Playbook](/blog/ai-incident-response-playbook) covers the technical response phases; the regulatory notification layer is an organizational process that sits alongside it.
 
 ---
 
@@ -263,6 +263,6 @@ All regulatory claims in this post are drawn from primary source text. Readers i
 - **NIST AI RMF 1.0 (NIST.AI.100-1):** Published January 2023. Available at csrc.nist.gov/pubs/ai/100/1/final.
 - **NIST AI RMF Playbook:** Companion document to NIST.AI.100-1, providing suggested practices for each core function and sub-function. Available at airc.nist.gov.
 - **ISO/IEC 42001:2023:** Available through national standards bodies (ANSI in the US, BSI in the UK, DIN in Germany) and directly from ISO. The standard is not freely available; it is a purchased publication.
-- **European AI Office:** Official source for Code of Practice development and GPAI model guidance — ai-office.ec.europa.eu. Track publication dates carefully; draft iterations are not binding until the finalization process is complete.
+- **European AI Office:** Official source for Code of Practice for GPAI models (finalized July 2025) and GPAI model guidance — ai-office.ec.europa.eu.
 
 Regulatory text evolves. If you are reading this post more than six months after its publication date (July 2026), verify that the cited article numbers, deadlines, and penalty structures remain current against the authoritative source.
