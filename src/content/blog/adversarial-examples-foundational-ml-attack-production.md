@@ -185,7 +185,7 @@ Adversarial evasion risk is highest when:
 
 Security cameras, automated vehicle systems, and physical access control using vision models are the physical-world attack surface. The adversarial patches literature demonstrates that attacks work across camera configurations and lighting conditions. The stop-sign result is particularly relevant for autonomous vehicles; adversarial wearables for surveillance evasion.
 
-Defenses in physical deployments are limited: randomized smoothing is one option; diversity of sensor modalities (combining camera with radar or lidar) makes single-modality attacks less effective; geometric diversity in camera placement makes attacks optimized for one viewpoint less transferable.
+Defenses in physical deployments are limited: adversarial training against a realistic distribution of physical conditions is one option; diversity of sensor modalities (combining camera with radar or lidar) makes single-modality attacks less effective; geometric diversity in camera placement makes attacks optimized for one viewpoint less transferable. Randomized smoothing, which provides certified L2-norm digital robustness, does not extend naturally to the unrestricted perturbation sets characteristic of physical patches.
 
 ### Document Classifiers, Spam Filters, and Content Moderation
 
@@ -243,4 +243,4 @@ The 2013 result still holds. The field has learned a great deal about *why* it h
 - Brendel, Rauber, Bethge (2018). "Decision-Based Adversarial Attacks: Reliable Attacks Against Black-Box Machine Learning Models." arXiv:1712.04248. ICLR 2018.
 - Chen, Jordan, Wainwright (2020). "HopSkipJumpAttack: A Query-Efficient Decision-Based Attack." arXiv:1904.02144. IEEE S&P 2020.
 - Sharif, Bhagavatula, Bauer, Reiter (2016). "Accessorize to a Crime: Real and Stealthy Attacks on State-of-the-Art Face Recognition." ACM CCS 2016.
-- Xu, Evans, Qi (2020). "Physically Realizable Adversarial Examples for LiDAR Object Detection." arXiv:2006.09555. CVPR 2020.
+- Xu, Zhao, Ding, Li, Zhang, Liu, Anandkumar (2020). "Adversarial T-shirt! Evading Person Detectors in a Physical World." arXiv:1910.11099. ECCV 2020.
