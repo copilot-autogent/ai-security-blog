@@ -1,6 +1,6 @@
 ---
 title: "LLM Guardrails in Practice: A Decision Guide to Runtime Input/Output Filtering Tools"
-description: "A technical breakdown of the runtime defense toolkit — LlamaGuard, Azure Prompt Shield, PromptGuard, NeMo Guardrails, Guardrails AI, and Presidio — with a decision framework for choosing the right stack against your specific threat model."
+description: "LlamaGuard, Azure Prompt Shield, PromptGuard, NeMo Guardrails, Guardrails AI, and Presidio — how each works and when to deploy it."
 pubDate: 2026-07-07
 tags: ["defense", "llm-security", "prompt-injection", "jailbreak", "runtime-defense", "tools"]
 ---
@@ -31,7 +31,7 @@ Most production systems need all three positions, but the right tools for each d
 
 The taxonomy draws from the [MLCommons AI Safety](https://mlcommons.org/working-groups/ai-safety/ai-safety/) hazard categories (violent crimes, non-violent crimes, sex-related crimes, child sexual abuse material, weapons of mass destruction, and others). Crucially, this taxonomy is **configurable at inference time** — you inject the category list into the model's context, which means you can adapt it to your application's specific policy without retraining. A children's education app and an enterprise HR assistant need different harm categories; LlamaGuard supports this without separate model deployments.
 
-The practical tradeoff is latency and compute. You're running a full language model as your classifier, not a lightweight BERT-style discriminator. For applications where throughput matters and latency is constrained, LlamaGuard is not a zero-cost addition to every inference call. It's best positioned as a gate on high-stakes content, or run synchronously on the narrow path where a fast upstream classifier has already flagged a request.
+The practical tradeoff is latency and compute. Running a full language model as your classifier — rather than a lightweight discriminator — carries significant per-request cost. LlamaGuard is appropriate where latency tolerance is higher: output filtering after response generation, harm classification in regulated environments where on-prem is required, or as a second-pass gate on inputs that have already passed a lightweight injection classifier. It is not a good fit for the common-case synchronous input path where fast discrimination is needed.
 
 LlamaGuard weights are open and deployable on-premises — an important distinction for regulated industries where data cannot leave the organization. The paper demonstrates strong performance on publicly available safety benchmarks including the OpenAI Moderation Evaluation dataset and ToxicChat, matching or exceeding commercially available content moderation services at the time of publication.
 
@@ -54,9 +54,9 @@ The tradeoff with Prompt Shield is the cloud dependency. This is a commercial AP
 
 [PromptGuard](https://huggingface.co/meta-llama/Prompt-Guard-86M) (Meta, 2024) takes a different architectural approach: instead of running a full LLM as the classifier, it uses a fine-tuned **mDeBERTa-v3-base** model (86M backbone parameters) optimized specifically for jailbreak and prompt injection detection.
 
-The BERT-style discriminator architecture means inference is an order of magnitude faster than LlamaGuard on equivalent hardware. The model uses mDeBERTa, which is trained on multilingual data, which provides architectural support for non-English inputs. Whether this translates into reliable detection of non-English jailbreaks depends on training data coverage for those attack patterns — the multilingual backbone is a necessary but not sufficient condition. Treat non-English coverage as partial and verify against your specific language exposure (see [Unicode token smuggling and safety filter evasion](/blog/unicode-token-smuggling-safety-filter-evasion) for the broader attack surface).
+The BERT-style discriminator architecture means inference is an order of magnitude faster than LlamaGuard on equivalent hardware. The model uses mDeBERTa, which is trained on multilingual data, providing architectural support for non-English inputs. Whether this translates into reliable detection of non-English jailbreaks depends on training data coverage for those attack patterns — the multilingual backbone is a necessary but not sufficient condition. Treat non-English coverage as partial and verify against your specific language exposure (see [Unicode token smuggling and safety filter evasion](/blog/unicode-token-smuggling-safety-filter-evasion) for the broader attack surface).
 
-The tradeoff is specialization. PromptGuard focuses on explicit jailbreak techniques and prompt injection patterns. It's not a general harm classifier; it doesn't evaluate whether a response discusses dangerous topics or produces harmful content. It's best used as a fast first-pass filter at the input gate, running synchronously on every request, with heavier harm classifiers like LlamaGuard applied in parallel or sequentially for the harm classification dimension.
+The tradeoff is specialization. PromptGuard focuses on explicit jailbreak techniques and prompt injection patterns — it is not a general harm classifier and does not evaluate whether content falls into prohibited harm categories. It is best deployed at the input gate as a fast synchronous pass for injection/jailbreak detection, running in parallel with or before a dedicated harm classifier that covers the content-safety dimension.
 
 The model weights are open and available on Hugging Face under Meta's license. At 86M backbone parameters it runs efficiently on CPU for low-to-moderate throughput workloads, making it accessible without dedicated GPU infrastructure.
 
@@ -114,25 +114,26 @@ Any guardrail deployment needs an honest accounting of the bypass surface. The f
 
 The right combination of tools depends on three variables: your threat model, your latency tolerance, and your deployment constraints.
 
-The key distinction in the tool landscape is between **injection/jailbreak classifiers** (PromptGuard, Azure Prompt Shield), which detect adversarial instruction constructs, and **harm classifiers** (LlamaGuard, Azure Content Safety), which evaluate whether content falls into prohibited categories. These are different problems that require different tools — and most production stacks need both. A cleverly obfuscated jailbreak may score harmless on a harm taxonomy while still achieving its goal; conversely, a harm classifier deployed as the only input gate will miss injection attacks that don't surface as harmful-sounding content.
+The critical architectural principle is that **injection/jailbreak classifiers** and **harm classifiers** cover different threat classes and must both be present. PromptGuard and Azure Prompt Shield detect adversarial instruction constructs regardless of whether the content sounds harmful. LlamaGuard and Azure Content Safety classify whether the content itself falls into prohibited harm categories. A request for sensitive but non-adversarial information passes an injection classifier; an obfuscated jailbreak may pass a harm classifier. Effective input-gate stacks run both independently — either classifier can independently block the request, which provides coverage across both attack surfaces.
 
-| Threat / Context | Low Latency · Cloud OK | Low Latency · On-Premises | Higher Latency Tolerance |
-|---|---|---|---|
-| **Prompt injection / jailbreak** | Azure Prompt Shield + PromptGuard | PromptGuard (sync) | PromptGuard + LlamaGuard (sequential) |
-| **General harm classification** | Azure Content Safety | LlamaGuard | LlamaGuard + custom taxonomy |
-| **Policy/topic enforcement** | NeMo Guardrails | NeMo Guardrails | NeMo Guardrails |
-| **Output PII / structured validation** | Guardrails AI + Presidio | Guardrails AI + Presidio | Guardrails AI + Presidio |
-| **Indirect injection (RAG)** | Azure Prompt Shield (indirect mode) | PromptGuard on retrieved chunks | PromptGuard + LlamaGuard on retrieved chunks |
+| Threat / Context | Cloud OK | On-Premises |
+|---|---|---|
+| **Prompt injection / jailbreak** | Azure Prompt Shield + PromptGuard | PromptGuard (fast sync) |
+| **General harm classification** | Azure Content Safety | LlamaGuard (higher latency; apply selectively) |
+| **Both threat classes at input** | Prompt Shield + PromptGuard + Azure Content Safety | PromptGuard + LlamaGuard (both applied) |
+| **Policy/topic enforcement** | NeMo Guardrails | NeMo Guardrails |
+| **Output PII / structured validation** | Guardrails AI + Presidio | Guardrails AI + Presidio |
+| **Indirect injection (RAG)** | Azure Prompt Shield (indirect mode) | PromptGuard on retrieved chunks |
 
 A few practical patterns:
 
-**Layered injection + harm gates**: Deploy PromptGuard for injection/jailbreak detection and LlamaGuard for harm classification as two parallel or sequential gates — not as a single chain where LlamaGuard is only invoked when PromptGuard fires. They cover different threat classes. PromptGuard catches adversarial instruction patterns; LlamaGuard catches harmful topic requests that may not look adversarial at all. Combining them with AND-gate semantics (either classifier can block) covers both dimensions without assuming one subsumes the other.
+**Dual input gate**: Deploy PromptGuard for injection/jailbreak detection and LlamaGuard (or Azure Content Safety) for harm classification as two independent gates at the input layer. Either can block; both must pass for the request to proceed. This is not a chain where one triggers the other — they operate in parallel, covering their respective threat surfaces.
 
-**RAG-specific pipeline**: For retrieval-augmented applications, apply an injection classifier to retrieved chunks *before* they enter the model's context. Note that chunk-level scanning addresses the most direct form of indirect injection but is incomplete: attacks can also emerge from how chunks are concatenated or templated into the prompt, or from interaction between an innocuous chunk and the user's query. The most robust approach is to scan both individual chunks and — where computationally feasible — the final composed prompt the model will actually see.
+**RAG-specific pipeline**: For retrieval-augmented applications, apply an injection classifier to retrieved chunks *before* they enter the model's context. Note that chunk-level scanning is a first line of defense against the most direct form of indirect injection, but it's incomplete: attacks can also emerge from how chunks are concatenated or templated into the prompt, or from interaction between an innocuous chunk and the user's query. The most robust approach scans both individual chunks and the final composed prompt the model will actually see.
 
 **Structured output applications**: Wrap the LLM call with Guardrails AI and configure validators for the specific output format your application depends on. Define retry behavior explicitly — how many retries, and what to do when they're exhausted — rather than letting failures propagate silently.
 
-**High-assurance regulated environments**: On-premises constraint eliminates cloud API options. The practical stack is PromptGuard for fast injection classification, LlamaGuard for harm assessment (both applied at the input gate), NeMo Guardrails for policy enforcement, Presidio for output PII scrubbing. All four are open-weights or open-source and deployable without external API dependencies.
+**High-assurance regulated environments**: On-premises constraint eliminates cloud API options. The practical stack is PromptGuard for fast synchronous injection classification, LlamaGuard for harm assessment (both applied independently at the input gate), NeMo Guardrails for policy enforcement, Presidio for output PII scrubbing. All four are open-weights or open-source and deployable without external API dependencies.
 
 ## Guardrails as Layer N, Not Layer 1
 
