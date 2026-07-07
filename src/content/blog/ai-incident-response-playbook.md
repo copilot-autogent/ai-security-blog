@@ -9,7 +9,7 @@ At 2:47 AM, a production alert fires. Your RAG-based customer support assistant 
 
 This scenario — an *illustrative composite of documented attack patterns* — is becoming more common as AI systems move from experimental to business-critical. What's rare is any organization being prepared to respond.
 
-Traditional security incident response is a mature discipline. NIST SP 800-61r2 defined a lifecycle (Prepare → Detect → Contain → Eradicate → Recover → Post-Incident) that most security teams have adapted; the 2024 revision (SP 800-61r3) restructures guidance around the Cybersecurity Framework's Govern/Identify/Protect/Detect/Respond/Recover functions. What neither revision addresses in detail is the specific character of AI system compromises: ephemeral attack surfaces, probabilistic reproduction, model artifacts as evidence, and recovery procedures that involve deploying different inference objects rather than patching software.
+Traditional security incident response is a mature discipline. NIST SP 800-61r2 defined a lifecycle (Prepare → Detect → Contain → Eradicate → Recover → Post-Incident) that most security teams have adapted; the April 2025 revision (SP 800-61r3) restructures guidance around the Cybersecurity Framework's Govern/Identify/Protect/Detect/Respond/Recover functions. What neither revision addresses in detail is the specific character of AI system compromises: ephemeral attack surfaces, probabilistic reproduction, model artifacts as evidence, and recovery procedures that involve deploying different inference objects rather than patching software.
 
 This post is the operational playbook. It follows the classic IR phase structure while extending it for AI-specific threats.
 
@@ -28,6 +28,10 @@ Before the phases: four structural differences that make AI incidents harder tha
 ## Prepare: What to Instrument Before an Incident
 
 The organizations that respond well to AI incidents are the ones that treated incident response as a logging design constraint, not an afterthought. Every decision about what to log is made harder once an incident is in progress.
+
+### A Note on Hosted API Deployments
+
+The guidance below is written for teams that control their model artifacts (self-hosted or fine-tuned models). Teams using hosted LLM APIs (OpenAI, Anthropic, Google, etc.) have less control over model versioning and checkpoint rollback, but the logging, detection, and containment principles apply equally. For rollback, the hosted-API equivalent is switching to an earlier model version (e.g., `gpt-4o-2024-05-13` → an earlier snapshot) or a different provider endpoint. Coordinate with your API provider for any incidents that suggest compromise at the model level rather than your application layer.
 
 ### Logging Minimum Viable Evidence
 
@@ -92,13 +96,15 @@ When an alert fires, the first step is correlation: pull the last N minutes of a
 
 ## Contain: Options from Least to Most Disruptive
 
+**Before any containment action: freeze and snapshot volatile evidence.** Containment steps — updating prompts, changing routing, modifying retrieval config — can destroy the exact system state that was present during the attack. Before taking any containment action, snapshot: the current system prompt, the current retrieval index version (for RAG systems), active tool policy configuration, and traffic routing rules. Take this snapshot to read-only storage. Then proceed with containment.
+
 Containment is often where AI IR diverges most sharply from conventional playbooks. The goal is to limit ongoing damage while preserving the capability to continue serving users. Options range from lightweight filtering to full traffic suspension.
 
 **Option 1: Output filtering (least disruptive).** Deploy or tighten a content policy layer that blocks responses containing known-bad patterns (e.g., system prompt fragments, PII formats, unusual verbosity). This doesn't stop the attack but limits its output surface. Risk: sophisticated attacks may evade pattern-based filtering.
 
 **Option 2: Rate limiting by query pattern.** If the attack pattern is identifiable in inputs (e.g., systematic model extraction queries), rate-limit or block by semantic similarity. This is appropriate for extraction attacks where the attack is in the query, not the model behavior.
 
-**Option 3: Route to shadow / backup model.** Most production ML stacks can be configured to split traffic. Route suspicious sessions (or all traffic) to a known-clean model checkpoint while investigating the primary. This preserves service availability while removing the potentially-compromised model from the critical path.
+**Option 3: Route to shadow / backup model.** Most production ML stacks can be configured to split traffic. Route suspicious sessions (or all traffic) to a known-clean model checkpoint while investigating the primary. This preserves service availability while removing the potentially-compromised model from the critical path. **Important:** this only helps if the failure domain is the model artifact itself. Prompt injection, RAG poisoning, and tool-policy compromises live in shared layers that a backup model will also use — switching models doesn't contain them.
 
 **Option 4: Disable tool access.** For agentic systems where the immediate risk is tool misuse (data exfiltration, unauthorized actions), disable tool invocation capabilities system-wide. This significantly degrades the system's usefulness but stops the most dangerous classes of prompt injection damage.
 
@@ -118,7 +124,7 @@ Containment is often where AI IR diverges most sharply from conventional playboo
 
 **Backdoor in fine-tuned model:** The model artifact is compromised at training time. Rollback means deploying a checkpoint from before the backdoor was introduced. If you don't know which checkpoint is clean, you must return to the pre-fine-tune base model and retrain from a trusted data source.
 
-**Data poisoning in training set:** The model artifact may be compromised in subtle ways that a checkpoint rollback doesn't address (the poison may have been present in previous fine-tuning runs). Eradication requires: (1) identify and remove poisoned training examples, (2) retrain from a clean checkpoint with clean data, (3) validate the retrained model before redeploy.
+**Data poisoning in training set:** The model artifact may be compromised in subtle ways that a checkpoint rollback doesn't address (the poison may have been present in previous fine-tuning runs). Eradication requires: (1) identify and remove poisoned training examples, (2) retrain from a clean checkpoint with clean data, (3) validate the retrained model before redeploy. **Extended pipeline scope:** if the investigation cannot rule out compromise of training code, tokenizers, data preprocessing pipelines, or the CI/CD environment used to build the model, retraining on the same pipeline may reproduce the compromise. Audit the full training stack before retraining.
 
 **Model extraction (your model has been copied):** The model artifact is not modified; the damage is in the exfiltrated copy. There is no rollback in the traditional sense. Eradication options include: architectural changes to make future extraction harder (e.g., output truncation, stochastic response formatting), monitoring for unauthorized model distribution, and legal action.
 
@@ -162,7 +168,7 @@ If you operate on a platform (API provider, marketplace, enterprise software eco
 
 For AI-specific incidents, consider submitting to the [MITRE ATLAS case study library](https://atlas.mitre.org/) once the incident is resolved and disclosure is appropriate. ATLAS is a knowledge base of adversarial AI attack patterns and documented cases — submitting a case study contributes to the field's collective understanding of real-world AI attacks. The MITRE ATLAS website provides a structured case study submission process.
 
-The coordinated vulnerability disclosure framework covered in related posts provides detailed guidance if the incident involves a vulnerability that has broader ecosystem impact.
+The [coordinated vulnerability disclosure framework for AI models](/blog/coordinated-vulnerability-disclosure-ai-models) provides detailed guidance if the incident involves a vulnerability that has broader ecosystem impact.
 
 ### Retrospective: Questions to Answer
 
@@ -273,4 +279,4 @@ RETROSPECTIVE DATE:
 
 ---
 
-*NIST references: [NIST SP 800-61r2](https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final) (Computer Security Incident Handling Guide); [NIST SP 800-61r3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) (Incident Response Recommendations and Considerations for Cybersecurity Risk Management, 2024); [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) (AI Risk Management Framework — Govern, Map, Measure, Manage functions, 2023). Garak: [github.com/NVIDIA/garak](https://github.com/NVIDIA/garak). MITRE ATLAS: [atlas.mitre.org](https://atlas.mitre.org/).*
+*NIST references: [NIST SP 800-61r2](https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final) (Computer Security Incident Handling Guide); [NIST SP 800-61r3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) (Incident Response Recommendations and Considerations for Cybersecurity Risk Management, April 2025); [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) (AI Risk Management Framework — Govern, Map, Measure, Manage functions, 2023). Garak: [github.com/NVIDIA/garak](https://github.com/NVIDIA/garak). MITRE ATLAS: [atlas.mitre.org](https://atlas.mitre.org/).*
