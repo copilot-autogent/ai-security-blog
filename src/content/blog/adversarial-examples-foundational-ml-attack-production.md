@@ -123,11 +123,11 @@ Wallace et al. (2019, "Universal adversarial triggers for attacking and analyzin
 
 The triggers look like nonsense — sequences like "zoning tapping fiennes" — but reliably steer model output when appended to arbitrary inputs. They generalize across inputs, which distinguishes them from input-specific perturbations.
 
-### AutoDAN and Suffix-Based Jailbreaks
+### GCG and Suffix-Based Jailbreaks
 
-Zou et al. (2023) demonstrated that the universal trigger approach extends to aligned LLMs: adversarial suffixes appended to harmful requests can override safety alignment and cause models to comply. The suffixes are optimized to maximize the probability of the model beginning its response with an affirmative token sequence ("Sure, here is..."), which empirically is sufficient to produce the harmful completion.
+Zou et al. (2023, "Universal and Transferable Adversarial Attacks on Aligned Language Models," arXiv:2307.15043) demonstrated that the universal trigger approach extends to aligned LLMs: adversarial suffixes appended to harmful requests can override safety alignment and cause models to comply. The suffixes are optimized to maximize the probability of the model beginning its response with an affirmative token sequence ("Sure, here is..."), which empirically is sufficient to produce the harmful completion.
 
-These attacks — sometimes called **GCG attacks** (Greedy Coordinate Gradient) — work on open-source aligned models (Llama 2, Vicuna) in white-box settings and transfer, with reduced success rates, to closed-source models including GPT and Claude. The discrete optimization is computationally expensive but tractable.
+These attacks — called **GCG attacks** (Greedy Coordinate Gradient) — work on open-source aligned models (Llama 2, Vicuna) in white-box settings and transfer, with reduced success rates, to closed-source models including GPT and Claude. The discrete optimization is computationally expensive but tractable.
 
 The implication is that safety alignment via RLHF is not robust to adversarial inputs in the adversarial examples sense: it shapes average behavior across natural distributions but does not guarantee behavior under adversarially optimized inputs.
 
@@ -151,7 +151,7 @@ Adversarial training provides empirical robustness — it makes attacks harder t
 
 Cohen et al. (2019, "Certified adversarial robustness via randomized smoothing," arXiv:1902.02918, ICML 2019) introduced **randomized smoothing**, currently the most scalable certified defense for large models. The approach: smooth the classifier by predicting the majority-vote class over random Gaussian noise added to the input. The smoothed classifier is provably certifiably robust to L2-norm perturbations — if the majority class is c with probability p, the certified radius within which c is guaranteed is determined by p and the noise level.
 
-The scalability advantage of randomized smoothing is that it requires no changes to model training — only inference is modified. The certified radii achievable in practice, however, are modest (on CIFAR-10, useful certification at L2 radius ~0.5, roughly corresponding to small but not large perturbations), and the approach doesn't extend naturally to L∞ norms or the unrestricted perturbation sets relevant for physical attacks.
+The scalability advantage of randomized smoothing is that it does not require changes to the base model architecture — only inference is modified, and noise-aware training (training the underlying classifier on Gaussian-augmented inputs) substantially improves certified accuracy without changing the certification mechanism. The certified radii achievable in practice, however, are modest (on CIFAR-10, useful certification at L2 radius ~0.5, roughly corresponding to small but not large perturbations), and the approach doesn't extend naturally to L∞ norms or the unrestricted perturbation sets relevant for physical attacks.
 
 For LLMs, no comparable certified defense exists at scale. The discrete nature of language, the open-ended output space, and the scale of modern language models make formal robustness verification an open research problem.
 
@@ -207,11 +207,11 @@ For production LLM deployments, this suggests:
 
 Adversarial examples are an **evasion attack** — they operate at test time, crafting inputs that cause misclassification. This distinguishes them from:
 
-- **Backdoor attacks** (training time): an attacker with training-data access embeds a trigger during training; at test time, any input containing the trigger is misclassified. Covered in related posts on backdoors (#134) and visual backdoors in VLMs (#196).
+- **Backdoor attacks** (training time): an attacker with training-data access embeds a trigger during training; at test time, any input containing the trigger is misclassified. Covered in the blog's backdoor and visual backdoor posts.
 - **Membership inference attacks**: determining whether a specific input was in the training set.
 - **Model extraction attacks**: reconstructing model parameters or behavior through query access.
 
-The adversarial examples framework underlies **adversarial VLM attacks** (#158): the pixel-level perturbations used to override VLM safety guardrails are adversarial examples applied to the visual input of a multimodal model. MITRE ATLAS catalogs adversarial evasion as [AML.T0015: Evade ML Model](https://atlas.mitre.org/techniques/AML.T0015) (#214).
+The adversarial examples framework underlies adversarial VLM attacks on vision-language models: the pixel-level perturbations used to override VLM safety guardrails are adversarial examples applied to the visual input of a multimodal model. MITRE ATLAS catalogs adversarial evasion as [AML.T0015: Evade ML Model](https://atlas.mitre.org/techniques/AML.T0015).
 
 ## What Has Not Been Solved
 
@@ -237,5 +237,10 @@ The 2013 result still holds. The field has learned a great deal about *why* it h
 - Szegedy et al. (2013). "Intriguing Properties of Neural Networks." arXiv:1312.6199.
 - Eykholt et al. (2018). "Robust Physical-World Attacks on Deep Learning Visual Classification." CVPR 2018.
 - Wallace, Zhao, Feng, Singh (2019). "Universal Adversarial Triggers for Attacking and Analyzing NLP." arXiv:1908.07125. EMNLP 2019.
+- Zou, Wang, Kolter, Fredrikson (2023). "Universal and Transferable Adversarial Attacks on Aligned Language Models." arXiv:2307.15043.
 - Cohen, Rosenfeld, Kolter (2019). "Certified Adversarial Robustness via Randomized Smoothing." arXiv:1902.02918. ICML 2019.
 - Athalye, Carlini, Wagner (2018). "Obfuscated Gradients Give a False Sense of Security." arXiv:1802.00420. ICML 2018.
+- Brendel, Rauber, Bethge (2018). "Decision-Based Adversarial Attacks: Reliable Attacks Against Black-Box Machine Learning Models." arXiv:1712.04248. ICLR 2018.
+- Chen, Jordan, Wainwright (2020). "HopSkipJumpAttack: A Query-Efficient Decision-Based Attack." arXiv:1904.02144. IEEE S&P 2020.
+- Sharif, Bhagavatula, Bauer, Reiter (2016). "Accessorize to a Crime: Real and Stealthy Attacks on State-of-the-Art Face Recognition." ACM CCS 2016.
+- Xu, Evans, Qi (2020). "Physically Realizable Adversarial Examples for LiDAR Object Detection." arXiv:2006.09555. CVPR 2020.
