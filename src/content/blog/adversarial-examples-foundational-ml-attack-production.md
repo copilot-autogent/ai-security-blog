@@ -17,7 +17,7 @@ The discovery: near every correctly classified natural image, there exist other 
 
 Why does this happen? Szegedy et al. initially hypothesized that adversarial examples occupy sparse "pockets" between classes in a high-dimensional space. Goodfellow et al. (2014) subsequently proposed a sharper explanation: **the linearity hypothesis**. Neural networks, despite their theoretical nonlinearity, behave approximately linearly across small input perturbations in high-dimensional spaces. In high dimensions, even a small per-component perturbation — invisible to a human who sees a low-dimensional projection of the image — can accumulate into a large change in the model's internal activation after thousands of linear operations. The model's behavior is locally linear in a way that humans are not.
 
-This isn't a bug in a specific architecture. It's a property of how high-dimensional linear maps interact with small perturbations. Models that don't suffer from this would need to be locally constant — ignoring input variations — which conflicts with being able to learn discriminative features at all.
+This isn't a bug in a specific architecture. It's a structural property of how high-dimensional linear maps interact with small perturbations. Models that combine strong robustness with high accuracy must balance locally stable boundaries against discriminative feature sensitivity — a tradeoff that current architectures resolve at the cost of some adversarial vulnerability.
 
 ## How Gradient-Based Attacks Work
 
@@ -91,7 +91,7 @@ Lab adversarial examples are digital: perturbations applied to pixel arrays befo
 
 ### Stop-Sign Attacks and Autonomous Vehicles
 
-Eykholt et al. (2018, "Robust physical-world attacks on deep learning visual classification," CVPR 2018) demonstrated **adversarial patches** on stop signs. By designing perturbations that survive the photographic degradation process — changes in lighting, angle, distance, and camera characteristics — they created physical stickers that caused a stop-sign classifier to misclassify the sign as a speed limit sign with high confidence across diverse real-world conditions.
+Eykholt et al. (2018, "Robust physical-world attacks on deep learning visual classification," CVPR 2018) demonstrated **adversarial patches** on stop signs. By designing perturbations that survive the photographic degradation process — changes in lighting, angle, distance, and camera characteristics — they created physical stickers that caused a stop-sign *classifier* to misclassify the sign as a speed limit sign with high confidence across diverse real-world conditions. The study examined the sign classifier component specifically, not end-to-end AV pipelines, but it demonstrates the physical-world attack surface for perception systems that autonomous vehicles and traffic-monitoring systems depend on.
 
 The adversarial patches are visible (not imperceptible like digital attacks), but visually appear as graffiti or stickers, unremarkable to a human observer and not causing misidentification by a human. The attack targets the model's learned features, not human perception.
 
@@ -127,7 +127,7 @@ The triggers look like nonsense — sequences like "zoning tapping fiennes" — 
 
 Zou et al. (2023, "Universal and Transferable Adversarial Attacks on Aligned Language Models," arXiv:2307.15043) demonstrated that the universal trigger approach extends to aligned LLMs: adversarial suffixes appended to harmful requests can override safety alignment and cause models to comply. The suffixes are optimized to maximize the probability of the model beginning its response with an affirmative token sequence ("Sure, here is..."), which empirically is sufficient to produce the harmful completion.
 
-These attacks — called **GCG attacks** (Greedy Coordinate Gradient) — work on open-source aligned models (Llama 2, Vicuna) in white-box settings and transfer, with reduced success rates, to closed-source models including GPT and Claude. The discrete optimization is computationally expensive but tractable.
+These attacks — called **GCG attacks** (Greedy Coordinate Gradient) — work on open-source aligned models (Llama 2, Vicuna) in white-box settings. Zou et al. also showed transfer to closed-source models at reduced rates; subsequent work has examined this transferability more broadly, with results varying by model family and alignment method.
 
 The implication is that safety alignment via RLHF is not robust to adversarial inputs in the adversarial examples sense: it shapes average behavior across natural distributions but does not guarantee behavior under adversarially optimized inputs.
 
@@ -142,7 +142,7 @@ Madry et al.'s adversarial training — augmenting the training dataset with PGD
 The costs are significant:
 
 1. **Computational**: Generating PGD adversarial examples during training requires many backward passes per training example, typically increasing training cost by a factor of 3–10×.
-2. **Accuracy degradation on clean inputs**: Adversarially trained models are typically 1–5% less accurate on natural (unperturbed) inputs — the model sacrifices some clean performance to gain robustness. This tradeoff is fundamental, not an artifact of optimization.
+2. **Accuracy degradation on clean inputs**: Adversarially trained models are typically 1–5% less accurate on natural (unperturbed) inputs — the model sacrifices some clean performance to gain robustness. This tradeoff is well-documented across datasets and architectures, though its magnitude varies with data distribution, model capacity, and training methodology.
 3. **Threat model specificity**: Adversarial training against L∞-bounded perturbations provides robustness against L∞ attacks but may not transfer to L2-bounded attacks, unrestricted attacks, or physically realizable adversarial patches. Robustness is not general.
 
 ### Certified Defenses: Guarantees With Scalability Limits
@@ -165,7 +165,7 @@ This is a recurring pattern in adversarial robustness: defenses that add complex
 
 A class of defenses — **gradient masking** or **obfuscated gradients** — reduce attack success by making gradients uninformative or zero at natural inputs. Shattered gradients (via non-differentiable components), stochastic gradients (via randomization at inference), and exploding/vanishing gradients (via aggressive clipping) all make standard gradient-based attacks ineffective.
 
-Athalye et al. (2018) showed that obfuscated gradient defenses are systematically breakable: shattered gradients can be circumvented by smooth approximations, stochastic gradients by expectation over the randomness, and backward pass issues by using forward difference gradient estimates. The pattern is consistent: making gradients hard to compute is not the same as making adversarial examples hard to find.
+Athalye et al. (2018, "Obfuscated gradients give a false sense of security," arXiv:1802.00420, ICML 2018) showed that obfuscated gradient defenses are systematically breakable: shattered gradients can be circumvented by smooth approximations, stochastic gradients by expectation over the randomness, and backward pass issues by using forward difference gradient estimates. The pattern is consistent: making gradients hard to compute is not the same as making adversarial examples hard to find.
 
 ## Practical Implications for Production AI
 
@@ -191,7 +191,7 @@ Defenses in physical deployments are limited: adversarial training against a rea
 
 Text-domain adversarial examples — character substitutions, synonym replacements, adversarial suffixes — are the relevant threat for NLP classifiers. Spam detection systems have faced adversarial evasion attempts since before neural networks (the obfuscation techniques used in classic spam share the adversarial example structure). Neural toxicity and safety classifiers are the current frontier.
 
-Defenses with practical value in this domain: training on a diverse set of input variations; adversarially augmenting training data with known character substitution attacks; using multiple classifiers or models (hard to fool all simultaneously); human review for borderline cases.
+Defenses with practical value in this domain: training on a diverse set of input variations; adversarially augmenting training data with known character substitution attacks; using multiple classifiers or models as one layer of a stack (an ensemble is harder to fool naïvely, but adaptive attackers can target all models jointly — it's not a standalone defense); human review for borderline cases.
 
 ### LLM Safety Alignment and Adversarial Suffixes
 
