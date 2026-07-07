@@ -9,7 +9,7 @@ At 2:47 AM, a production alert fires. Your RAG-based customer support assistant 
 
 This scenario — an *illustrative composite of documented attack patterns* — is becoming more common as AI systems move from experimental to business-critical. What's rare is any organization being prepared to respond.
 
-Traditional security incident response is a mature discipline. NIST SP 800-61r2 defined a lifecycle (Prepare → Detect → Contain → Eradicate → Recover → Post-Incident) that most security teams have adapted; the April 2025 revision (SP 800-61r3) restructures guidance around the Cybersecurity Framework's Govern/Identify/Protect/Detect/Respond/Recover functions. What neither revision addresses in detail is the specific character of AI system compromises: ephemeral attack surfaces, probabilistic reproduction, model artifacts as evidence, and recovery procedures that involve deploying different inference objects rather than patching software.
+Traditional security incident response is a mature discipline. NIST SP 800-61r2 defined a lifecycle (Prepare → Detect → Contain → Eradicate → Recover → Post-Incident) that most security teams have adapted; the 2024 revision (SP 800-61r3) restructures guidance around the Cybersecurity Framework's Govern/Identify/Protect/Detect/Respond/Recover functions. What neither revision addresses in detail is the specific character of AI system compromises: ephemeral attack surfaces, probabilistic reproduction, model artifacts as evidence, and recovery procedures that involve deploying different inference objects rather than patching software.
 
 This post is the operational playbook. It follows the classic IR phase structure while extending it for AI-specific threats.
 
@@ -142,6 +142,8 @@ Before returning a model to production, validate:
 
 ### Redeploy Checklist
 
+- [ ] Retrieval index version verified (for RAG systems) and any poisoned index content removed or reindexed
+- [ ] Tool allowlists and session state reviewed and cleaned
 - [ ] Clean checkpoint identified and hash verified against model registry
 - [ ] Behavioral baseline comparison passed
 - [ ] Garak (or equivalent) adversarial probe completed with no critical findings
@@ -279,4 +281,4 @@ RETROSPECTIVE DATE:
 
 ---
 
-*NIST references: [NIST SP 800-61r2](https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final) (Computer Security Incident Handling Guide); [NIST SP 800-61r3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) (Incident Response Recommendations and Considerations for Cybersecurity Risk Management, April 2025); [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) (AI Risk Management Framework — Govern, Map, Measure, Manage functions, 2023). Garak: [github.com/NVIDIA/garak](https://github.com/NVIDIA/garak). MITRE ATLAS: [atlas.mitre.org](https://atlas.mitre.org/).*
+*NIST references: [NIST SP 800-61r2](https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final) (Computer Security Incident Handling Guide); [NIST SP 800-61r3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) (Incident Response Recommendations and Considerations for Cybersecurity Risk Management, 2024); [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) (AI Risk Management Framework — Govern, Map, Measure, Manage functions, 2023). Garak: [github.com/NVIDIA/garak](https://github.com/NVIDIA/garak). MITRE ATLAS: [atlas.mitre.org](https://atlas.mitre.org/).*
