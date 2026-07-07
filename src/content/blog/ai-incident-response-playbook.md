@@ -9,9 +9,9 @@ At 2:47 AM, a production alert fires. Your RAG-based customer support assistant 
 
 This scenario — an *illustrative composite of documented attack patterns* — is becoming more common as AI systems move from experimental to business-critical. What's rare is any organization being prepared to respond.
 
-Traditional security incident response is a mature discipline. NIST SP 800-61r3 defines a lifecycle (Prepare → Detect → Contain → Eradicate → Recover → Post-Incident) that most security teams have adapted. What that lifecycle doesn't address is the specific character of AI system compromises: ephemeral attack surfaces, probabilistic reproduction, model artifacts as evidence, and recovery procedures that involve deploying different inference objects rather than patching software.
+Traditional security incident response is a mature discipline. NIST SP 800-61r2 defined a lifecycle (Prepare → Detect → Contain → Eradicate → Recover → Post-Incident) that most security teams have adapted; the 2024 revision (SP 800-61r3) restructures guidance around the Cybersecurity Framework's Govern/Identify/Protect/Detect/Respond/Recover functions. What neither revision addresses in detail is the specific character of AI system compromises: ephemeral attack surfaces, probabilistic reproduction, model artifacts as evidence, and recovery procedures that involve deploying different inference objects rather than patching software.
 
-This post is the operational playbook. It builds on NIST's IR lifecycle but reframes each phase for AI-specific threats.
+This post is the operational playbook. It follows the classic IR phase structure while extending it for AI-specific threats.
 
 ## Why AI Incidents Are Different
 
@@ -19,7 +19,7 @@ Before the phases: four structural differences that make AI incidents harder tha
 
 **Evidence is ephemeral by default.** A SQL injection attack leaves traces in web server logs, database query logs, and potentially WAF alerts. A prompt injection attack against an LLM leaves traces only if you specifically instrumented prompt logging. Most deployments don't log full input/output pairs by default — privacy concerns, cost, and latency all push against it. When the incident happens, the attack surface may not have been logged at all.
 
-**Attacks may not reproduce.** A buffer overflow either triggers or it doesn't. Prompt injection attacks depend on model behavior that's probabilistic. The attack that succeeded at 2:47 AM may fail at 60% of the time when you try to reproduce it in a test environment. Traditional IR assumes you can study the attack mechanism by replicating it. AI incidents often don't give you that luxury.
+**Attacks may not reproduce.** A buffer overflow either triggers or it doesn't. Prompt injection attacks depend on model behavior that's probabilistic. The attack that succeeded at 2:47 AM may fail 60% of the time when you try to reproduce it in a test environment. Traditional IR assumes you can study the attack mechanism by replicating it. AI incidents often don't give you that luxury.
 
 **The "binary" is hard to diff.** Software incidents ultimately come down to understanding which code is running. You can diff binaries, audit git history, inspect running processes. A model artifact is an opaque parameter matrix. "What changed between the clean version and the compromised version" is an open research problem for neural networks, not a solved operational procedure.
 
@@ -33,13 +33,13 @@ The organizations that respond well to AI incidents are the ones that treated in
 
 Every production AI system should capture:
 
-**Full input/output pairs.** Not just user-visible query and response — the full context window presented to the model, including system prompts, retrieved context in RAG systems, and tool call results. This is the minimum needed to understand what the model saw and responded to.
+**Full input/output pairs.** Not just user-visible query and response — the full context window presented to the model, including system prompts, retrieved context in RAG systems, and tool call results. This is the minimum needed to understand what the model saw and responded to. **Implement with access controls and retention limits:** a full-context log is a high-value store that may contain PII, credentials, and tenant data. Redact sensitive fields, apply role-based access, and define a retention period consistent with your privacy obligations before enabling this at scale.
 
 **System prompt versions.** Your system prompt is part of the attack surface. Log the exact system prompt hash (e.g., SHA-256 of the prompt string) for every inference call, and maintain a versioned history of prompt changes with timestamps.
 
 **Model version hashes.** The model artifact SHA or checkpoint identifier for every inference call. When you're trying to determine whether a checkpoint was tampered with, you need to know which checkpoint was running when.
 
-**Tool call traces.** For agentic systems, log every tool invocation: the tool name, input parameters, output, and the model reasoning that triggered it. Tool misuse is a primary attack vector, and without this trace you cannot distinguish legitimate tool use from attack-driven tool calls.
+**Tool call traces.** For agentic systems, log every tool invocation: the tool name, input parameters, and output. Where chain-of-thought reasoning is available and your provider exposes it, you may log a summary of the reasoning that triggered the call — but be cautious: raw CoT can contain sensitive intermediate content or prompt-injection payloads, and many providers do not expose it at all. At minimum, the tool name and parameters are essential for distinguishing legitimate from attack-driven invocations.
 
 **Timing and latency data.** Anomalous latency patterns can indicate certain attack classes (e.g., repeated probing for model extraction). Timestamp every inference call with millisecond resolution.
 
@@ -114,7 +114,7 @@ Containment is often where AI IR diverges most sharply from conventional playboo
 
 ### What Rollback Means for Different Compromise Types
 
-**Prompt injection compromise:** The model itself is not compromised — the attack succeeded through the input interface. Rollback means: (1) patch the system prompt or retrieval pipeline to close the injection vector, (2) review tool permissions and restrict as needed, (3) audit output logs for data already exfiltrated. The model artifact itself may not need replacing.
+**Prompt injection compromise:** The model itself is not compromised — the attack succeeded through the input interface. Rollback means: (1) patch the system prompt or retrieval pipeline to close the injection vector, (2) review tool permissions and restrict as needed, (3) audit output logs for data already exfiltrated. For agentic systems, also revoke any credentials or sessions the model may have used during the compromise window, and perform integrity checks on any downstream systems the model could have written to or modified.
 
 **Backdoor in fine-tuned model:** The model artifact is compromised at training time. Rollback means deploying a checkpoint from before the backdoor was introduced. If you don't know which checkpoint is clean, you must return to the pre-fine-tune base model and retrain from a trusted data source.
 
@@ -152,7 +152,7 @@ Before returning a model to production, validate:
 
 User notification thresholds vary by jurisdiction and incident type. General guidelines:
 
-- **Data exfiltration:** If user PII was exposed in model outputs, apply the same notification standards as any data breach — typically 72 hours under GDPR, similar under CCPA and US state equivalents.
+- **Data exfiltration:** If user PII was exposed in model outputs, apply breach notification obligations — these vary by jurisdiction. Under GDPR Art. 33, supervisory authority notification is required within 72 hours; user notification (Art. 34) is required "without undue delay" when there is a high risk to rights and freedoms. US state breach notification laws vary but typically do not map to a uniform 72-hour window. Consult counsel for your specific jurisdictions.
 - **Behavioral manipulation:** If users received responses that were materially different from what the model should have produced (e.g., malicious instructions disguised as legitimate advice), disclose to affected users.
 - **Service disruption from containment:** If containment measures degraded service, notify users with an explanation of what happened and when normal service is expected to resume.
 
@@ -160,7 +160,7 @@ User notification thresholds vary by jurisdiction and incident type. General gui
 
 If you operate on a platform (API provider, marketplace, enterprise software ecosystem), check your platform agreement for breach notification obligations. Most platform providers have their own incident reporting requirements.
 
-For AI-specific incidents, consider submitting to the [MITRE ATLAS case study library](https://atlas.mitre.org/) once the incident is resolved and disclosure is appropriate. ATLAS case studies contribute to the field's collective understanding of real-world AI attacks. The MITRE ATLAS website provides a structured case study submission process and is the closest analog to CVE/NVD for AI attack patterns — see also [ATLAS MITRE cross-reference post](/blog) for the taxonomy.
+For AI-specific incidents, consider submitting to the [MITRE ATLAS case study library](https://atlas.mitre.org/) once the incident is resolved and disclosure is appropriate. ATLAS is a knowledge base of adversarial AI attack patterns and documented cases — submitting a case study contributes to the field's collective understanding of real-world AI attacks. The MITRE ATLAS website provides a structured case study submission process.
 
 The coordinated vulnerability disclosure framework covered in related posts provides detailed guidance if the incident involves a vulnerability that has broader ecosystem impact.
 
@@ -273,4 +273,4 @@ RETROSPECTIVE DATE:
 
 ---
 
-*NIST references: [NIST SP 800-61r3](https://csrc.nist.gov/publications/detail/sp/800-61/rev-3/final) (Incident Response Recommendations and Considerations for Cybersecurity Risk Management, 2024); [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) (Respond/Recover functions, 2023). Garak: [github.com/NVIDIA/garak](https://github.com/NVIDIA/garak). MITRE ATLAS: [atlas.mitre.org](https://atlas.mitre.org/).*
+*NIST references: [NIST SP 800-61r2](https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final) (Computer Security Incident Handling Guide); [NIST SP 800-61r3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) (Incident Response Recommendations and Considerations for Cybersecurity Risk Management, 2024); [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) (AI Risk Management Framework — Govern, Map, Measure, Manage functions, 2023). Garak: [github.com/NVIDIA/garak](https://github.com/NVIDIA/garak). MITRE ATLAS: [atlas.mitre.org](https://atlas.mitre.org/).*
