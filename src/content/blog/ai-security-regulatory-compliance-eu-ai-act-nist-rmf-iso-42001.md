@@ -1,13 +1,13 @@
 ---
 title: "AI Security and the Law: What the EU AI Act, NIST AI RMF, and ISO 42001 Actually Require of Builders"
-description: "The EU AI Act, NIST AI RMF 1.0, and ISO/IEC 42001:2023 have moved AI security from best practice to legal obligation. This post maps specific regulatory requirements — adversarial testing, incident reporting deadlines, robustness mandates — to the attack classes they govern and the technical controls that satisfy them."
+description: "The EU AI Act creates statutory security obligations for high-risk AI systems; NIST AI RMF 1.0 and ISO/IEC 42001:2023 are becoming de facto requirements through procurement and certification. This post maps specific requirements — adversarial testing, incident reporting deadlines, robustness mandates — to the attack classes they govern and the controls that address them."
 pubDate: 2026-07-07
 tags: ["regulatory-compliance", "eu-ai-act", "nist-ai-rmf", "iso-42001", "risk-management", "governance", "red-teaming", "incident-response"]
 ---
 
 For most of this blog's life, AI security has been framed as a technical problem: attackers probe model boundaries, defenders patch them, researchers publish new attacks faster than defenses mature. That framing isn't wrong — but it's incomplete. In 2024–2026, AI security became a *legal* problem. Organizations that ship high-risk AI systems now face statutory obligations to adversarially test them, report security incidents within hours, and maintain documented risk management systems that would survive regulatory scrutiny.
 
-This post maps three frameworks — the EU AI Act (Regulation 2024/1689/EU), the NIST AI Risk Management Framework 1.0 (NIST.AI.100-1), and ISO/IEC 42001:2023 — to the attack classes covered in detail elsewhere on this blog. The goal is to answer a question practitioners increasingly face: *"Our RAG system has a prompt injection vulnerability. Which regulation do we violate if we don't fix it, and what exactly does fixing it require?"*
+This post maps three frameworks — the EU AI Act (Regulation (EU) 2024/1689), the NIST AI Risk Management Framework 1.0 (NIST.AI.100-1), and ISO/IEC 42001:2023 — to the attack classes covered in detail elsewhere on this blog. The goal is to answer a question practitioners increasingly face: *"Our RAG system has a prompt injection vulnerability. Which regulation do we violate if we don't fix it, and what exactly does fixing it require?"*
 
 ## The Compliance Imperative: Why Security Is Now a Legal Obligation
 
@@ -17,13 +17,13 @@ Three forces converged to make AI security a regulatory matter.
 
 **Voluntary frameworks weren't moving fast enough.** The NIST AI RMF debuted in January 2023 as an explicitly voluntary framework. Within months, US federal procurement policy began treating it as a de facto requirement for AI acquisition. The gap between "voluntary" and "mandatory" narrowed to policy language.
 
-**The EU moved first, forcing global compliance.** Regulation 2024/1689/EU — the EU AI Act — was published in the Official Journal of the European Union on July 12, 2024 (OJ L 2024/1689). It applies directly in all EU member states without national implementation legislation. Because it applies to any AI system deployed in the EU regardless of where the developer is located, it effectively became a global standard for any organization with EU market exposure.
+**The EU moved first, forcing global compliance.** Regulation (EU) 2024/1689 — the EU AI Act — was published in the Official Journal of the European Union on July 12, 2024 (OJ L 2024/1689). It applies directly in all EU member states without national implementation legislation. Because it applies to any AI system deployed in the EU regardless of where the developer is located, it effectively became a global standard for any organization with EU market exposure.
 
 ---
 
 ## The EU AI Act: Risk Architecture and the Security Articles That Matter
 
-The EU AI Act (Regulation 2024/1689/EU) establishes a risk-tiered regulatory structure. Understanding which tier your system falls into determines which security obligations apply.
+The EU AI Act (Regulation (EU) 2024/1689) establishes a risk-tiered regulatory structure. Understanding which tier your system falls into determines which security obligations apply.
 
 ### Risk Classification
 
@@ -56,7 +56,7 @@ Article 15(3) is particularly significant: "The technical robustness of high-ris
 
 Article 15(4) specifies that for high-risk AI systems intended to interact with natural persons, cybersecurity measures shall be commensurate with the circumstances.
 
-The practical interpretation: any high-risk AI system that is demonstrably vulnerable to documented attack classes — and that has not been tested for and mitigated against those vulnerabilities — is non-compliant with Article 15 as a matter of statutory text.
+The practical interpretation: a high-risk AI system that is demonstrably vulnerable to documented attack classes — and that has not been tested for and mitigated against those vulnerabilities — will struggle to demonstrate the "appropriate level" of robustness that Article 15 requires. The Act uses a risk-based standard rather than an absolute one, so the adequacy of security measures is assessed in proportion to the risk; but the burden falls on providers to demonstrate that level has been met.
 
 ### Articles 51–56: GPAI and Systemic-Risk Models
 
@@ -69,9 +69,15 @@ The AI Office's Code of Practice for GPAI Models is the implementing guidance fo
 
 ### Incident Reporting
 
-Article 73 establishes incident reporting obligations. Providers of high-risk AI systems deployed in the EU must report any serious incident — defined to include incidents resulting in death, serious harm to health, property damage, or a serious breach of fundamental rights — to national market surveillance authorities without undue delay, and in any case within **three working days** of becoming aware of the incident for incidents affecting safety, and **15 days** for other serious incidents.
+Article 73 establishes incident reporting obligations for providers of high-risk AI systems. Serious incidents must be reported to national market surveillance authorities without undue delay, and in any case within the following tiered deadlines from first becoming aware:
 
-For systemic-risk GPAI models, Article 55(1)(c) requires reporting of serious incidents to the AI Office. The three-working-day timeframe for safety incidents is the most demanding reporting obligation in the Act.
+- **Two days** (calendar): incidents involving widespread infringement or serious incidents involving critical infrastructure
+- **Ten days**: incidents resulting in death
+- **Fifteen days**: other serious incidents (the default ceiling)
+
+For systemic-risk GPAI models, Article 55(1)(c) requires reporting of serious incidents to the AI Office without undue delay.
+
+**Important:** Always verify Article 73's specific deadlines against the final adopted text of Regulation (EU) 2024/1689 published in the Official Journal, as implementing guidance from national authorities may add precision. The deadlines above are drawn from the Act's tiered structure; the GPAI-specific obligation in Article 55 has its own formulation.
 
 ### Enforcement and Penalties
 
@@ -80,9 +86,9 @@ Infringements of specific provisions carry different penalty ceilings:
 - Violations of other obligations applicable to providers (including the Article 9 and 15 security requirements): up to **€15,000,000** or **3% of total worldwide annual turnover**, whichever is higher (Article 99(4))
 - Incorrect, incomplete, or misleading information to authorities: up to **€7,500,000** or **1% of total worldwide annual turnover**, whichever is higher (Article 99(5))
 
-These figures come directly from Regulation 2024/1689/EU Article 99 as published. The penalties are ceilings — national enforcement authorities exercise discretion — but they signal regulatory seriousness.
+These figures come directly from Regulation (EU) 2024/1689 Article 99 as published. The penalties are ceilings — national enforcement authorities exercise discretion — but they signal regulatory seriousness.
 
-**Application timeline:** The Act entered into force on August 1, 2024. Provisions on prohibited AI practices (Article 5) applied from February 2, 2025. Obligations for GPAI models applied from August 2, 2025. The high-risk AI system requirements in Annex III apply from **August 2, 2026**. This means the full Article 9 and Article 15 obligations for high-risk systems are now in the enforcement window.
+**Application timeline:** The Act entered into force on August 1, 2024. Provisions on prohibited AI practices (Article 5) applied from February 2, 2025. Obligations for GPAI models applied from August 2, 2025. The high-risk AI system requirements for systems listed in Annex III apply from **August 2, 2026**. High-risk AI systems covered via the Annex I product-safety route (systems embedded in regulated products such as medical devices and machinery) follow a longer transition timeline. This means the full Article 9 and Article 15 obligations are now active for most Annex III high-risk systems.
 
 ---
 
@@ -118,7 +124,7 @@ NIST Cybersecurity Framework 2.0 (published February 2024) added a sixth functio
 
 ### Federal Adoption and Procurement
 
-Executive Order 14110 (October 2023) directed federal agencies to develop standards and guidance for AI safety and security based on NIST's work. The Office of Management and Budget Memorandum M-24-10 (March 2024) established AI governance requirements for federal agencies using AI. While M-24-10 does not mandate AI RMF compliance by name, it requires agencies to have AI governance structures, risk assessments, and testing practices that are substantively aligned with the AI RMF. For vendors selling AI systems to the US federal government, the practical effect is that AI RMF alignment has become a procurement requirement even where it is not legally mandated.
+Executive Order 14110 (October 2023) directed federal agencies to develop standards and guidance for AI safety and security based on NIST's work. The Office of Management and Budget Memorandum M-24-10 (March 28, 2024) established AI governance requirements for federal agencies using AI. M-24-10 explicitly references the NIST AI RMF and directs agencies to use it for risk management of covered AI — making the framework functionally mandatory for agency operations even if the framework's own documentation describes it as voluntary. For vendors selling AI systems to the US federal government, the practical effect is that AI RMF alignment has become a procurement expectation built into agency governance requirements.
 
 ---
 
@@ -182,7 +188,7 @@ Until those standards are finalized, the practical obligation is: document your 
 
 ### NIST's Framing
 
-NIST AI RMF Playbook practice MEASURE 2.7 describes red-teaming in operational terms: "Conduct adversarial testing including red-teaming to identify AI system vulnerabilities, attack surfaces, and exposures. Document results." The NIST AI 100-1 companion document *Adversarial Machine Learning: A Taxonomy and Terminology* (NIST.AI.100-2, published January 2024 as a second draft for public comment) provides technical vocabulary for these evaluations.
+NIST AI RMF Playbook practice MEASURE 2.7 describes red-teaming in operational terms: "Conduct adversarial testing including red-teaming to identify AI system vulnerabilities, attack surfaces, and exposures. Document results." The NIST companion document *Adversarial Machine Learning: A Taxonomy and Terminology* (NIST.AI.100-2e2025) provides technical vocabulary for these evaluations. This document was finalized in 2025; earlier iterations were published as drafts for public comment.
 
 For organizations aligning with the AI RMF, MEASURE 2.7 is the practice that requires red-teaming. The word "suggested" in the Playbook's practice descriptions reflects the framework's voluntary character at the federal level — but as noted above, voluntary at the statutory level does not mean optional in procurement contexts.
 
@@ -202,19 +208,23 @@ The [MITRE ATLAS framework](/blog/mitre-atlas-adversarial-ai-threat-landscape) p
 
 ### EU AI Act Reporting
 
-Article 73 establishes the incident reporting timeline for high-risk AI systems. The obligations are:
+Article 73 establishes the incident reporting timeline for providers of high-risk AI systems. Serious incidents must be reported to national market surveillance authorities without undue delay, within the following tiered deadlines from first becoming aware:
 
-- **Three working days** from becoming aware: serious incidents affecting safety of persons
-- **Fifteen days** from becoming aware: other serious incidents (including serious breaches of fundamental rights)
-- **Immediate** (without undue delay): for systemic-risk GPAI models, Article 55(1)(c) requires reporting to the AI Office
+- **Two calendar days:** Incidents involving widespread infringement or serious incidents involving critical infrastructure
+- **Ten calendar days:** Incidents resulting in death
+- **Fifteen calendar days:** Other serious incidents (the default)
+
+For systemic-risk GPAI models, Article 55(1)(c) requires reporting of serious incidents to the AI Office without undue delay.
 
 "Serious incident" is defined in Article 3(49) as an incident — or near-miss — that has led, or may lead, to death, serious harm to health, property damage, or a serious breach of fundamental rights. In security terms, this captures: a model compromise that enables extraction of health records (GDPR + AI Act), an adversarial attack against a high-risk AI used in loan decisioning that produces discriminatory outputs at scale, or a backdoor activation in a system used for critical infrastructure management.
+
+**Always verify these deadlines against the final adopted text of Regulation (EU) 2024/1689 and national market surveillance authority guidance** — implementing acts may add precision, and the tiering is complex.
 
 ### Interaction with Existing IR Programs
 
 The EU AI Act's reporting obligations stack with:
 - **GDPR Article 33:** 72-hour notification to supervisory authority for personal data breaches
-- **NIS2 Directive:** 24-hour early warning for significant cybersecurity incidents affecting essential services
+- **NIS2 Directive:** 24-hour early warning, 72-hour incident notification, and 1-month final report for significant cybersecurity incidents affecting essential services
 - **DORA (Digital Operational Resilience Act):** Incident reporting for financial sector entities
 
 For organizations in regulated industries deploying high-risk AI, a single incident may trigger concurrent obligations under multiple regimes. The AI Act reporting goes to **national market surveillance authorities** (the bodies designated by each member state under Article 70); GDPR reporting goes to **data protection authorities** (DPAs); NIS2 reporting goes to **national cybersecurity authorities** (e.g., BSI in Germany, ANSSI in France).
@@ -227,8 +237,8 @@ Practical implication: incident response playbooks for EU-deployed high-risk AI 
 
 Not every organization needs to comply with every requirement above. The obligations are conditional on system type, deployment context, and geography. This checklist helps prioritize:
 
-**1. Classify your AI systems under the EU AI Act risk tiers.**
-If you have EU market exposure and deploy AI systems, determine whether any fall into Annex III categories. The Act's website (artificialintelligenceact.eu publishes an unofficial annotated text; the authoritative text is OJ L 2024/1689) and your legal counsel are the right resources. High-risk classification triggers the Article 9 and Article 15 obligations.
+**1. Classify your AI systems under the EU AI Act risk tiers, and determine your role (provider vs. deployer).**
+If you have EU market exposure and deploy AI systems, determine whether any fall into Annex III categories. Critically, note that Articles 9 and 15 impose their most demanding obligations on **providers** (those who develop AI systems or place them on the market), not on deployers who merely use third-party systems. Deployers have their own obligations (Article 26) but are not responsible for the provider-level technical compliance. Understanding your role in the AI supply chain is the prerequisite for determining which obligations bind you.
 
 **2. Assess whether any models qualify as GPAI or systemic-risk GPAI.**
 If you are a foundation model provider (not a deployer of third-party models), determine training compute. The 10^25 FLOPs threshold for systemic risk is in Article 51(1). If you are deploying third-party models, understand what the model provider's obligations are and how those flow through supply-chain contracts.
@@ -237,7 +247,7 @@ If you are a foundation model provider (not a deployer of third-party models), d
 At minimum, test against the attack classes in the cross-reference table above that are relevant to your deployment context. Document the methodology, who performed the testing, the date range, the findings, and the residual risks. This documentation is what an Article 9(5) compliance audit will request.
 
 **4. Establish incident response with regulatory notification workflows.**
-Map your AI incident types to their reporting obligations. Identify which authority receives which notification, pre-draft notification templates, and ensure the three-working-day (safety) and 15-day (other serious incidents) deadlines are in your incident response timeline. If you are also subject to GDPR and/or NIS2, consolidate the notification map.
+Map your AI incident types to their reporting obligations. Identify which authority receives which notification, pre-draft notification templates, and ensure the tiered Article 73 deadlines (2 / 10 / 15 calendar days by incident severity) are built into your incident response timeline. If you are also subject to GDPR (72h for data breaches) and/or NIS2 (24h early warning, 72h notification), consolidate the notification map — a single AI security incident may trigger multiple concurrent reporting obligations to different authorities.
 
 **5. Align with NIST AI RMF to satisfy US federal procurement and build the governance layer.**
 Whether or not you have direct federal contracts, AI RMF alignment produces the documentation artifacts (risk assessments, testing records, governance policies) that also support EU AI Act compliance. The four functions — Govern, Map, Measure, Manage — are a useful organizing structure for building an AI security program that scales across regulatory jurisdictions.
@@ -248,10 +258,10 @@ Whether or not you have direct federal contracts, AI RMF alignment produces the 
 
 All regulatory claims in this post are drawn from primary source text. Readers implementing compliance programs should verify against the authoritative texts:
 
-- **EU AI Act (Regulation 2024/1689/EU):** Published in the Official Journal of the European Union, L series, 2024. The text is available via EUR-Lex. Article numbers cited here refer to the final adopted text.
+- **NIST.AI.100-2e2025 (Adversarial Machine Learning: Taxonomy and Terminology of Attacks and Mitigations):** Finalized in 2025. Available at nist.gov. Earlier pre-decisional draft iterations were published in 2023 and 2024; use the finalized version for compliance citations.
+- **EU AI Act (Regulation (EU) 2024/1689):** Published in the Official Journal of the European Union, L series, 2024. The text is available via EUR-Lex. Article numbers cited here refer to the final adopted text.
 - **NIST AI RMF 1.0 (NIST.AI.100-1):** Published January 2023. Available at csrc.nist.gov/pubs/ai/100/1/final.
 - **NIST AI RMF Playbook:** Companion document to NIST.AI.100-1, providing suggested practices for each core function and sub-function. Available at airc.nist.gov.
-- **NIST.AI.100-2 (Adversarial Machine Learning Taxonomy and Terminology):** Second draft for public comment published January 2024. Available at nist.gov. Note that as of writing, this remains a draft document.
 - **ISO/IEC 42001:2023:** Available through national standards bodies (ANSI in the US, BSI in the UK, DIN in Germany) and directly from ISO. The standard is not freely available; it is a purchased publication.
 - **European AI Office:** Official source for Code of Practice development and GPAI model guidance — ai-office.ec.europa.eu. Track publication dates carefully; draft iterations are not binding until the finalization process is complete.
 
