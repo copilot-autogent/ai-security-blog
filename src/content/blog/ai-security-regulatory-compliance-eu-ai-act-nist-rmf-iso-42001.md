@@ -31,7 +31,7 @@ The EU AI Act (Regulation (EU) 2024/1689) establishes a risk-tiered regulatory s
 
 **High-risk AI systems (Annex III):** Systems in eight domains including biometric identification, critical infrastructure management, education, employment, essential private and public services, law enforcement, migration, and administration of justice (Article 6 and Annex III). These systems bear the full weight of the Act's security requirements.
 
-**General-purpose AI models (GPAI, Articles 51–56 / Title VIII):** Large foundation models trained on substantial compute. "Systemic-risk" GPAI models — those trained using more than 10^25 FLOPs — face heightened obligations including mandatory red-team evaluations.
+**General-purpose AI models (GPAI, Articles 51–56 / Title VIII):** AI models trained on large amounts of data using self-supervision at scale, capable of serving a wide range of downstream tasks. "Systemic-risk" GPAI models — those where Article 51(1) applies, with training compute exceeding 10^25 FLOPs as a presumption (rebuttable) of systemic risk — face heightened obligations including mandatory red-team evaluations.
 
 **Limited and minimal risk:** Chatbots and image generators face transparency obligations (Article 50) but not the security mandates discussed here.
 
@@ -44,7 +44,7 @@ Specifically, Article 9(2) requires the risk management system to:
 - Estimate and evaluate the risks that may emerge when the system is used as intended and under conditions of reasonably foreseeable misuse
 - Evaluate risks in light of data from post-market monitoring
 
-Article 9(4) requires that "appropriate and targeted risk management measures" be adopted for residual risks. Article 9(5) requires that high-risk AI systems be tested to identify appropriate risk management measures and to verify compliance — and explicitly states that testing shall be performed against **prior defined metrics and probabilistic thresholds**.
+Article 9(4) requires that "appropriate and targeted risk management measures" be adopted for residual risks. Article 9(5) requires that high-risk AI systems be tested to identify appropriate risk management measures and to verify compliance — and explicitly states that testing shall be performed against **preliminarily defined metrics and probabilistic thresholds**.
 
 For security purposes, this means adversarial testing — including tests for prompt injection, data poisoning susceptibility, model extraction resistance, and robustness to distribution shift — is not optional for high-risk AI systems. It is a statutory requirement.
 
@@ -52,15 +52,15 @@ For security purposes, this means adversarial testing — including tests for pr
 
 Article 15 is the most technically specific security provision in the Act. It requires that high-risk AI systems be designed and developed to achieve, throughout their lifecycle, an "appropriate level of accuracy, robustness and cybersecurity, and to perform consistently in those respects."
 
-Article 15(3) is particularly significant: "The technical robustness of high-risk AI systems shall include resilience against attempts by unauthorised third parties to alter their use, outputs or performance by exploiting the system vulnerabilities." The recitals clarify that this encompasses **adversarial attacks**, **data poisoning attacks**, and **model poisoning attacks**.
+Article 15(3) addresses technical robustness: high-risk AI systems must be designed to be resilient against unauthorized third-party attempts to alter their use, outputs, or performance by exploiting system vulnerabilities — encompassing adversarial attacks, data poisoning attacks, and model poisoning attacks as described in the recitals.
 
-Article 15(4) specifies that for high-risk AI systems intended to interact with natural persons, cybersecurity measures shall be commensurate with the circumstances.
+Article 15(4) addresses resilience against errors, faults, and inconsistencies that may occur in high-risk AI systems, ensuring that such systems can adequately cope with these and continue operating at an appropriate level of performance.
 
 The practical interpretation: a high-risk AI system that is demonstrably vulnerable to documented attack classes — and that has not been tested for and mitigated against those vulnerabilities — will struggle to demonstrate the "appropriate level" of robustness that Article 15 requires. The Act uses a risk-based standard rather than an absolute one, so the adequacy of security measures is assessed in proportion to the risk; but the burden falls on providers to demonstrate that level has been met.
 
 ### Articles 51–56: GPAI and Systemic-Risk Models
 
-General-purpose AI models with systemic risk (>10^25 FLOPs training compute) face obligations that go beyond the high-risk framework. Article 55 requires providers of systemic-risk GPAI models to:
+General-purpose AI models with systemic risk — where Article 51(1)'s 10^25 FLOPs training compute threshold applies as a presumption — face obligations that go beyond the high-risk framework. Article 55 requires providers of systemic-risk GPAI models to:
 - Perform **model evaluations** including adversarial testing (Article 55(1)(a)) — described in the Act as testing "to identify and mitigate systemic risks"
 - Track, document, and **report serious incidents** to the AI Office without undue delay
 - Apply **cybersecurity protection** adequate to the level of risk
@@ -71,7 +71,7 @@ The AI Office's Code of Practice for GPAI Models is the implementing guidance fo
 
 Article 73 establishes incident reporting obligations for providers of high-risk AI systems. Serious incidents must be reported to national market surveillance authorities without undue delay, and in any case within the following tiered deadlines from first becoming aware:
 
-- **Two days** (calendar): incidents involving widespread infringement (cross-border fundamental-rights breaches per Article 3(49)(b)) or serious and irreversible disruption of critical infrastructure management or operation
+- **Two days** (calendar): incidents involving widespread infringement (cross-border fundamental-rights breaches, as referenced in Article 73) or serious and irreversible disruption of critical infrastructure management or operation
 - **Ten days**: incidents resulting in death
 - **Fifteen days**: other serious incidents (the default ceiling)
 
@@ -114,7 +114,7 @@ The AI RMF Playbook identifies specific suggested practices for each sub-functio
 
 **MEASURE 2.6** — Addresses AI system safety risks, including safe-to-fail design and safe operation under anomalous conditions. This practice covers the question of what happens when an AI system encounters conditions outside its designed operating envelope — relevant to adversarial inputs that push the system into unexpected behavior states.
 
-**MEASURE 2.7** — Specifically addresses AI risk and impact assessment methods for adversarial attacks. The Playbook text suggests: "Conduct adversarial testing including red-teaming to identify AI system vulnerabilities, attack surfaces, and exposures. Document results." This practice is the NIST equivalent of the EU AI Act's Article 9(5) testing mandate.
+**MEASURE 2.7** — Specifically addresses AI risk and impact assessment methods for adversarial attacks. The Playbook suggests: conduct adversarial testing including red-teaming to identify AI system vulnerabilities, attack surfaces, and exposures, and document results. This practice is the NIST equivalent of the EU AI Act's Article 9(5) testing mandate.
 
 **MANAGE 4.1 / 4.2** — Residual risk treatment and incident response. The AI RMF's relationship to existing NIST cybersecurity guidance is explicit: NIST SP 800-61r3 (Incident Response) remains the baseline; MANAGE 4.x extends the lifecycle to AI-specific incidents including model compromise, behavioral drift, and adversarial attack discovery post-deployment.
 
@@ -124,7 +124,7 @@ NIST Cybersecurity Framework 2.0 (published February 2024) added a sixth functio
 
 ### Federal Adoption and Procurement
 
-Executive Order 14110 (October 2023) directed federal agencies to develop standards and guidance for AI safety and security based on NIST's work. The Office of Management and Budget Memorandum M-24-10 (March 28, 2024) established AI governance requirements for federal agencies using AI. M-24-10 explicitly references the NIST AI RMF and directs agencies to use it for risk management of covered AI — making the framework functionally mandatory for agency operations even if the framework's own documentation describes it as voluntary. For vendors selling AI systems to the US federal government, the practical effect is that AI RMF alignment has become a procurement expectation built into agency governance requirements.
+Executive Order 14110 (October 2023) directed federal agencies to develop standards and guidance for AI safety and security based on NIST's work. The Office of Management and Budget Memorandum M-24-10 (March 28, 2024) established AI governance requirements for federal agencies using AI. M-24-10 explicitly references the NIST AI RMF and directs agencies to use it for risk management of covered AI — making the framework functionally expected within federal agency operations. For vendors selling AI systems to the US federal government, alignment with the AI RMF has become an increasingly common contractual expectation, even where the framework itself remains technically voluntary.
 
 ---
 
@@ -164,7 +164,7 @@ The following table maps attack classes to their regulatory anchors and the tech
 | **Backdoor / trojan attacks** | Art. 9 (risk mgmt); Art. 15 (model poisoning resilience) | MEASURE 2.7 | Clause 8 | [Backdoor Attacks in Foundation Models](/blog/backdoor-attacks-foundation-models), [Sleeper Agents](/blog/sleeper-agents-ai-supply-chain-backdoor) |
 | **Model extraction** | Art. 15 (cybersecurity); Art. 9 (risk mgmt) | MEASURE 2.7, MEASURE 2.6 | Clause 8 | [Model Extraction via API Queries](/blog/model-extraction-api-queries-stealing-proprietary-ai) |
 | **Membership inference** | Art. 10 (data governance); GDPR intersection | MEASURE 2.10 | Clause 6 | [Membership Inference Attacks](/blog/membership-inference-attacks) |
-| **Supply chain attacks** | Art. 9 (risk mgmt); Art. 13 (transparency re: third-party components) | MANAGE 4.1, MEASURE 2.7 | Clause 8 | [AI Agent Supply Chain Attacks](/blog/ai-agent-supply-chain-attacks), [LLM Router Supply Chain Attack](/blog/llm-router-supply-chain-attack) |
+| **Supply chain attacks** | Art. 9 (risk mgmt); Art. 25 (obligations of importers/distributors) | MANAGE 4.1, MEASURE 2.7 | Clause 8 | [AI Agent Supply Chain Attacks](/blog/ai-agent-supply-chain-attacks), [LLM Router Supply Chain Attack](/blog/llm-router-supply-chain-attack) |
 | **Adversarial examples** | Art. 15 (robustness against adversarial input) | MEASURE 2.7, MEASURE 2.6 | Clause 8 | [Adversarial Attacks on Vision-Language Models](/blog/adversarial-attacks-vision-language-models-pixels-injection), [Adversarial Examples (Foundational)](/blog/adversarial-examples-foundational-ml-attack-production) |
 | **Privacy / data exfiltration** | Art. 10 (data governance); Art. 15; GDPR intersection | MEASURE 2.10 | Clause 6, Clause 8 | [RAG Privacy Attacks](/blog/rag-privacy-attacks-retrieval-data-exfiltration), [Gradient Inversion Attacks](/blog/gradient-inversion-attacks-reconstructing-private-training-data) |
 
@@ -188,7 +188,7 @@ Until those standards are finalized, the practical obligation is: document your 
 
 ### NIST's Framing
 
-NIST AI RMF Playbook practice MEASURE 2.7 describes red-teaming in operational terms: "Conduct adversarial testing including red-teaming to identify AI system vulnerabilities, attack surfaces, and exposures. Document results." The NIST companion document *Adversarial Machine Learning: A Taxonomy and Terminology* (NIST.AI.100-2e2025) provides technical vocabulary for these evaluations. This document was finalized in 2025; earlier iterations were published as drafts for public comment.
+NIST AI RMF Playbook practice MEASURE 2.7 describes red-teaming in operational terms: conduct adversarial testing including red-teaming to identify AI system vulnerabilities, attack surfaces, and exposures, and document results. The NIST companion document *Adversarial Machine Learning: A Taxonomy and Terminology* (NIST.AI.100-2e2025) provides technical vocabulary for these evaluations. This document was finalized in 2025; earlier iterations were published as drafts for public comment.
 
 For organizations aligning with the AI RMF, MEASURE 2.7 is the practice that requires red-teaming. The word "suggested" in the Playbook's practice descriptions reflects the framework's voluntary character at the federal level — but as noted above, voluntary at the statutory level does not mean optional in procurement contexts.
 
@@ -210,13 +210,13 @@ The [MITRE ATLAS framework](/blog/mitre-atlas-adversarial-ai-threat-landscape) p
 
 Article 73 establishes the incident reporting timeline for providers of high-risk AI systems. Serious incidents must be reported to national market surveillance authorities without undue delay, within the following tiered deadlines from first becoming aware:
 
-- **Two calendar days:** Incidents involving widespread infringement (cross-border fundamental-rights breaches per Article 3(49)(b)) or serious and irreversible disruption of the management or operation of critical infrastructure
+- **Two calendar days:** Incidents involving widespread infringement (cross-border fundamental-rights breaches, as referenced in Article 73) or serious and irreversible disruption of the management or operation of critical infrastructure
 - **Ten calendar days:** Incidents resulting in death
 - **Fifteen calendar days:** Other serious incidents (the default)
 
 For systemic-risk GPAI models, Article 55(1)(c) requires reporting of serious incidents to the AI Office without undue delay.
 
-"Serious incident" is defined in Article 3(49) as an incident — or near-miss — that has led, or may lead, to death, serious harm to health, property damage, or a serious breach of fundamental rights. In security terms, this captures: a model compromise that enables extraction of health records (GDPR + AI Act), an adversarial attack against a high-risk AI used in loan decisioning that produces discriminatory outputs at scale, or a backdoor activation in a system used for critical infrastructure management.
+"Serious incident" is defined in Article 3(49) as an incident — or near-miss — that has led, or may lead, to: death or serious harm to health; disruption of the management or operation of critical infrastructure; breach of obligations protecting fundamental rights; serious harm to property or the environment; or, for GPAI models, other significant impacts as relevant. In security terms, this captures: a model compromise that enables extraction of health records (GDPR + AI Act), an adversarial attack against a high-risk AI used in loan decisioning that produces discriminatory outputs at scale, or a backdoor activation in a system used for critical infrastructure management.
 
 **Always verify these deadlines against the final adopted text of Regulation (EU) 2024/1689 and national market surveillance authority guidance** — implementing acts may add precision, and the tiering is complex.
 
@@ -241,7 +241,7 @@ Not every organization needs to comply with every requirement above. The obligat
 If you have EU market exposure and deploy AI systems, determine whether any fall into Annex III categories. Critically, note that Articles 9 and 15 impose their most demanding obligations on **providers** (those who develop AI systems or place them on the market), not on deployers who merely use third-party systems. Deployers have their own obligations (Article 26) but are not responsible for the provider-level technical compliance. Understanding your role in the AI supply chain is the prerequisite for determining which obligations bind you.
 
 **2. Assess whether any models qualify as GPAI or systemic-risk GPAI.**
-If you are a foundation model provider (not a deployer of third-party models), determine training compute. The 10^25 FLOPs threshold for systemic risk is in Article 51(1). If you are deploying third-party models, understand what the model provider's obligations are and how those flow through supply-chain contracts.
+If you are a foundation model provider (not a deployer of third-party models), determine whether any model meets the systemic-risk threshold under Article 51(1). Exceeding 10^25 FLOPs of training compute creates a rebuttable presumption of systemic risk; the AI Office may also designate other models. If you are deploying third-party models, understand what the model provider's obligations are and how those flow through supply-chain contracts.
 
 **3. Conduct and document adversarial testing for each high-risk system.**
 At minimum, test against the attack classes in the cross-reference table above that are relevant to your deployment context. Document the methodology, who performed the testing, the date range, the findings, and the residual risks. This documentation is what an Article 9(5) compliance audit will request.
