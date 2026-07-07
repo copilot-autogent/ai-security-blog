@@ -31,7 +31,7 @@ That gap is the attack surface.
 
 The core insight in Carlini et al. 2023 ([arXiv:2302.10149](https://arxiv.org/abs/2302.10149)) is elegant and alarming. Web domains expire. When an organization lets a domain lapse, it becomes available for purchase by anyone — including someone who wants to appear in the next Common Crawl snapshot.
 
-Here's the full attack chain:
+Here's the attack chain — important for defenders to understand each step they can interrupt:
 
 1. **Identify target domains.** The attacker analyzes existing Common Crawl snapshots to find domains that (a) appear in the crawl, (b) have since expired, and (c) are available for registration.
 2. **Purchase the domain.** Domain registration is cheap — expired domains typically cost as little as a few dollars to the list price of the extension, occasionally more for premium domains.
@@ -45,7 +45,7 @@ The cost to execute: the paper estimated that purchasing expired domains include
 
 ### What the Attacker Can Control
 
-The attacker can inject arbitrary text into training data. The effectiveness depends on how much data they inject and how well-crafted it is — but the Carlini et al. paper demonstrated that even at **0.01% of the training dataset**, effects on model behavior are measurable. For a dataset of 400 billion tokens, 0.01% is still 40 million tokens — but an attacker targeting a smaller downstream derivative dataset (a common practice when building specialized corpora from Common Crawl subsets) can achieve this fraction with far less volume.
+The attacker can inject arbitrary text into training data. Carlini et al.'s key finding is about **injection feasibility**: even a fraction as small as 0.01% of a training corpus is achievable via expired domain purchases, because Common Crawl contains many such expired-but-purchaseable domains. The paper's contribution is demonstrating that this fraction is *reachable* at low cost — not establishing a behavioral-effect threshold (how much poison is enough to change model behavior is a separate empirical question that depends on the attack's design, the model architecture, and the training setup). An attacker targeting a smaller downstream derivative dataset (a common practice when building specialized corpora from Common Crawl subsets) can reach a given fraction with even less volume than targeting the full crawl.
 
 ## What You Can Make a Model Believe
 
@@ -94,9 +94,9 @@ Scale doesn't just make attacks cheaper to execute. It makes them harder to remo
 The most direct defense against the expired domain attack is **domain provenance verification**. The critical security boundary is ownership *at crawl time* — an attacker who owns the domain when Common Crawl visits it has already won, even if they sell it afterward. The practical defense is therefore not "compare then vs. now" but rather: flag domains that appear in a crawl snapshot but show signals of recent registration or ownership change *before or close to* the crawl date, and exclude URLs from domains with high-suspicion provenance signals.
 
 Concretely:
-- **Domain re-registration detection**: Flag domains in a crawl snapshot whose WHOIS registrant or registrar changed *around the crawl date* relative to the previous snapshot. The expired-domain attack involves re-purchasing an old domain that previously had legitimate content — the domain's first-registration date may be old, but the registrant changed. This distinction matters: "recently first registered" misses expired-domain reuse; the correct signal is *ownership transfer near the crawl date*.
-- **Domain blocklists**: Maintain and share lists of domains that have been identified as sold for poisoning purposes
-- **Content change detection**: Compare domain content across crawl snapshots; large content divergences on the same domain/URL between consecutive snapshots are a signal of ownership change and potential injection
+- **Domain re-registration detection via content change signals**: The most practically accessible signal is not WHOIS/RDAP ownership data (which is often redacted or unavailable due to privacy regulations) but **content divergence between snapshots**: compare domain content across consecutive Common Crawl snapshots; a large content change on a domain at the same URL is a signal that ownership may have changed. This doesn't require historical registrant records.
+- **Domain blocklists**: Maintain and share lists of domains that have been identified as sold for poisoning purposes; this is analogous to threat-intel blocklists in traditional security
+- **RDAP/WHOIS cross-referencing where available**: Where historical ownership data is accessible (e.g., through archival WHOIS services like DomainTools, or ICANN's zone-file access program), flag domains whose registrant metadata changed around the crawl date. The caveat: GDPR-era WHOIS redaction means this is incomplete for many domains, particularly those under major registrars. It supplements — but cannot replace — content-based signals.
 
 This is partial because an attacker with a fresh domain that was never in prior crawls can still inject content. But it closes the expired-domain-purchase vector that Carlini et al. demonstrated as the practical attack path.
 
@@ -120,7 +120,7 @@ Bagging-based ensemble approaches (derived from the certified robustness literat
 
 ### Data Auditing and Hashing Before Training
 
-Before any large training run, compute and log cryptographic hashes of every training shard — and store those hashes alongside a manifest of exact preprocessing inputs in an append-only, externally attested store (not in the same infrastructure that runs preprocessing, which could be tampered and rehashed). This creates a forensic baseline: after training, if poisoned content is discovered, the hashes enable precise attribution — which shards contained the poisoned content, and which training runs used those shards.
+Before any large training run, compute and log cryptographic hashes of every training shard alongside **document-level manifests** (a mapping from each training document's hash to its source URL and shard assignment) stored in an append-only, externally attested store. Shard-level hashes alone don't enable precise attribution — they tell you which shard changed, not which document inside it was the culprit. Document-level manifests make post-hoc forensic attribution tractable: after training, if poisoned content is discovered, you can trace which shards and which training runs included it.
 
 This doesn't prevent poisoning, but it provides the forensic foundation for understanding exposure and supports targeted decisions about whether a given trained model needs to be replaced.
 
