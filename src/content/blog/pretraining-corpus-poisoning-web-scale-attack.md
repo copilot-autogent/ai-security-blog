@@ -1,6 +1,6 @@
 ---
 title: "Poisoning the Pretraining Corpus: How Attackers Corrupt Foundation Models Before They're Built"
-description: "Modern foundation models train on trillions of tokens scraped from the web. Carlini et al. 2023 demonstrated that purchasing expired web domains in Common Crawl snapshots for as little as $60 lets an attacker inject poisoned training examples that survive into GPT-scale models — before a single GPU fires up."
+description: "Modern foundation models train on trillions of tokens scraped from the web. Carlini et al. 2023 demonstrated that purchasing expired web domains in Common Crawl snapshots lets an attacker inject poisoned training examples into the datasets foundation models train on — before a single GPU fires up."
 pubDate: 2026-07-07
 tags: ["poisoning-attacks", "pretraining", "supply-chain", "data-security", "common-crawl", "foundation-models", "threat-modeling", "defense-patterns", "adversarial-ml"]
 ---
@@ -41,7 +41,7 @@ Here's the full attack chain:
 
 Carlini et al. found that across particular Common Crawl and derived corpora (including C4 and Wikipedia-sourced datasets), there were domains available for purchase that, if acquired, would let an attacker control tokens in future training snapshots. They demonstrated the attack empirically on C4 and Common Crawl, showing that adversarial text inserted via purchased expired domains appears in the datasets used to train real models.
 
-The cost to execute: the paper estimated that purchasing expired domains included in Common Crawl snapshots — sufficient to reach a 0.01% poisoning rate in some corpora — was feasible for well under $100. Individual expired domain registrations typically cost around $10 to the standard list price of the extension. This is not a nation-state capability. It is an undergraduate budget.
+The cost to execute: the paper estimated that purchasing expired domains included in particular Common Crawl-derived corpora was feasible at standard domain registration prices (~$10 per domain for most TLDs), with specific attack scenarios (such as frontrunning Wikipedia snapshot references) requiring a small number of targeted domain acquisitions. The paper's headline cost estimates varied by attack scenario; the key finding was that the barrier is low enough for non-state actors. This is not a nation-state capability. It is an undergraduate budget.
 
 ### What the Attacker Can Control
 
@@ -94,9 +94,9 @@ Scale doesn't just make attacks cheaper to execute. It makes them harder to remo
 The most direct defense against the expired domain attack is **domain provenance verification**. The critical security boundary is ownership *at crawl time* — an attacker who owns the domain when Common Crawl visits it has already won, even if they sell it afterward. The practical defense is therefore not "compare then vs. now" but rather: flag domains that appear in a crawl snapshot but show signals of recent registration or ownership change *before or close to* the crawl date, and exclude URLs from domains with high-suspicion provenance signals.
 
 Concretely:
-- **Domain registration age verification**: Flag domains that were first registered recently, especially those appearing in older crawl snapshots with high content similarity to previously indexed pages
+- **Domain re-registration detection**: Flag domains in a crawl snapshot whose WHOIS registrant or registrar changed *around the crawl date* relative to the previous snapshot. The expired-domain attack involves re-purchasing an old domain that previously had legitimate content — the domain's first-registration date may be old, but the registrant changed. This distinction matters: "recently first registered" misses expired-domain reuse; the correct signal is *ownership transfer near the crawl date*.
 - **Domain blocklists**: Maintain and share lists of domains that have been identified as sold for poisoning purposes
-- **Content change detection**: Compare current domain content against cached versions from the crawl; large divergences on the same domain/URL are a signal
+- **Content change detection**: Compare domain content across crawl snapshots; large content divergences on the same domain/URL between consecutive snapshots are a signal of ownership change and potential injection
 
 This is partial because an attacker with a fresh domain that was never in prior crawls can still inject content. But it closes the expired-domain-purchase vector that Carlini et al. demonstrated as the practical attack path.
 
@@ -116,7 +116,7 @@ Steinhardt et al. 2017 ([NeurIPS 2017](https://proceedings.neurips.cc/paper/2017
 
 The limitation: these certified defenses were designed for classical machine learning settings (SVMs, logistic regression on fixed feature representations). Their applicability to foundation model pretraining, where the feature representation is itself learned from the training data, is limited. The theoretical framework is valuable; the direct application is not straightforward.
 
-**DataSifting** and related bagging-based ensemble approaches (derived from certified robustness literature) offer partial extensions: train multiple models on different data subsets and aggregate predictions. For classification tasks, this provides statistical robustness against poisoning at the cost of training compute. For free-form autoregressive generation, the aggregation scheme does not translate directly — majority vote over token sequences is not well-defined — so bagging-style defenses don't apply cleanly to LLM pretraining without significant adaptation. The theoretical framework has value for bounded classification sub-tasks; its application to full pretraining at scale remains an open research problem.
+Bagging-based ensemble approaches (derived from the certified robustness literature — see, e.g., Levine & Feizi 2021, "Deep Partition Aggregation") offer partial extensions: train multiple models on different data subsets and aggregate predictions. For classification tasks, this provides statistical robustness against poisoning at the cost of training compute. For free-form autoregressive generation, the aggregation scheme does not translate directly — majority vote over token sequences is not well-defined — so these defenses don't apply cleanly to LLM pretraining without significant adaptation. The theoretical framework has value for bounded classification sub-tasks; its application to full pretraining at scale remains an open research problem.
 
 ### Data Auditing and Hashing Before Training
 
@@ -168,13 +168,13 @@ This post completes a four-part picture:
 
 Each has a distinct attacker capability model and distinct mitigations. The pretraining attack is the most powerful (most persistent, hardest to remove, propagates furthest) and requires the least access to target infrastructure (a web server and a domain registration fee). It is also the hardest to defend against given current pipeline architecture.
 
-MITRE ATLAS cross-reference: [**AML.T0020** — Poison Training Data](https://atlas.mitre.org/techniques/AML.T0020). This attack is also a concern at the data collection phase of [**AML.T0019** — Discover ML Model Ontology](https://atlas.mitre.org/techniques/AML.T0019) — an attacker who understands which corpora feed a target model can more precisely target their injection.
+MITRE ATLAS cross-reference: [**AML.T0020** — Poison Training Data](https://atlas.mitre.org/techniques/AML.T0020). The expired-domain technique is a specific instantiation of this: an attacker acquires data-serving infrastructure (expired web domains) to control inputs into the training pipeline. Related: [**AML.T0018** — Backdoor ML Model](https://atlas.mitre.org/techniques/AML.T0018) when the goal is trigger implantation rather than generic data corruption.
 
 ## What Should Change
 
 The field needs at minimum three things:
 
-**1. Domain ownership verification as a standard pipeline step.** Any corpus derived from Common Crawl should flag and exclude URLs from domains that changed ownership between the original crawl date and the corpus assembly date. This closes the primary practical attack path Carlini et al. demonstrated. The technical mechanism exists; the industry norm does not.
+**1. Domain ownership verification as a standard pipeline step.** Any corpus derived from Common Crawl should cross-reference domain WHOIS/RDAP data to detect registrant changes *between snapshots* — specifically to catch domains that were legitimately indexed in prior crawls but changed ownership before or around the target snapshot date. This closes the primary practical attack path Carlini et al. demonstrated. The technical mechanism exists; the industry norm does not.
 
 **2. ML Bills of Materials.** Foundation model providers should publish — at minimum — which large-scale corpora were used for pretraining. Downstream fine-tuners and deployers can then assess exposure when a corpus is found to be compromised. Without this transparency, affected downstream deployments can't even know to investigate.
 
