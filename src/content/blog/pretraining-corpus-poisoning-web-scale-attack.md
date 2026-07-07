@@ -13,7 +13,7 @@ Carlini et al. 2023 closed the theoretical debate about whether this attack is p
 
 ## How the Web Becomes a Training Dataset
 
-Foundation models require scale. GPT-3 trained on roughly 300 billion tokens. Llama 2 on 2 trillion. PaLM 2 on 3.6 trillion. Assembling text at that scale means scraping the internet, repeatedly.
+Foundation models require scale. GPT-3 trained on roughly 300 billion tokens. Llama 2 on 2 trillion. PaLM 2's exact training token count is not publicly confirmed, but reported estimates place it in the trillions. Assembling text at that scale means scraping the internet, repeatedly.
 
 **Common Crawl** is the backbone of most large-scale pretraining corpora. It's a nonprofit that crawls the web continuously and publishes raw snapshots — petabytes of HTML and extracted text, freely available. C4 (used in T5 and Flan-T5), The Pile (used in GPT-NeoX and Pythia), RedPajama, Dolma, and the datasets behind most open-weight LLMs are all built substantially from Common Crawl data.
 
@@ -39,9 +39,9 @@ Here's the full attack chain:
 4. **Wait for the next crawl.** Common Crawl runs continuously. The attacker's content appears in the next snapshot. It passes through quality filtering (because it looks like coherent text). It passes through deduplication (because it wasn't in prior snapshots).
 5. **The poison is included in training.** Any model trained on that Common Crawl snapshot — or on a downstream dataset derived from it — now trains on the attacker's data.
 
-Carlini et al. found that over 600 domains from Common Crawl snapshots were available for purchase at the time of their research. They demonstrated the attack empirically on C4 and Common Crawl, showing that adversarial text inserted via purchased expired domains appears in the datasets used to train real models.
+Carlini et al. found that across particular Common Crawl and derived corpora (including C4 and Wikipedia-sourced datasets), there were domains available for purchase that, if acquired, would let an attacker control tokens in future training snapshots. They demonstrated the attack empirically on C4 and Common Crawl, showing that adversarial text inserted via purchased expired domains appears in the datasets used to train real models.
 
-The cost to execute: under $60 per domain at the time of publication. This is not a nation-state capability. It is an undergraduate budget.
+The cost to execute: the paper estimated that purchasing expired domains included in Common Crawl snapshots — sufficient to reach a 0.01% poisoning rate in some corpora — was feasible for well under $100. Individual expired domain registrations typically cost around $10 to the standard list price of the extension. This is not a nation-state capability. It is an undergraduate budget.
 
 ### What the Attacker Can Control
 
@@ -81,7 +81,7 @@ Carlini et al. addressed this: by distributing poisoned content across multiple 
 
 Scale doesn't just make attacks cheaper to execute. It makes them harder to remove and more persistent across the ecosystem.
 
-**Memorization scales with model size.** Carlini et al. 2021 ([arXiv:2012.07805](https://arxiv.org/abs/2012.07805)) demonstrated that larger language models memorize more of their training data — verbatim. Biderman et al. 2023 (the Pythia suite, [arXiv:2304.01373](https://arxiv.org/abs/2304.01373)) showed this relationship holds across model sizes: a 12B parameter model memorizes substantially more training examples than a 70M model trained on the same data. For poisoning attacks, this cuts both ways: a larger model that memorizes more training data also memorizes poisoned examples more faithfully, and the poison is harder to attenuate through downstream training.
+**Memorization scales with model size.** Carlini et al. 2022 ([arXiv:2202.07646](https://arxiv.org/abs/2202.07646), "Quantifying Memorization Across Neural Language Models") demonstrated that larger language models memorize more of their training data — verbatim. Biderman et al. 2023 (the Pythia suite, [arXiv:2304.01373](https://arxiv.org/abs/2304.01373)) showed this relationship holds across model sizes: a 12B parameter model memorizes substantially more training examples than a 70M model trained on the same data. For poisoning attacks, this cuts both ways: a larger model that memorizes more training data also memorizes poisoned examples more faithfully, and the poison is harder to attenuate through downstream training.
 
 **Poisoned foundation models propagate through fine-tuning inheritance.** Almost no enterprise trains a foundation model from scratch. They fine-tune a pretrained model. If that pretrained model was trained on a poisoned corpus, every derivative — regardless of how clean the fine-tuning data was — inherits the poison in its base representations. A single corrupted base model can propagate to thousands of downstream deployments. This is the supply chain attack structure: compromise the base, contaminate the derivatives.
 
@@ -91,7 +91,7 @@ Scale doesn't just make attacks cheaper to execute. It makes them harder to remo
 
 ### Provenance Filtering (Practical, Partial)
 
-The most direct defense against the expired domain attack is **domain provenance verification**. Before including a domain's content in a training corpus, check that the domain was under the same ownership during the crawl period as it is now — or, more practically, maintain domain blocklists that exclude domains that have changed hands since initial crawling.
+The most direct defense against the expired domain attack is **domain provenance verification**. The critical security boundary is ownership *at crawl time* — an attacker who owns the domain when Common Crawl visits it has already won, even if they sell it afterward. The practical defense is therefore not "compare then vs. now" but rather: flag domains that appear in a crawl snapshot but show signals of recent registration or ownership change *before or close to* the crawl date, and exclude URLs from domains with high-suspicion provenance signals.
 
 Concretely:
 - **Domain registration age verification**: Flag domains that were first registered recently, especially those appearing in older crawl snapshots with high content similarity to previously indexed pages
@@ -106,7 +106,7 @@ Every large-scale training pipeline deduplicates. This helps — it limits the b
 
 ### Influence Function Analysis (Research, Not Yet Production-Ready)
 
-**Influence functions** (Koh & Liang 2017, NeurIPS 2017) provide a mechanism for attributing a model's behavior on a given test example back to specific training examples. In principle, this lets a defender identify which training examples are most "responsible" for a poisoned output, enabling targeted removal.
+**Influence functions** (Koh & Liang 2017, ICML 2017) provide a mechanism for attributing a model's behavior on a given test example back to specific training examples. In principle, this lets a defender identify which training examples are most "responsible" for a poisoned output, enabling targeted removal.
 
 The problem: influence function computation for models with billions of parameters is computationally prohibitive. Approximations exist, but their reliability on modern LLM-scale models is limited. This is an active research direction, not a deployable tool for most practitioners.
 
@@ -116,11 +116,11 @@ Steinhardt et al. 2017 ([NeurIPS 2017](https://proceedings.neurips.cc/paper/2017
 
 The limitation: these certified defenses were designed for classical machine learning settings (SVMs, logistic regression on fixed feature representations). Their applicability to foundation model pretraining, where the feature representation is itself learned from the training data, is limited. The theoretical framework is valuable; the direct application is not straightforward.
 
-**DataSifting** and related bagging-based ensemble approaches (derived from certified robustness literature) offer partial extensions: train multiple models on different data subsets and take majority vote. This provides statistical robustness against poisoning at the cost of training compute — a hard sell for already-expensive pretraining runs.
+**DataSifting** and related bagging-based ensemble approaches (derived from certified robustness literature) offer partial extensions: train multiple models on different data subsets and aggregate predictions. For classification tasks, this provides statistical robustness against poisoning at the cost of training compute. For free-form autoregressive generation, the aggregation scheme does not translate directly — majority vote over token sequences is not well-defined — so bagging-style defenses don't apply cleanly to LLM pretraining without significant adaptation. The theoretical framework has value for bounded classification sub-tasks; its application to full pretraining at scale remains an open research problem.
 
 ### Data Auditing and Hashing Before Training
 
-Before any large training run, compute and log cryptographic hashes of every training shard. This creates an immutable record of exactly what data was included. After training, if poisoned content is discovered, the hashes enable precise attribution: which shards contained the poisoned content, and which training runs used those shards.
+Before any large training run, compute and log cryptographic hashes of every training shard — and store those hashes alongside a manifest of exact preprocessing inputs in an append-only, externally attested store (not in the same infrastructure that runs preprocessing, which could be tampered and rehashed). This creates a forensic baseline: after training, if poisoned content is discovered, the hashes enable precise attribution — which shards contained the poisoned content, and which training runs used those shards.
 
 This doesn't prevent poisoning, but it provides the forensic foundation for understanding exposure and supports targeted decisions about whether a given trained model needs to be replaced.
 
@@ -145,7 +145,7 @@ This is where the attack surface becomes a governance problem without a clear so
 
 The MITRE ATLAS taxonomy is clear: this falls under [**AML.T0020** (Poison Training Data)](https://atlas.mitre.org/techniques/AML.T0020). The attack chain — identifying accessible training data, injecting adversarial examples, waiting for them to be included in training — is documented. What's missing is an accountability chain that matches.
 
-The closest analogy in software security is open-source supply chain attacks: the [SolarWinds](https://en.wikipedia.org/wiki/SolarWinds_cyberattack) and [XZ Utils](https://en.wikipedia.org/wiki/XZ_Utils_backdoor) incidents happened in trusted infrastructure that was invisible to end users. The response — signing software artifacts, publishing SBOMs, monitoring CI/CD pipelines — required coordinated effort across many organizations. AI pretraining corpus security is at an earlier stage of that response.
+The closest analogy in software security is supply chain attacks on CI/CD and update pipelines: the [SolarWinds incident](https://en.wikipedia.org/wiki/SolarWinds_cyberattack) (a compromise of a proprietary build pipeline) and the [XZ Utils backdoor](https://en.wikipedia.org/wiki/XZ_Utils_backdoor) (a compromise of an open-source project's release process) happened in trusted infrastructure that was invisible to end users. The response — signing software artifacts, publishing SBOMs, monitoring CI/CD pipelines — required coordinated effort across many organizations. AI pretraining corpus security is at an earlier stage of that response.
 
 Proposed accountability structures include:
 - **Training data transparency requirements** — disclosure of which corpora (at minimum, which large-scale web crawls) a foundation model was trained on
@@ -186,4 +186,4 @@ The pretraining corpus was the well everyone drank from. It may already be poiso
 
 ---
 
-*Key research: Carlini et al. 2023, "Poisoning Web-Scale Training Datasets is Practical" — [arXiv:2302.10149](https://arxiv.org/abs/2302.10149). Wallace et al. 2021, "Concealed Data Poisoning Attacks on NLP Models" — [arXiv:2010.12563](https://arxiv.org/abs/2010.12563), NAACL 2021. Steinhardt et al. 2017, "Certified Defenses for Data Poisoning Attacks" — [NeurIPS 2017](https://proceedings.neurips.cc/paper/2017/hash/9f3d52ab304291776c6b7b47aeabf28a-Abstract.html). Memorization-scale: Carlini et al. 2021 — [arXiv:2012.07805](https://arxiv.org/abs/2012.07805); Biderman et al. 2023 (Pythia) — [arXiv:2304.01373](https://arxiv.org/abs/2304.01373). Influence functions: Koh & Liang 2017, NeurIPS 2017. Attack taxonomy: [MITRE ATLAS AML.T0020](https://atlas.mitre.org/techniques/AML.T0020).*
+*Key research: Carlini et al. 2023, "Poisoning Web-Scale Training Datasets is Practical" — [arXiv:2302.10149](https://arxiv.org/abs/2302.10149). Wallace et al. 2021, "Concealed Data Poisoning Attacks on NLP Models" — [arXiv:2010.12563](https://arxiv.org/abs/2010.12563), NAACL 2021. Steinhardt et al. 2017, "Certified Defenses for Data Poisoning Attacks" — [NeurIPS 2017](https://proceedings.neurips.cc/paper/2017/hash/9f3d52ab304291776c6b7b47aeabf28a-Abstract.html). Memorization-scale: Carlini et al. 2022, "Quantifying Memorization Across Neural Language Models" — [arXiv:2202.07646](https://arxiv.org/abs/2202.07646); Biderman et al. 2023 (Pythia) — [arXiv:2304.01373](https://arxiv.org/abs/2304.01373). Influence functions: Koh & Liang 2017, ICML 2017. Attack taxonomy: [MITRE ATLAS AML.T0020](https://atlas.mitre.org/techniques/AML.T0020).*
