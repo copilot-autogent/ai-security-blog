@@ -72,15 +72,17 @@ This maps onto a classical availability attack pattern. The vector store's simil
 
 Corpus flooding is particularly relevant for RAG systems that crawl open web content, ingest user-submitted documents at scale, or allow external contributors to a shared knowledge base. The more permissive the ingestion pipeline, the lower the cost of this attack.
 
-### Class 4: Persistent Prompt Injection via Retrieved Chunks
+### Class 4: Persistent Prompt Injection via Indexed Corpus Documents
 
-The previous three classes target what facts the RAG produces. This class targets the model's *behavior*: injecting LLM instructions — not false facts — into a corpus document, such that when the document is retrieved it causes the model to execute attacker-specified actions.
+The previous three classes target what facts the RAG produces. This class targets the model's *behavior*: injecting LLM instructions — not false facts — into an indexed corpus document, such that when the document is retrieved it causes the model to execute attacker-specified actions rather than simply returning information.
 
-Greshake et al. named this class in the original indirect prompt injection paper ([arXiv:2302.12173](https://arxiv.org/abs/2302.12173)): the attacker places an instruction in any content that will be retrieved (a webpage, a shared document, an email), and the model processes it as an instruction because there is no syntactic boundary between retrieved data and system instructions in a standard RAG context window.
+The scope here is narrower than the broader indirect prompt injection literature: this is specifically about content that an attacker has placed in a document already indexed into the knowledge base — an internal wiki page, an uploaded PDF, a web-crawled article that entered the vector store — not about live webpage content retrieved dynamically in a browser-use context (which is a different attack surface).
+
+Greshake et al.'s indirect prompt injection paper ([arXiv:2302.12173](https://arxiv.org/abs/2302.12173)) established the theoretical basis: the attacker places instruction-following text in indexed content, and the model processes it as an instruction because there is no syntactic boundary between retrieved data and system instructions in a standard RAG context window.
 
 In a pure RAG system with no agentic tool use, this class produces misleading text outputs. In an agentic RAG deployment — one where the model can call tools, send emails, query databases, or trigger workflows — retrieved injection content can do all of that. The attack surface scales with the agent's capabilities.
 
-The coupling between corpus injection and indirect prompt injection is worth emphasizing: an adversarial document that successfully passes the retrieval condition (Class 1 objective) and contains instruction-following text (Class 4 payload) combines both threat models. A corpus poisoning attack can simultaneously spread disinformation and exfiltrate sensitive query content if the injection payload is crafted for both.
+The coupling between corpus injection and persistent injection is worth emphasizing: an adversarial document that satisfies the Class 1 retrieval condition and contains instruction-following text (Class 4 payload) combines both threat models. A single document can simultaneously spread disinformation and, if the agentic context allows it, trigger data exfiltration.
 
 ---
 
@@ -122,9 +124,16 @@ The defense literature for RAG corpus poisoning is developing; empirical validat
 
 ### Document Provenance Gating (Architecturally Strong, Hard to Retrofit)
 
-Every document ingested should carry provenance metadata: origin URL or upload source, ingesting user or service account, ingestion timestamp, last-verified date, and access tier. This metadata should be enforced as a **pre-retrieval filter** — documents from untrusted provenance classes should be excluded before similarity search, or their results down-ranked.
+Every document ingested should carry provenance metadata: origin URL or upload source, ingesting user or service account, ingestion timestamp, last-verified date, and access tier.
 
-This control is architecturally sound for a clear reason: provenance enforced before the LLM sees the content is a hard gate. Provenance enforced by instructing the LLM to "prefer high-provenance documents" is not a security control — retrieved context can override system instructions, and the model has no cryptographic way to verify provenance claims in retrieved text.
+There are two distinct enforcement modes, with meaningfully different security properties:
+
+- **Hard exclusion (pre-retrieval filter)**: documents from untrusted provenance classes are excluded from the similarity search entirely, using the vector database's metadata filter parameter. They never compete for top-K slots. This is the stronger control — the untrusted document cannot influence the output because it is not retrieved.
+- **Score down-ranking (soft control)**: retrieved documents from lower-trust sources are penalized in a re-ranking step after similarity search. This reduces their likelihood of reaching the model but does not eliminate it — a sufficiently high-similarity score can survive the penalty, and re-ranking implementations vary in how aggressively they penalize low-provenance sources.
+
+Pre-retrieval exclusion is the architecturally correct choice for documents from sources below a trust threshold. Down-ranking is appropriate as a secondary signal for borderline-trust sources where exclusion would degrade recall too aggressively.
+
+In both cases, provenance must be enforced before the LLM sees the content. Provenance enforced by instructing the LLM to "prefer high-provenance documents" is not a security control — retrieved context can override system instructions, and the model has no cryptographic way to verify provenance claims embedded in retrieved text.
 
 The deployment gap: provenance tracking requires metadata to be captured at ingestion, stored alongside embeddings, and filtered at query time. Most vector databases support this via metadata filtering, but retrofitting it into an existing deployment requires schema changes and re-ingestion. Organizations building new RAG pipelines should treat provenance as a first-class schema requirement, not an afterthought.
 
@@ -179,9 +188,9 @@ This is the RAG equivalent of a penetration test. It should be standard practice
 
 **Retrieval layer**
 - [ ] Are retrieved documents filtered or down-ranked by provenance tier before being passed to the model?
-- [ ] Is there a re-ranking step that penalizes anomalous similarity clusters?
+- [ ] Is anomaly detection configured on retrieval patterns for the sentinel query set? *(Detection signal — does not prevent a poisoning event, but bounds dwell time.)*
 - [ ] Are sentinel queries monitored for retrieval drift over time?
-- [ ] For multi-tenant deployments: does every retrieval query filter by tenant/user namespace *before* similarity search? (Post-hoc namespace filtering — scoring across the full corpus and then filtering — does not prevent cross-tenant document ranking.)
+- [ ] For multi-tenant deployments: does every retrieval query apply a namespace/tenant filter as a vector-database-level metadata constraint before similarity search? *(If the ANN index spans tenants and filtering is applied post-retrieval, a poisoned document from another tenant can still rank and be surfaced before the filter discards it — even if it never reaches the model, the ranking signal leaks.)*
 
 **Inference layer**
 - [ ] Are retrieved chunks framed as external data rather than trusted instructions?
