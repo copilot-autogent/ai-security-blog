@@ -1,6 +1,6 @@
 ---
 title: "Poisoning the Knowledge Base: Adversarial Document Injection into RAG Vector Stores"
-description: "RAG doesn't just leak secrets — it can be weaponized by anyone who can write to the corpus. This post maps the four attack classes (targeted poisoning, backdoor triggers, denial-of-retrieval, persistent injection), the real-world surfaces where each lands, and the defenses with actual empirical backing."
+description: "RAG can be weaponized by anyone who can write to the corpus. This post maps four attack classes — targeted poisoning, backdoor triggers, denial-of-retrieval, persistent injection — and the defenses with empirical backing."
 pubDate: 2026-07-08
 tags: ["rag", "rag-security", "vector-stores", "adversarial-ml", "threat-modeling", "defense-patterns", "prompt-injection"]
 ---
@@ -23,11 +23,11 @@ This post addresses **malicious content going in**: a document injected into the
 
 A system that addresses only retrieval access control while leaving corpus ingestion unguarded has fixed one side of the equation.
 
+**Relationship to adjacent posts:** [RAG privacy attacks](/blog/rag-privacy-attacks-retrieval-data-exfiltration) addresses the inverse problem — data leaking *out* via adversarial retrieval queries. [RAG and memory poisoning in long-context agent systems](/blog/rag-memory-poisoning-attacks) covers the broader threat to agent episodic memory and cross-session contamination. This post focuses specifically on the corpus-integrity attack surface: malicious content injected *into* the knowledge base to manipulate future queries.
+
 ---
 
 ## Attack Taxonomy: Four Classes of Corpus Injection
-
-### Class 1: Targeted Knowledge Poisoning
 
 The foundational empirical work here is **PoisonedRAG** (Zou et al., USENIX Security 2025; [arXiv:2402.07867](https://arxiv.org/abs/2402.07867)). The key finding: an attacker can reliably cause a RAG system to answer a specific question with attacker-chosen content by injecting as few as **five adversarial documents** into a corpus of 10,000.
 
@@ -40,7 +40,9 @@ PoisonedRAG simultaneously satisfies both conditions:
 1. **Retrieval condition**: the poisoned document embeds close to the target query's representation, beating out legitimate documents for a top-K slot.
 2. **Generation condition**: the document's text, once in context, causes the LLM to produce the target answer even when legitimate contradictory documents are also retrieved.
 
-Attack success rates exceeded 90% against black-box RAG deployments across multiple LLMs and embedding models in the paper's evaluation. The attacker doesn't need inference API access at query time — only the ability to submit a document to the ingestion pipeline before the attack query is issued.
+Attack success rates exceeded 90% against RAG deployments across multiple LLMs and embedding models in the paper's evaluation. The attacker doesn't need inference API access at query time — only the ability to submit a document to the ingestion pipeline before the attack query is issued.
+
+A note on attacker capability: the original PoisonedRAG evaluation used a surrogate embedding model (a publicly available model used as a proxy) to optimize the retrieval condition without direct access to the target system's embedding API. This is gray-box rather than true black-box — the attacker needs to select a surrogate that produces similar embedding geometry to the target. In practice, many enterprise deployments use well-known embedding models (OpenAI `text-embedding-3`, Cohere embed, sentence-transformers) that are either publicly accessible or easily approximated, lowering this barrier significantly. The attacker cost scales with how non-public and non-approximable the target embedding model is — see "Threat Model Boundaries" below.
 
 ### Class 2: Backdoor Triggers via Corpus Manipulation
 
@@ -58,7 +60,9 @@ The production implication: a security team that tests "does our RAG system give
 
 ### Class 3: Denial-of-Retrieval via Corpus Flooding
 
-A less technically sophisticated but practically effective attack: flooding the vector store with high-volume content that embeds near legitimate documents. When a legitimate query is issued, the attacker's documents compete for top-K slots — crowding out the genuine content with noise, contradictory information, or adversarially crafted irrelevance.
+*This attack class is an extrapolation from the retrieval mechanics documented in the poisoning literature rather than a separately validated attack in the same experimental tradition as PoisonedRAG or BadRAG. It is included because the retrieval architecture makes it structurally possible, and practitioners have observed corpus quality degradation in high-volume ingestion deployments — though controlled adversarial demonstrations against production RAG systems are not yet in the public literature at the time of writing.*
+
+A less technically sophisticated but practically plausible attack: flooding the vector store with high-volume content that embeds near legitimate documents. When a legitimate query is issued, the attacker's documents compete for top-K slots — crowding out the genuine content with noise, contradictory information, or adversarially crafted irrelevance.
 
 Unlike targeted poisoning, this class doesn't require per-query optimization. The attacker submits many documents, accepting that a fraction will rank highly for a variety of queries. The effect is degradation: the system's accuracy drops across a broad query surface, rather than producing a specific wrong answer to a specific question.
 
@@ -192,7 +196,7 @@ Two caveats for calibration:
 
 **BadRAG backdoors require knowing the trigger keyword.** A backdoor that activates only on "refund policy VIP" is useless if the attacker doesn't know that phrase will appear in future queries. In closed enterprise deployments with non-public query patterns, the attacker would need knowledge of internal terminology — achievable through insider access or reconnaissance, but not a zero-knowledge attack. In public-facing systems where query patterns are predictable (customer support, product Q&A), the attacker has a much easier time choosing effective triggers.
 
-**PoisonedRAG attacks require white-box or gray-box knowledge of the embedding model.** The joint optimization process for the retrieval condition (making the document embed near the target query) is significantly harder when the attacker cannot query the embedding model directly. Black-box attacks that approximate the embedding via API queries are possible but noisier. Deployments using proprietary, non-publicly-queryable embedding models have a higher attack cost — not immunity, but a meaningful increase in required attacker capability.
+**PoisonedRAG attacks require a surrogate or target embedding model for the optimization step.** The joint optimization for the retrieval condition (embedding the adversarial document close to the target query) requires querying an embedding model. PoisonedRAG's evaluations used a surrogate model — a publicly available embedding model that approximates the target system's geometry — rather than direct access to the victim system's embedding API. This is gray-box access: the attacker doesn't need the target system's embedding API, but does need a reasonable surrogate. Deployments using well-known public embedding models (OpenAI, Cohere, popular sentence-transformers checkpoints) provide good surrogate coverage. Deployments using proprietary, non-public embedding models increase the attacker's optimization cost — good surrogates may not exist, increasing the noise in the retrieval condition and lowering attack success rates. This is not immunity, but it is a meaningful increase in required attacker capability.
 
 ---
 
