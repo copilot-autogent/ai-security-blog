@@ -1,6 +1,6 @@
 ---
 title: "Poisoning the Knowledge Base: Adversarial Document Injection into RAG Vector Stores"
-description: "RAG can be weaponized by anyone who can write to the corpus. This post maps four attack classes — targeted poisoning, backdoor triggers, denial-of-retrieval, persistent injection — and the defenses with empirical backing."
+description: "RAG can be weaponized by anyone who can write to the corpus. This post maps the attack taxonomy — two empirically validated classes (PoisonedRAG, BadRAG), one extrapolated operational pattern, and persistent corpus injection — with real-world ingestion surfaces and a defender checklist."
 pubDate: 2026-07-08
 tags: ["rag", "rag-security", "vector-stores", "adversarial-ml", "threat-modeling", "defense-patterns", "prompt-injection"]
 ---
@@ -28,6 +28,8 @@ A system that addresses only retrieval access control while leaving corpus inges
 ---
 
 ## Attack Taxonomy: Four Classes of Corpus Injection
+
+### Class 1: Targeted Knowledge Poisoning
 
 The foundational empirical work here is **PoisonedRAG** (Zou et al., USENIX Security 2025; [arXiv:2402.07867](https://arxiv.org/abs/2402.07867)). The key finding: an attacker can reliably cause a RAG system to answer a specific question with attacker-chosen content by injecting as few as **five adversarial documents** into a corpus of 10,000.
 
@@ -144,16 +146,18 @@ Monitoring the stability of retrieval results over time provides a signal-level 
 
 These are detection controls, not prevention controls. They tell you a poisoning event may have occurred; they don't prevent the poisoned documents from surfacing in the window before detection. Their value is in bounding the dwell time of a corpus compromise and enabling remediation.
 
-### Sandboxed Retrieval Contexts (Architecturally Correct, Not Yet Standard Practice)
+### Retrieval Context Framing (Prompt-Level Partial Defense for Class 4)
 
-The Class 4 attack — persistent injection via retrieved chunks — is a direct consequence of treating retrieved content and trusted instructions as equivalent inputs to the model. The mitigation is architectural: retrieved documents should be passed to the model in a way that marks them as external, potentially untrusted data, with explicit instruction that the content is to be read and summarized, not executed.
+The Class 4 attack — persistent injection via retrieved chunks — is a direct consequence of treating retrieved content and trusted instructions as equivalent inputs to the model. The most accessible mitigation is prompt-level framing: passing retrieved documents in a way that marks them as external, potentially untrusted data with explicit instruction that the content is to be read and summarized, not executed as instructions.
 
-In practice, this means:
-- Wrapping retrieved chunks in a framing that distinguishes them from system instructions
-- Instructing the model that retrieved text may contain instruction-like content that should be treated as data, not commands
-- For agentic deployments, applying tool-use confirmation requirements for actions triggered by retrieved content
+This is often called "sandboxed retrieval" in framework documentation, but the term is aspirational — it describes a property LLMs currently approximate through prompting, not enforce at a technical level. Current LLMs do not maintain a hard syntactic boundary between system instructions and retrieved content; a well-crafted injection in a retrieved document can still override framing instructions in many models, particularly when the injected content is repeated across multiple retrieved chunks or placed early in context.
 
-This is called "sandboxed retrieval" in some frameworks and is analogous to the principle of least privilege applied to context injection: the model should do less with retrieved content than it does with system instructions. Current LLMs do not enforce this distinction natively — it requires explicit prompt engineering and, where available, structured message formats that separate roles.
+The practical controls are:
+- Wrapping retrieved chunks in a role or section that signals external, data-only content
+- Instructing the model that retrieved text may contain instruction-like patterns that should be treated as data to report, not commands to follow
+- For agentic deployments, requiring explicit confirmation before executing tool calls that were triggered primarily by retrieved context (not the original user query)
+
+This raises the attacker's bar for Class 4 (the injection must now override the framing instruction in addition to landing in context), but it is not a hard boundary. The stronger control is upstream: keeping instruction-like content out of the corpus via ingestion validation (Class 4 payloads are often syntactically distinctive) and monitoring agentic outputs for actions not warranted by the original query.
 
 ### Adversarial Corpus Testing Before Production (Underused)
 
@@ -177,6 +181,7 @@ This is the RAG equivalent of a penetration test. It should be standard practice
 - [ ] Are retrieved documents filtered or down-ranked by provenance tier before being passed to the model?
 - [ ] Is there a re-ranking step that penalizes anomalous similarity clusters?
 - [ ] Are sentinel queries monitored for retrieval drift over time?
+- [ ] For multi-tenant deployments: does every retrieval query filter by tenant/user namespace *before* similarity search? (Post-hoc namespace filtering — scoring across the full corpus and then filtering — does not prevent cross-tenant document ranking.)
 
 **Inference layer**
 - [ ] Are retrieved chunks framed as external data rather than trusted instructions?
