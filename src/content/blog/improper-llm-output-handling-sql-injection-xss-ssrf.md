@@ -11,7 +11,7 @@ The same discipline hasn't followed LLMs into production.
 
 When a developer writes `db.execute("SELECT * FROM users WHERE name = '" + llm_response + "'")`, the LLM response is treated with more trust than a form field. This isn't a hypothetical — text-to-SQL tools, analytics assistants, and RAG pipelines are shipping exactly this pattern. And while developers scrutinize the user's natural language input for injection attempts, the LLM's output — which is already attacker-influenced by the time it arrives — is passed downstream without inspection.
 
-OWASP LLM Top 10 2025 ranks this as **LLM05: Improper Output Handling**: the failure to validate, sanitize, or appropriately handle LLM-generated content before passing it to downstream systems. It is distinct from prompt injection (LLM05 in 2023, now LLM01 — how attacks enter the model) and distinct from insecure output content like hallucinations. The threat is specifically about what happens when attacker-influenced LLM output is *executed* by a downstream system with its own security model.
+OWASP LLM Top 10 2025 ranks this as **LLM05: Improper Output Handling**: the failure to validate, sanitize, or appropriately handle LLM-generated content before passing it to downstream systems. It is distinct from prompt injection (LLM01 in both the 2023 and 2025 editions — how attacks enter the model) and distinct from insecure output content like hallucinations. The threat is specifically about what happens when attacker-influenced LLM output is *executed* by a downstream system with its own security model. Note the numbering shift: what was LLM02 (Insecure Output Handling) in 2023 was renumbered to LLM05 in 2025 as the Top 10 was reorganized.
 
 ---
 
@@ -169,37 +169,49 @@ The core principle: **treat LLM output as untrusted data when it crosses into an
 
 ### Parameterized Queries for LLM-Generated SQL
 
-If a system feature requires LLM-generated SQL, the generated SQL must use parameterized queries with bind variables — never string interpolation. An LLM that generates a SQL template with placeholders (`SELECT * FROM products WHERE name = ?`) rather than literal values removes the SQL injection surface.
+If a system feature requires LLM-generated SQL, the generated SQL must use parameterized queries with bind variables — never string interpolation. An LLM that generates a SQL template with placeholders (`SELECT * FROM products WHERE name = ?`) rather than literal values removes the literal-value SQL injection surface.
 
-Better: avoid LLM-generated SQL entirely. Structure the interface so the LLM selects from a predefined set of query templates with parameterized inputs, rather than composing arbitrary SQL.
+**Critical limitation:** parameterization protects *values* — the data bound to placeholders. It does not protect SQL *structure*. An LLM that generates column names, table names, `ORDER BY` expressions, or appended clauses cannot be made safe through bind variables alone, because those elements cannot be parameterized. For any text-to-SQL feature where the LLM determines query structure (not just filter values), the safer architecture is an **allowlisted query template** approach: the LLM selects from a fixed set of predefined query templates with parameterized value slots, rather than composing arbitrary SQL. Structure is application-controlled; the LLM's contribution is limited to the bound values.
 
 ```python
-# Unsafe: string interpolation of LLM output
-query = f"SELECT * FROM products WHERE category = '{llm_response}'"
+# Unsafe: LLM output in SQL structure (parameterization doesn't help here)
+order_col = llm_response  # could be "name; DROP TABLE--"
+query = f"SELECT * FROM products ORDER BY {order_col}"
 db.execute(query)
 
-# Safe: parameterized query
-db.execute("SELECT * FROM products WHERE category = ?", (validated_category,))
+# Safer: allowlist structural choices; parameterize value slots
+ALLOWED_COLUMNS = {"name", "price", "created_at"}
+if order_col not in ALLOWED_COLUMNS:
+    raise ValueError("Invalid sort column")
+db.execute(f"SELECT * FROM products ORDER BY {order_col}")
+
+# Safest for value filtering: parameterized query — LLM provides value only
+db.execute("SELECT * FROM products WHERE category = ?", (llm_extracted_category,))
 ```
+
+Better still: avoid LLM-generated SQL entirely. Structure the interface so the LLM selects from a predefined set of query templates with parameterized inputs, rather than composing arbitrary SQL.
 
 ### HTML Encoding and Content Security Policy
 
 LLM output rendered in a browser must be treated as untrusted HTML. Apply the same encoding that user-supplied content receives:
 
 - Escape HTML special characters before rendering LLM output in DOM contexts
-- Use a vetted sanitization library (DOMPurify, bleach) if the LLM output is expected to contain legitimate markup
-- Apply a Content Security Policy that restricts inline script execution
-- If rendering Markdown, use a parser that explicitly strips or escapes HTML tags
+- Use a vetted sanitization library (DOMPurify, bleach) if the LLM output is expected to contain legitimate markup — HTML tag escaping alone is insufficient if LLM output can appear in attribute values, `href`/`src` attributes, or Markdown-rendered links; `javascript:` and `data:` URI schemes remain dangerous even when the surrounding HTML is escaped
+- Apply a Content Security Policy that restricts inline script execution and limits trusted script sources
+- If rendering Markdown, use a parser that explicitly strips or escapes HTML tags **and** sanitizes link/image targets against `javascript:` and `data:` schemes (many Markdown-to-HTML libraries have opt-in HTML sanitization; verify the configuration, not just the library name)
+- For rich-text contexts, prefer an allowlist of permitted HTML elements and attributes over a denylist; `DOMPurify`'s default allowlist is a reasonable starting point
 
 The anti-pattern to avoid: treating LLM output as "safe HTML" because it was generated by your own model. Your model's context is external-data-influenced; its output should be treated accordingly.
 
-### URL Allow-Lists for Agent Tool Calls
+### URL Validation for Agent Tool Calls
 
-Agents that fetch URLs based on LLM output must enforce an allow-list of permitted URL prefixes. An LLM that generates a URL for an HTTP tool call should have that URL validated against:
+Agents that fetch URLs based on LLM output must enforce strict URL validation before any network request. Simple prefix allow-lists are insufficient — they are bypassable through URL userinfo components, subdomain confusion, open redirects on allowed domains, and DNS rebinding. The validation must operate on the fully parsed and resolved destination:
 
-- An explicit allow-list of external domains the agent is permitted to reach
-- A block-list of internal address ranges (RFC 1918 ranges, link-local addresses, localhost)
-- A scheme restriction (https only, no `file://`, `gopher://`, or other non-standard schemes)
+- Parse the URL with a canonical URL parser (not string matching) to extract scheme, host, path, and query
+- Restrict permitted schemes to `https` only; reject `http`, `file://`, `gopher://`, `ftp://`, and other non-standard schemes
+- Validate the host against an explicit allowlist of approved external domains
+- Block private and link-local IP ranges (RFC 1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16; link-local: 169.254.0.0/16) by resolving the hostname to an IP address and checking the resolved IP, not just the hostname string
+- Follow redirects conservatively: validate the destination URL of each redirect hop, not just the initial URL
 
 The URL allow-list must be enforced in the tool call executor, not in the LLM prompt — a prompt instruction to "only fetch external URLs" is an advisory that the LLM may not follow if its context has been manipulated.
 
@@ -220,6 +232,8 @@ Using JSON Schema validation, Pydantic models, or similar output parsers:
 - Define the expected structure and types for LLM output that will be consumed by downstream systems
 - Reject or re-generate outputs that don't conform to the schema
 - Avoid embedding free-text LLM output inside structured fields that will be parsed as code or markup
+
+**Important limitation for the duplicate-key case:** standard JSON Schema validators and Pydantic parsers operate on the parsed object, which many JSON libraries produce by taking the last value for a duplicate key (or the first — behavior is implementation-dependent). If duplicate keys are a threat vector, schema validation alone does not close the hole. Use a JSON parser or canonicalizer that explicitly **rejects** duplicate keys (Python's `json.loads` does not reject duplicates by default; `jsonschema` with strict mode, or a custom object-pairs-hook that checks for duplicates, is required). Alternatively, use a structured output mode from the LLM provider that guarantees schema-conforming output without free-form text generation.
 
 ### Output Content Classification
 
