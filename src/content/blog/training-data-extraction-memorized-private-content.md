@@ -50,7 +50,7 @@ Temperature is a multiplier on the logit distribution before sampling. At temper
 
 If an attacker knows a specific document or repository was in the training corpus — for example, because it's public and was likely scraped — they can craft extraction queries with known prefixes. This substantially reduces the search space.
 
-For code models specifically: given a public GitHub repository that a model was almost certainly trained on, provide the function signature and doc comment, and let the model complete the function body. Compare the completion to the actual repository contents. Any match is a verbatim extraction.
+For code models specifically: given a public GitHub repository that a model was almost certainly trained on, provide the function signature and doc comment, and let the model complete the function body. Compare the completion to the actual repository contents. A verbatim match that includes distinctive, non-boilerplate logic is a strong candidate for memorization — though a uniqueness check against other training corpus sources is needed to rule out coincidental matches from duplicated code elsewhere.
 
 This class of targeted extraction is particularly threatening for fine-tuned models trained on company-internal documents, medical records, or proprietary code — where the attacker doesn't have access to the training data but knows the category of content that might be there.
 
@@ -69,7 +69,7 @@ The landmark paper *"Extracting Training Data from Large Language Models"* (Carl
 **Key findings:**
 - **604 unique memorized training examples** verified verbatim in the GPT-2 training data
 - Extracted sequences included: full names paired with home addresses, full names paired with phone numbers, private email addresses, social media usernames linked to real identities, and a Bitcoin address
-- The extraction rate was roughly 1 memorized example per 800 model queries
+- The extraction rate across the full sample was approximately 1 verified memorized example per 1,000 generated samples (604 verified examples from ~600,000 samples)
 - **Larger models memorize more:** GPT-2 XL (1.5B parameters) memorized substantially more content than GPT-2 Small (117M parameters), even controlling for the identical training corpus — an important finding, because it means scaling laws are also scaling-memorization laws
 
 **The counterfactual baseline:** The authors compared extraction rates against a model trained on the *same architecture* but a *different corpus*, controlling for model properties. This confirmed the extracted sequences were genuine training-data artifacts, not coincidentally generated content.
@@ -100,7 +100,7 @@ Researchers have demonstrated that completion queries against code models can el
 
 ### Fine-Tuned Models on Private Corpora
 
-The memorization risk is *higher* for fine-tuned models than for base models. When a model is fine-tuned on a small corpus — a company's internal documents, a hospital's patient records, a law firm's case files — it receives many gradient updates from a small number of documents. This drives the model to memorize those documents more aggressively than a base model would memorize a single document in a 40GB corpus.
+The memorization risk can be substantially elevated in fine-tuning scenarios involving small, highly repeated sensitive corpora — a company's internal documents, a hospital's patient records, a law firm's case files. In these cases, the model receives many gradient updates on a small number of documents, which drives more aggressive memorization of those specific examples than would occur for a single document in a 40GB general training corpus. This effect is strongest when the fine-tuning corpus is small (few thousand documents or fewer), training runs for many epochs, and the training data contains distinctive, non-generic content.
 
 An internal LLM fine-tuned on HR documents could reproduce verbatim performance reviews if queried with the right prefix. A model fine-tuned on medical notes could reproduce specific patient information. A model fine-tuned on financial filings could reproduce material non-public information. None of this requires adversarial access to the model weights — only query access to the inference endpoint.
 
@@ -114,7 +114,7 @@ This is one reason the *machine unlearning* problem (removing the influence of s
 
 The privacy attack surface against ML systems has a clear taxonomy, and understanding where extraction sits within it clarifies the appropriate defenses:
 
-**Gradient inversion** (covered in a previous post): reconstructs training data from gradients *during training*, typically in federated learning settings where a malicious aggregator observes participant gradient updates. Requires gradient access. Training data extraction requires only inference API access.
+**Gradient inversion** (covered in a [previous post](./gradient-inversion-attacks-reconstructing-private-training-data)): reconstructs training data from gradients *during training*, typically in federated learning settings where a malicious aggregator observes participant gradient updates. Requires gradient access. Training data extraction requires only inference API access.
 
 **Membership inference** (covered in [a previous post](./membership-inference-attacks)): a statistical attack to determine *whether* a specific record was in training. Does not extract content — only answers a binary question about a specific point. Far lower information gain than extraction; also far lower noise tolerance.
 
@@ -138,7 +138,7 @@ In practice, deduplication should be applied both within a training corpus (remo
 
 DP-SGD (differentially private stochastic gradient descent, Abadi et al. 2016) injects calibrated noise into per-example gradients during training. By bounding the per-example gradient norm (clipping) and adding noise at the appropriate scale, DP-SGD provides a formal (ε, δ)-DP guarantee: the ratio of output probabilities for any model output can change by at most a multiplicative factor of e^ε (plus an additive δ failure probability) when any single training record is added or removed.
 
-At a meaningful privacy budget (ε ≤ 3), DP training substantially reduces memorization. The cost is model utility — DP-trained models are typically less capable at equivalent parameter counts, and utility costs are higher for models trained on smaller corpora (because each example contributes a larger fraction of the training signal).
+At meaningful privacy budgets — DP literature commonly uses ε in the range of 1–10, with smaller values providing stronger but more utility-costly guarantees — DP training substantially reduces memorization. The choice of ε is highly application-dependent: there is no universal "safe" threshold, and the same ε value provides different practical protection levels depending on dataset size, model architecture, and the specific attack model. The cost is model utility — DP-trained models are typically less capable at equivalent parameter counts, and utility costs are higher for models trained on smaller corpora (because each example contributes a larger fraction of the training signal).
 
 DP is most practically deployed in fine-tuning contexts: base models are trained without DP on large public corpora (where the privacy risk is lower), and DP is applied during fine-tuning on sensitive private corpora (where the risk is highest). This trades some fine-tuning utility for a formal upper bound on what can be extracted from the private corpus.
 
