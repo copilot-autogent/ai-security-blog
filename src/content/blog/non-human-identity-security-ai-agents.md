@@ -56,7 +56,7 @@ The mitigation requires **mutual authentication between agent components**: sign
 
 ### 4. Credential Replay Across Sessions
 
-Long-lived agent tokens create a session fixation problem. If an agent uses the same token across multiple task sessions, and that token is compromised in session N, every previous session's actions can be attributed to the legitimate agent (confusing forensics) and future sessions can be hijacked.
+Long-lived agent tokens create a credential reuse and replay problem. If an agent uses the same token across multiple task sessions, and that token is compromised in session N, an attacker can use it in any future session where it remains valid — the agent infrastructure has no mechanism to detect this because the token is still valid.
 
 More practically: a token valid across multiple sessions can be captured from one session's logs or network traffic and replayed in a later session with different context. The agent infrastructure has no mechanism to detect this because the token is still valid.
 
@@ -78,7 +78,7 @@ OAuth 2.0 was designed with a specific trust model: a human user, capable of ind
 
 **The authorization request isn't human-legible.** OAuth flows for humans show a permissions dialog in plain language. OAuth flows for agents typically happen programmatically without a human in the loop. The agent's operator configured the scopes; the end user's consent is implicit, granular only to the level the operator bothered to specify.
 
-**Delegation chains have no standard termination.** OAuth has defined patterns for user-to-application delegation. There is no equivalent standard for application-to-agent-to-sub-agent delegation. Each platform (OpenAI, Anthropic, Google DeepMind) handles this differently, and the chains are often opaque to the end user.
+**Delegation chains have no standardized termination.** OAuth 2.0 Token Exchange ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693)) provides a standardized building block for delegation and impersonation scenarios, and is the closest existing standard for machine-to-machine token exchange. However, RFC 8693 does not fully address agent-specific concerns: it does not constrain sub-agent scopes to a strict subset of the parent's authorization, does not encode task-intent into derived tokens, and does not define a mechanism for the authorization server to verify that a delegation was intended by the original human authorizer. Each platform (OpenAI, Anthropic, Google DeepMind) adds platform-specific conventions on top of this foundation, and the chains remain largely opaque to end users.
 
 The emerging response to this is a category of patterns sometimes called "Agent Authorization" — extensions to OAuth that add constraints specifically for automated principals. These include:
 
@@ -174,9 +174,9 @@ Before deploying any AI agent with credential access:
 - [ ] Delegation chains are documented and bounded (sub-agents receive a strict subset of parent scopes)
 - [ ] High-sensitivity operations have human re-authorization gates regardless of existing token permissions
 
-## Why This Is OWASP LLM09 (Excessive Agency) Viewed Through the Identity Lens
+## Why This Is OWASP LLM06 (Excessive Agency) Viewed Through the Identity Lens
 
-OWASP LLM Top 10 2025 includes LLM09 — Excessive Agency: the risk that an LLM agent takes actions with greater impact than intended because it has been granted excessive permissions. The standard discussion focuses on what the agent *does*. NHI security focuses on what the agent *holds*.
+OWASP LLM Top 10 2025 (v2.0) includes LLM06 — Excessive Agency: the risk that an LLM agent takes actions with greater impact than intended because it has been granted excessive permissions. The standard discussion focuses on what the agent *does*. NHI security focuses on what the agent *holds*.
 
 These are complementary angles on the same structural problem. Excessive agency is the behavior; over-privileged NHI is the infrastructure that makes excessive agency dangerous. You can limit what the agent decides to do (prompt-level controls, output classifiers, action confirmation gates) without addressing what the agent *could* do if those controls failed. NHI security addresses the latter.
 
@@ -186,4 +186,4 @@ Credential scoping is not just an IAM compliance exercise. It's the backstop tha
 
 ---
 
-*Sources: [Astrix Security NHI Research](https://astrix.security/learn/nhi-security/), [RFC 9700 – OAuth 2.0 Security Best Current Practice](https://www.rfc-editor.org/rfc/rfc9700), [CISA Identity and Access Management Guidance](https://www.cisa.gov/resources-tools/resources/identity-and-access-management), [OWASP LLM Top 10 2025 – LLM09 Excessive Agency](https://owasp.org/www-project-top-10-for-large-language-model-applications/), [SPIFFE Project](https://spiffe.io/), [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)*
+*Sources: [Astrix Security NHI Research](https://astrix.security/learn/nhi-security/), [RFC 9700 – OAuth 2.0 Security Best Current Practice](https://www.rfc-editor.org/rfc/rfc9700), [RFC 8693 – OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693), [CISA Identity and Access Management Guidance](https://www.cisa.gov/resources-tools/resources/identity-and-access-management), [OWASP LLM Top 10 2025 – LLM06 Excessive Agency](https://owasp.org/www-project-top-10-for-large-language-model-applications/), [SPIFFE Project](https://spiffe.io/), [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)*
