@@ -19,7 +19,7 @@ Three properties compound the problem:
 
 **Machine speed with irreversible side effects.** A human reading through a file system before deleting things takes minutes and pauses for confirmation. An agent with file system tools can delete thousands of files in seconds. Emails get sent, API calls complete, forms get submitted, money moves — before a human can observe what happened.
 
-**Compounding errors in agentic loops.** A single wrong decision rarely catastrophic on its own. But when each tool call feeds the next prompt — and the agent is trying to recover from the previous mistake — errors compound. The agent that incorrectly identifies a file as temporary deletes it; when the expected downstream step fails because the file is gone, it may try increasingly creative recovery actions.
+**Compounding errors in agentic loops.** A single wrong decision is rarely catastrophic on its own. But when each tool call feeds the next prompt — and the agent is trying to recover from the previous mistake — errors compound. The agent that incorrectly identifies a file as temporary deletes it; when the expected downstream step fails because the file is gone, it may try increasingly creative recovery actions.
 
 **States outside the design envelope.** No one can enumerate all the states an agent might encounter in production. The environment changes, users behave unexpectedly, external APIs return unexpected responses. An agent with no controllability mechanisms is operating without a safety net in an unbounded state space.
 
@@ -56,7 +56,7 @@ Action budgets address compounding error loops directly. If an agent is consumin
 Implementation points:
 
 - Track the budget at the **session level**, not the request level. Individual tool call counts look normal; the pattern that matters is accumulated calls over the session's lifetime.
-- Use separate budgets for different **action categories**. Reads are cheap; writes are expensive; irreversible writes (delete, send, submit) are most expensive. A 5-token budget for irreversible writes is a meaningful constraint even when read budgets are generous.
+- Use separate budgets for different **action categories**. Reads are cheap; writes are expensive; irreversible writes (delete, send, submit) are most expensive. A 5-call budget for irreversible writes is a meaningful constraint even when read budgets are generous.
 - Budget exhaustion should **fail to a known safe state** — typically: halt the session, log the budget exhaustion with full context, notify a human, and wait for explicit restart rather than proceeding.
 
 ### Rate Limiter
@@ -70,7 +70,7 @@ Rate limits:
   external_api_calls: 2/minute
 ```
 
-Rate limiters catch a different failure mode: an agent stuck in a fast tight loop. An agent that calls the same tool 200 times in 60 seconds hasn't hit the 1000-call session budget, but something is clearly wrong. Exponential backoff after threshold crossing gives the system time to recover or for humans to observe the anomaly.
+Rate limiters catch a different failure mode: an agent stuck in a fast tight loop. An agent that calls the same tool 200 times in 60 seconds may not have hit its session budget (say, a 500-call hard limit), but something is clearly wrong. Exponential backoff after threshold crossing gives the system time to recover or for humans to observe the anomaly.
 
 Rate limits also provide a natural defense against cost blowouts. LLM API costs are roughly proportional to token consumption; an uncontrolled agent loop can accumulate significant cost in minutes.
 
@@ -98,7 +98,7 @@ When an agent requests an irreversible action, the framework intercepts it:
 [GATE] Awaiting human approval — agent is paused
 ```
 
-The gate forces a human decision before the action executes. The agent state is preserved; the session resumes exactly where it paused once the action is approved or rejected.
+The gate forces a human decision before the action executes. If approved, the agent executes the action and continues. If rejected, the rejection is returned to the agent as a tool call error with a structured reason (e.g., `{"status": "rejected", "reason": "human operator declined"}`), allowing the agent to take an alternative path or surface the rejection to the user rather than looping back with the same request.
 
 This pattern is operationally heavier than the others — it requires a UI for approval and a mechanism for resuming paused sessions. But it's also the only pattern that gives humans meaningful control over irreversible consequences before they occur.
 
