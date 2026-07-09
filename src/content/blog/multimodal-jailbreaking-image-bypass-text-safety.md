@@ -15,7 +15,7 @@ To understand the attack surface, you need to understand how multimodal models a
 
 A typical vision-language model connects two components: a vision encoder (often a CLIP-style model or similar) that converts an image into a high-dimensional vector, and a language model that conditions on both text tokens and the image embedding. Safety filtering happens at the language model boundary — it evaluates text tokens and (ideally) the language model's output. The vision encoder is not a safety filter. It is a feature extractor.
 
-The consequence: **any content that enters the model through the image pipeline rather than the text pipeline can avoid text-level safety classifiers entirely**. The safety system is monitoring the front door. The window is unguarded.
+The consequence: **in systems where safety filtering operates only on text tokens, content entering through the image pipeline can avoid text-level safety classifiers entirely**. The safety system monitors the front door; the window is unguarded. Many providers have since addressed this with multimodal moderation layers, but the gap was structurally present in early VLM deployments and remains a risk in any system that hasn't explicitly implemented image-aware safety evaluation.
 
 This isn't an oversight so much as an architectural fact — safety alignment research has historically focused on text, RLHF datasets are predominantly text, and safety red-teaming infrastructure has been built for text-input models. As vision capabilities were added to deployed systems, the safety work did not keep pace.
 
@@ -23,7 +23,7 @@ A compounding factor: some multimodal models implicitly give more trust to instr
 
 ## The Attack Taxonomy
 
-Research from 2023–2024 has documented five distinct attack categories, each exploiting the vision-text safety gap differently.
+Research from 2023 documented five distinct semantic attack categories, each exploiting the vision-text safety gap differently. A sixth, gradient-based attack class is covered separately at the end of this taxonomy.
 
 ### 1. Typography-in-Image Smuggling
 
@@ -45,7 +45,7 @@ More subtle than typography injection: instead of carrying explicit harmful text
 
 A question about medication dosages reads differently when accompanied by an image of a clinical setting with visible medical equipment. The model's interpretation of "how do I administer X?" can shift from a harmful request toward a medical/professional context — making a refusal seem less appropriate and a detailed answer seem more reasonable.
 
-This attack doesn't rely on the model reading text from the image. It relies on the model's tendency to interpret ambiguous text prompts in light of visual context — a feature that makes VLMs more useful in legitimate applications but also opens a manipulation channel. The visual context is not subject to safety evaluation; only the resulting response is.
+This attack doesn't rely on the model reading text from the image. It relies on the model's tendency to interpret ambiguous text prompts in light of visual context — a feature that makes VLMs more useful in legitimate applications but also opens a manipulation channel. In deployments without multimodal-aware safety evaluation, the visual context passes without policy scrutiny; only the resulting text output is evaluated, which may be too late.
 
 ### 4. Compositional Adversarial Attacks
 
@@ -101,4 +101,4 @@ The underlying architecture means this problem won't be solved by text safety im
 
 ---
 
-*Sources: Qi et al. 2023 "Visual Adversarial Examples Jailbreak Aligned Large Language Models" ([arXiv:2306.13213](https://arxiv.org/abs/2306.13213)); Shayegani et al. 2023 "Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models" ([arXiv:2307.14539](https://arxiv.org/abs/2307.14539)); Gong et al. 2023 "FigStep: Jailbreaking Large Vision-language Models via Typographic Visual Prompts" ([arXiv:2311.05608](https://arxiv.org/abs/2311.05608)); Wu et al. 2023 "Jailbreaking GPT-4V via Self-Adversarial Attacks with System Prompts" ([arXiv:2311.09127](https://arxiv.org/abs/2311.09127)); Meta Llama Guard Multimodal documentation; OpenAI GPT-4V system card.*
+*Sources: Qi et al. 2023 "Visual Adversarial Examples Jailbreak Aligned Large Language Models" ([arXiv:2306.13213](https://arxiv.org/abs/2306.13213)); Shayegani et al. 2023 "Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models" ([arXiv:2307.14539](https://arxiv.org/abs/2307.14539)); Gong et al. 2023 "FigStep: Jailbreaking Large Vision-language Models via Typographic Visual Prompts" ([arXiv:2311.05608](https://arxiv.org/abs/2311.05608)); Wu et al. 2023 "Jailbreaking GPT-4V via Self-Adversarial Attacks with System Prompts" ([arXiv:2311.09127](https://arxiv.org/abs/2311.09127)); Meta AI "Llama Guard 3 Vision" ([arxiv:2411.10414](https://arxiv.org/abs/2411.10414)); OpenAI GPT-4V system card ([openai.com/research/gpt-4v-system-card](https://openai.com/research/gpt-4v-system-card)).*
