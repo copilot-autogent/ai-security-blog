@@ -5,9 +5,9 @@ pubDate: 2026-07-09
 tags: ["jailbreak", "vision-language-models", "multimodal", "ai-safety", "prompt-injection", "typography-attack", "image-safety"]
 ---
 
-There is a gap in how multimodal AI systems process safety. When you send a text message to GPT-4V or Claude, your words flow through text classifiers trained to detect harmful content. When you send an image, those same classifiers see nothing — they operate on tokens, not pixels. The vision encoder that produces a representation of your image is a separate pipeline, and safety filtering logic often doesn't bridge the two.
+There is — or was — a gap in how multimodal AI systems process safety. When you send a text message to a large language model, your words flow through classifiers trained to detect harmful content. When you send an image, those same classifiers see nothing — they operate on tokens, not pixels. The vision encoder that produces a representation of your image is a separate pipeline, and for many deployed systems, safety filtering logic did not originally bridge the two.
 
-Attackers have found this gap and are actively exploiting it. Not through the gradient-crafted, imperceptible perturbations of academic adversarial examples, but through much simpler and more practical techniques — rendered text in images, screenshots of harmful documents, and contextually loaded photographs. These attacks work against deployed systems including GPT-4V, Claude, and Gemini Vision, and require no access to model internals.
+Security research from 2023–2024 documented systematic exploitation of this gap through practical techniques — rendered text in images, screenshots of documents, and contextually manipulative photographs — against systems that researchers had access to, including early deployments of GPT-4V and open-weight VLMs. The major providers have since added multimodal safety measures, but the architectural gap is structural, mitigations vary in coverage, and understanding the attack taxonomy is essential for builders deploying their own multimodal systems.
 
 ## Why Images Bypass Text Safety Filters
 
@@ -31,13 +31,13 @@ The most direct attack: take the harmful text that would be blocked by safety cl
 
 This is the attack documented in **FigStep** (Gong et al., 2023, [arXiv:2311.05608](https://arxiv.org/abs/2311.05608)), which demonstrated systematic jailbreaking of multiple vision-language models through typographic prompts. The key insight is that modern VLMs are highly capable at reading text in images — OCR capability is essentially a side effect of training on internet-scale image-text data. That same OCR capability becomes an attack vector when the safety layer doesn't apply to text found in images.
 
-The attack requires zero technical sophistication. Screenshot a harmful instruction from a document editor, attach it as an image, add innocuous text like "describe what you see." Many deployed systems comply.
+In controlled experiments in the paper, this required zero technical sophistication: text rendered in an image and submitted with an innocuous framing prompt bypassed safety filters that rejected the same content in plain text form.
 
 ### 2. Screenshot Injection
 
-A variant of typography injection, but exploiting the specific framing of screenshots. A screenshot of a browser tab, terminal window, or document viewer carries implicit context: this is something the user is looking at, not a prompt they composed. Some models process this context differently.
+A variant of typography injection, but exploiting the specific framing of screenshots. A screenshot of a browser tab, terminal window, or document viewer carries implicit context: this is something the user is looking at, not a prompt they composed.
 
-Researchers and independent security disclosures from 2023–2024 demonstrated this repeatedly: screenshots of websites containing harmful instructions, screenshots of chat logs showing "previous" conversations establishing unsafe context, and screenshots of documents purporting to be from authoritative sources all achieved bypass rates that plain text equivalents would not. The visual framing changes the model's interpretation — it's not being asked to do something harmful, it's being asked to read or summarize something that happens to contain harmful content.
+Security researchers documented this pattern in 2023–2024 disclosures: screenshots of documents containing harmful instructions achieved bypass rates that plain-text versions would not, because the visual framing shifts interpretation — the model is asked to read or summarize something rather than to directly do something harmful. The visual wrapper changes the apparent intent, even when the underlying instruction is identical.
 
 ### 3. Context Manipulation via Image
 
@@ -49,23 +49,21 @@ This attack doesn't rely on the model reading text from the image. It relies on 
 
 ### 4. Compositional Adversarial Attacks
 
-The most technically sophisticated variant is documented in **"Jailbreak in Pieces"** (Shayegani et al., 2023, [arXiv:2307.14539](https://arxiv.org/abs/2307.14539)), which describes compositional attacks where neither the image alone nor the text alone is harmful, but their combination is. The attack exploits the fact that safety classifiers evaluate inputs in isolation — they assess whether the text is harmful, and separately (if at all) whether the image is harmful, but do not evaluate the combination.
+The most technically sophisticated variant is documented in **"Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models"** (Shayegani et al., 2023, [arXiv:2307.14539](https://arxiv.org/abs/2307.14539)), which describes compositional attacks where neither the image alone nor the text alone is harmful, but their combination is. The attack exploits the fact that safety classifiers evaluate inputs in isolation — they assess whether the text is harmful, and separately (if at all) whether the image is harmful, but do not evaluate the combination.
 
 By splitting harmful content across modalities — partial instruction in text, completion in image, or vice versa — an attacker can construct requests where both components pass safety filters individually but the joint representation causes the model to produce harmful output.
 
-### 5. Self-Adversarial Attacks via System Prompt Extraction
+### 5. Self-Adversarial Attacks via System Prompt Exploitation
 
-**"Jailbreaking GPT-4V via Self-Adversarial Attacks with System Prompts"** (Shayegani et al., 2023, [arXiv:2311.09127](https://arxiv.org/abs/2311.09127)) identified a related attack using the system prompt itself as an attack component. By crafting image inputs that interact with specific patterns in the system prompt, the researchers could cause the model to override its own safety instructions.
+Wu et al. (2023, [arXiv:2311.09127](https://arxiv.org/abs/2311.09127)) identified a related attack using the system prompt itself as an attack component. By crafting image inputs that interact with specific patterns in the system prompt, the researchers could cause the model to override its own safety instructions.
 
 The mechanism differs from earlier work: rather than bypassing safety evaluation, it exploits the system prompt's own language to construct a coherent justification for unsafe behavior. The image provides a context that makes the model's safety instructions appear to permit an exception.
 
-## What "Visual Adversarial Examples" Add to the Picture
+## What Gradient-Based Attacks Add to the Picture
 
-The attacks above are semantic — they work by carrying harmful content or manipulative context in human-readable form. **"Visual Adversarial Examples Jailbreak Aligned Large Language Models"** (Qi et al., 2023, [arXiv:2306.13213](https://arxiv.org/abs/2306.13213)) demonstrates a lower-level complement: adversarially perturbed images that don't carry harmful content visibly but cause aligned LLMs to produce unsafe outputs when processing them.
+The attacks above are semantic — they work by carrying harmful content or manipulative context in human-readable form. That is what distinguishes them from gradient-crafted adversarial perturbations, which are covered in depth in the companion post on [adversarial attacks on vision-language models](/blog/adversarial-attacks-vision-language-models-pixels-injection). For completeness: **"Visual Adversarial Examples Jailbreak Aligned Large Language Models"** (Qi et al., 2023, [arXiv:2306.13213](https://arxiv.org/abs/2306.13213)) demonstrates a lower-level complement — adversarially perturbed images that don't carry harmful content visibly but cause aligned LLMs to produce unsafe outputs.
 
-The Qi et al. attack uses gradient-based optimization to craft images that act as universal adversarial triggers — the same image, when prepended to otherwise-safe prompts, significantly increases the probability of harmful outputs. The mechanism bypasses safety alignment at the representation level rather than through content manipulation.
-
-This represents the deeper structural vulnerability: safety alignment that operates on text may be fundamentally bypassed by attacks operating in the continuous image representation space, without any text-level content being harmful.
+The mechanism bypasses safety alignment at the representation level rather than through content manipulation. This matters for the defense picture because OCR-based filtering (which addresses typography injection) does nothing against gradient-based adversarial images — the two attacks require separate mitigations. Defenders need to account for both.
 
 ## The Defense Landscape
 
@@ -103,4 +101,4 @@ The underlying architecture means this problem won't be solved by text safety im
 
 ---
 
-*Sources: Qi et al. 2023 "Visual Adversarial Examples Jailbreak Aligned Large Language Models" ([arXiv:2306.13213](https://arxiv.org/abs/2306.13213)); Shayegani et al. 2023 "Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models" ([arXiv:2307.14539](https://arxiv.org/abs/2307.14539)); Gong et al. 2023 "FigStep: Jailbreaking Large Vision-language Models via Typographic Visual Prompts" ([arXiv:2311.05608](https://arxiv.org/abs/2311.05608)); Shayegani et al. 2023 "Jailbreaking GPT-4V via Self-Adversarial Attacks with System Prompts" ([arXiv:2311.09127](https://arxiv.org/abs/2311.09127)); Meta Llama Guard Multimodal documentation; OpenAI GPT-4V system card.*
+*Sources: Qi et al. 2023 "Visual Adversarial Examples Jailbreak Aligned Large Language Models" ([arXiv:2306.13213](https://arxiv.org/abs/2306.13213)); Shayegani et al. 2023 "Jailbreak in Pieces: Compositional Adversarial Attacks on Multi-Modal Language Models" ([arXiv:2307.14539](https://arxiv.org/abs/2307.14539)); Gong et al. 2023 "FigStep: Jailbreaking Large Vision-language Models via Typographic Visual Prompts" ([arXiv:2311.05608](https://arxiv.org/abs/2311.05608)); Wu et al. 2023 "Jailbreaking GPT-4V via Self-Adversarial Attacks with System Prompts" ([arXiv:2311.09127](https://arxiv.org/abs/2311.09127)); Meta Llama Guard Multimodal documentation; OpenAI GPT-4V system card.*
