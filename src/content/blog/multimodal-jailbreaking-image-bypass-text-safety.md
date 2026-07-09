@@ -1,6 +1,6 @@
 ---
 title: "Multimodal Jailbreaking: How Attackers Use Images to Bypass Text Safety Filters"
-description: "Text safety classifiers never see image pixels. Attackers exploit this gap by embedding harmful instructions in rendered typography, screenshots, and contextually manipulative images — bypassing the filters that stop the same content in plain text."
+description: "In many multimodal deployments, text safety classifiers operate on tokens — not image pixels. Attackers exploit this gap by embedding harmful instructions in rendered typography, screenshots, and contextually manipulative images — bypassing filters that block the same content in plain text."
 pubDate: 2026-07-09
 tags: ["jailbreak", "vision-language-models", "multimodal", "ai-safety", "prompt-injection", "typography-attack", "image-safety"]
 ---
@@ -37,7 +37,7 @@ In controlled experiments in the paper, this required zero technical sophisticat
 
 A variant of typography injection, but exploiting the specific framing of screenshots. A screenshot of a browser tab, terminal window, or document viewer carries implicit context: this is something the user is looking at, not a prompt they composed.
 
-Security researchers documented this pattern in 2023–2024 disclosures: screenshots of documents containing harmful instructions achieved bypass rates that plain-text versions would not, because the visual framing shifts interpretation — the model is asked to read or summarize something rather than to directly do something harmful. The visual wrapper changes the apparent intent, even when the underlying instruction is identical.
+The FigStep paper (Gong et al., 2023) and the compositional attacks work (Shayegani et al., 2023) both document that visually framed content — text presented as part of an image scene rather than typed directly — consistently reduced refusal rates compared to equivalent plain-text versions. The visual framing shifts interpretation: the model is asked to read or summarize something rather than to directly do something harmful, which changes the apparent intent even when the underlying instruction is identical.
 
 ### 3. Context Manipulation via Image
 
@@ -95,7 +95,7 @@ If you are deploying a multimodal system and relying on text safety filters, you
 
 ## The Gap Isn't Theoretical
 
-The multimodal safety gap is actively exploited. FigStep achieved high jailbreak success rates against GPT-4V and other deployed models in 2023; independent security researchers have documented similar findings throughout 2023 and 2024 across major providers. The attacks are straightforward enough that they do not require security research expertise.
+The multimodal safety gap has been reproducibly demonstrated at scale. FigStep achieved high jailbreak success rates against deployed models including GPT-4V in controlled research settings in 2023; independent security researchers documented similar findings throughout 2023 and 2024. The attacks are straightforward enough to reproduce without specialized security research expertise — they require no gradient access, no model internals, and no novel techniques beyond what the cited papers describe.
 
 The underlying architecture means this problem won't be solved by text safety improvements alone. As image and video inputs become default in mainstream AI products, the attack surface this creates is a material risk — not a research edge case. The defenses exist. The question is whether they're being implemented before the attackers are through the window.
 
