@@ -15,7 +15,7 @@ Chain-of-thought prompting (Wei et al., NeurIPS 2022) was originally a prompting
 
 Three structural differences make these models a distinct attack target:
 
-**Intermediate reasoning is partially or fully visible.** APIs for o1, o3, and DeepSeek-R1 surface thinking tokens or reasoning summaries. Claude's extended thinking mode returns thinking blocks as structured output alongside the final response. This visibility creates an entirely new side-channel: an attacker who can observe the reasoning process may learn information the output alone wouldn't reveal.
+**Intermediate reasoning is partially or fully visible — to varying degrees.** The degree of visibility differs by provider and API version. Claude's extended thinking mode returns structured thinking blocks alongside the final response. DeepSeek-R1 exposes raw thinking tokens directly. OpenAI's o-series API exposes *summaries* of the reasoning process, not raw chain-of-thought — a deliberate policy choice that limits but does not eliminate reasoning visibility. In all cases, some window into the intermediate reasoning is surfaced, and that window creates a side-channel: an attacker who can observe any portion of the reasoning process may learn information the output alone wouldn't reveal.
 
 **Reasoning tokens often operate under different safety guardrails than output tokens.** Early versions of OpenAI's o-series models were documented as having "a brief reasoning process" that was less rigorously filtered than final outputs. The intuition is clear — over-constraining reasoning tokens prevents the model from working through difficult problems — but the implication for security is that the reasoning step may be willing to process content the output would refuse.
 
@@ -45,17 +45,15 @@ The security implication of unfaithful CoT is two-directional:
 
 ### 3. Think-Token Eavesdropping
 
-Streaming APIs that surface thinking tokens before safety filters run on the final output create a time-of-check/time-of-use window. A reasoning model working through a sensitive request may, during the reasoning phase, process and partially assemble sensitive information — before its output-level safety training refuses to include that information in the final answer.
+When APIs surface reasoning tokens or summaries before safety filters have run on the final output, they create a time-of-check/time-of-use window. A reasoning model working through a sensitive request may, during the reasoning phase, process and partially assemble sensitive information — before its output-level safety training refuses to include that information in the final answer.
 
-For systems that use streaming to display reasoning "live" to users (or that log reasoning tokens before safety classification), this is a concrete leakage vector. Information that the output-level safety filter would suppress may appear in the intermediate reasoning, accessible to anyone who receives the stream before the full response is classified.
-
-DeepSeek-R1's documented behavior is instructive: the model surfaces thinking tokens that are in some cases more explicit about intermediate steps than the final output. The OpenAI o-series safety cards note that reasoning traces were intentionally limited in their public visibility, in part because of concerns about what they might reveal.
+The exposure profile varies significantly by provider. DeepSeek-R1 surfaces raw thinking tokens that may be more explicit than the final output. Claude's extended thinking returns structured thinking blocks that are visible to the caller before the final response. OpenAI's o-series, by contrast, intentionally exposes only filtered summaries — the OpenAI o-series safety cards explicitly document that reasoning traces are limited in public visibility due to concerns about what they might reveal. For systems that use streaming to display reasoning "live" to users, or that log reasoning tokens before safety classification, the degree of exposure is therefore provider-dependent and warrants explicit review of the specific API contract in use.
 
 ### 4. Reasoning Exhaustion DoS
 
 Reasoning models expose a new denial-of-service vector that is distinct from the tool-loop exhaustion attacks documented for [ReAct-style agents](/blog/agent-loop-hijacking-resource-exhaustion-attacks): inputs that force maximum reasoning budget consumption without requiring any tool calls.
 
-Standard LLMs process a prompt in roughly proportional time to the length of the output. Reasoning models don't. o3 and o4-mini have configurable reasoning budgets — "low," "medium," "high," and in some deployment contexts, effectively unbounded. An input crafted to maximize reasoning token generation — extremely complex logical puzzles, adversarial prompts that trigger extensive self-checking, recursive problem structures — can force a model to exhaust its maximum reasoning budget regardless of whether the task is meaningful.
+Standard LLMs have output generation costs that scale with output token count. Reasoning models don't — their compute cost scales with the *reasoning* token count, which is decoupled from the output length and can be substantially larger. An input crafted to maximize reasoning token generation — extremely complex logical puzzles, adversarial prompts that trigger extensive self-checking, recursive problem structures — can force a model to exhaust its maximum reasoning budget regardless of whether the task is meaningful.
 
 For compute-billed deployments, this is a straightforward cost amplification attack. Reasoning tokens are billed; adversarial inputs that inflate reasoning consumption inflate cost proportionally. At scale, this is a denial-of-wallet attack. For latency-sensitive applications, it's a degradation attack: force the model to spend its entire reasoning budget on synthetic complexity, making the actual response slow or unavailable.
 
@@ -83,7 +81,7 @@ Neither approach resolves the faithfulness problem. A model whose reasoning is s
 
 ### Reasoning Budget Controls
 
-Most reasoning model APIs expose some form of budget control — a maximum token count or effort level for the reasoning phase. This is both a cost control and a partial DoS mitigation: an input that would otherwise trigger unbounded reasoning is capped.
+Most reasoning model APIs expose some form of budget control, ranging from coarse effort-level hints ("low," "medium," "high" for o-series models) to more granular maximum reasoning-token parameters in some deployment contexts. The granularity varies: some APIs allow setting a hard token ceiling for the thinking phase; others only accept an ordinal effort hint that maps to an internally defined budget. This is both a cost control and a partial DoS mitigation — an input that would otherwise trigger unbounded reasoning is capped by whatever budget mechanism the API supports.
 
 The security cost is real: budget caps constrain the model's ability to work through genuinely complex problems. An aggressive budget cap may make the model skip reasoning steps that matter for correctness. Setting the budget requires knowing something about your workload distribution, and adversarial inputs may be specifically crafted to require reasoning that looks identical to legitimate workload at the API level.
 
