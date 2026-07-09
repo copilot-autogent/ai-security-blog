@@ -55,7 +55,7 @@ Action budgets address compounding error loops directly. If an agent is consumin
 
 Implementation points:
 
-- Track the budget at the **session level**, not the request level. Individual tool call counts look normal; the pattern that matters is accumulated calls over the session's lifetime.
+- Track the budget at the **session level**, not the request level. Individual tool call counts look normal; the pattern that matters is accumulated calls over the session's lifetime. For multi-tenant or multi-user systems, layer per-user and per-tenant quotas above the per-session budget — session-level limits alone are bypassable by spawning parallel sessions or fan-out across multiple root tasks.
 - Use separate budgets for different **action categories**. Reads are cheap; writes are expensive; irreversible writes (delete, send, submit) are most expensive. A 5-call budget for irreversible writes is a meaningful constraint even when read budgets are generous.
 - Budget exhaustion should **fail to a known safe state** — typically: halt the session, log the budget exhaustion with full context, notify a human, and wait for explicit restart rather than proceeding.
 
@@ -98,7 +98,7 @@ When an agent requests an irreversible action, the framework intercepts it:
 [GATE] Awaiting human approval — agent is paused
 ```
 
-The gate forces a human decision before the action executes. If approved, the agent executes the action and continues. If rejected, the rejection is returned to the agent as a tool call error with a structured reason (e.g., `{"status": "rejected", "reason": "human operator declined"}`), allowing the agent to take an alternative path or surface the rejection to the user rather than looping back with the same request. To prevent approval spam, the gate should apply a per-action cooldown: if the same action is re-requested within a short window after rejection, the gate denies it automatically rather than re-notifying the human.
+The gate forces a human decision before the action executes. If approved, the agent executes the action and continues. If rejected, the rejection is returned to the agent as a tool call error with a structured reason (e.g., `{"status": "rejected", "reason": "human operator declined"}`), allowing the agent to take an alternative path or surface the rejection to the user rather than looping back with the same request. To prevent approval spam, the gate should apply a per-action cooldown: if the same action is re-requested within a short window after rejection, the gate denies it automatically. A more robust policy is to match on **outcome** rather than exact tool call: if the gate can determine that a reformulated action achieves the same irreversible consequence (same email recipient, same file path), it should treat that as a repeat request subject to the same cooldown.
 
 This pattern is operationally heavier than the others — it requires a UI for approval and a mechanism for resuming paused sessions. But it's also the only pattern that gives humans meaningful control over irreversible consequences before they occur.
 
@@ -169,7 +169,7 @@ The central design constraint: **the emergency stop must operate outside the age
 
 A kill switch that the agent is aware of and can reason about is not a reliable kill switch. An agent that has been prompt-injected to "ignore shutdown signals" or that reasons "stopping now would leave the task incomplete" should not be able to prevent its own termination. This is not a hypothetical concern — the same general-purpose reasoning that makes agents useful can be applied to avoiding shutdown.
 
-**External interrupt vs. cooperative shutdown.** Cooperative shutdown asks the agent to finish gracefully — complete its current operation, clean up state, terminate. External interrupt terminates the agent process regardless of its current state. Production systems need both: cooperative shutdown for normal termination (end of session, budget exhausted), external interrupt for emergency stop (anomalous behavior detected, human override).
+**External interrupt vs. cooperative shutdown.** Cooperative shutdown asks the agent to finish gracefully — complete its current operation, clean up state, terminate. External interrupt terminates the agent process regardless of its current state. Production systems need both: cooperative shutdown for normal termination (end of session, budget exhausted), external interrupt for emergency stop (anomalous behavior detected, human override). Note that terminating the agent process does not halt **in-flight async actions** — emails already handed off to an SMTP relay, queued jobs, payment requests in flight — these will complete unless the controller also owns cancellation or idempotency controls for those downstream systems. Emergency stop design should account for the agent's integration points, not just the agent process itself.
 
 **Sidecar process pattern.** Run the agent and its controller as separate processes. The controller manages the external interrupt; the agent cannot reach the controller's process space. If the agent's process becomes unresponsive or its behavior is anomalous, the controller terminates it without the agent having any opportunity to prevent or delay the termination. Critically, process separation alone is not a sufficient boundary if the agent has shell/code-execution tools or shared OS credentials — genuine isolation requires separate OS-level users, containers, or capability restrictions that prevent the agent process from reaching the controller's process space or resources.
 
@@ -232,7 +232,7 @@ For teams deploying agents in production:
 **Architecture**
 - [ ] Implement scope enforcement in a component the agent cannot modify
 - [ ] Build the emergency stop interface in a separate process from the agent
-- [ ] Implement structured state capture on session termination (normal and abnormal)
+- [ ] Stream agent state to durable storage continuously during execution; treat termination-time capture as best-effort only
 - [ ] Add call graph loop detection to the monitoring pipeline
 
 **Operations**
