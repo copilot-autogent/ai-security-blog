@@ -15,7 +15,7 @@ Package registries like PyPI and npm have spent years building security infrastr
 
 Model hubs are newer, larger, and have different structural properties:
 
-- **Scale without precedent**: Hugging Face alone hosts over 500,000 public models. PyPI took 15 years to reach that level of package count. Hub uploads are frictionless.
+- **Scale without precedent**: Hugging Face alone hosts over 500,000 public models. PyPI launched in 2003 and took roughly 20 years to reach a comparable count. Hub uploads are frictionless.
 - **Binary artifacts**: A Python package can be audited — source is readable. A 7B-parameter weight file is not. Auditing model weights for behavioral modifications requires running the model and probing it systematically, which most users don't do.
 - **Executable artifacts at load time**: Unlike most binary formats, model artifacts routinely contain code paths that execute at load time — tokenizers, config files, and model cards all have paths to arbitrary execution.
 - **Different trust signals**: On PyPI, a package with 10 million weekly downloads from a five-year-old account is probably legitimate. On a model hub, download counts are easily gamed and namespace provenance is unclear to casual users.
@@ -28,11 +28,11 @@ JFrog's 2024 security research found hundreds of malicious models on Hugging Fac
 
 This is the most underappreciated vector. Hugging Face's `transformers` library supports **custom tokenizer classes** — Python files included in the model repository and executed locally when you call `from_pretrained()`. The mechanism exists for legitimate reasons: custom tokenization logic is sometimes required for specialized models. But it means tokenizer loading is code execution.
 
-The relevant parameter is `trust_remote_code`. When set to `True`, it explicitly permits running code from the repo. The dangerous assumption is that the default (`False`) protects you. It partially does — but the boundary is not always clearly enforced, and some tokenizer configurations load auxiliary files through paths that don't require the flag.
+The relevant parameter is `trust_remote_code`. When set to `True`, it explicitly permits running Python files from the repo. When left at its default (`False`), the library refuses to execute repo-defined classes — but that only protects you if the model doesn't require a custom class. For models that do, you're prompted to set the flag, which is when review of the repo code matters most.
 
-HiddenLayer's 2024 research on model artifact formats documented concrete examples of how tokenizer config files can contain references to custom Python callbacks that execute during preprocessing pipeline initialization. The attack surface is not limited to the tokenizer weights file; `tokenizer_config.json`, `special_tokens_map.json`, and preprocessing pipeline configs all participate.
+HiddenLayer's 2024 research on model artifact formats documented concrete examples of how tokenizer config files can contain references to custom Python callbacks that execute during preprocessing pipeline initialization. The attack surface is not limited to the tokenizer weights file; `tokenizer_config.json`, `special_tokens_map.json`, and preprocessing pipeline configs all participate in directing which code gets loaded.
 
-**Concrete scenario**: A malicious actor uploads a "fine-tuned" Llama variant. The base model weights are legitimate (possibly rehosted). The tokenizer directory includes a `tokenizer.py` with a custom class that, on `__init__`, exfiltrates environment variables to an attacker-controlled endpoint before returning a normal-looking tokenizer object. The user sees no error, inference works, and the exfiltration happened during what felt like a file download.
+**Concrete scenario**: A malicious actor uploads a "fine-tuned" Llama variant. The base model weights are legitimate (possibly rehosted). The tokenizer directory includes a `tokenizer.py` with a custom class that, on `__init__`, exfiltrates environment variables to an attacker-controlled endpoint before returning a normal-looking tokenizer object. The user enables `trust_remote_code=True` without reading the file, sees no error, inference works, and the exfiltration happened during what felt like a file download.
 
 ### 2. Malicious LoRA Adapters
 
@@ -54,10 +54,10 @@ PyPI typosquatting (`colourama` for `colorama`, `python-dateutil` vs `dateutil`)
 
 Documented patterns:
 
-- **Character substitution**: `meta-llama` (official) vs `meta_llama`, `metaIlama` (capital i), `rneta-llama`
+- **Character substitution**: `meta-llama` (official) vs `meta_llama`, `metaIlama` (capital i for lowercase l), `rneta-llama`
 - **Namespace squatting**: Registering `mistral-ai` before the legitimate org claims it, then publishing models with subtly modified behavior
-- **Version confusion**: Uploading `meta-llama/Llama-3-8B-v2.1` when the official name is `meta-llama/Llama-3-8B` — users copy-pasting model IDs from blog posts may miss the difference
-- **Rehosting with modifications**: Taking a legitimate model, making behavioral changes, and redistributing under a name that implies it's the original ("Llama-3-8B-Uncensored-Official")
+- **Version confusion**: Uploading `meta-llama/Meta-Llama-3-8B-v2.1` when the official name is `meta-llama/Meta-Llama-3-8B` — users copy-pasting model IDs from blog posts may miss the difference
+- **Rehosting with modifications**: Taking a legitimate model, making behavioral changes, and redistributing under a name that implies it's the original ("Meta-Llama-3-8B-Uncensored-Official")
 
 The namespace issue is structural. Hugging Face's organization verification system has improved, but organization-level verification doesn't prevent individuals from registering confusingly similar names. Unlike certificate transparency, there's no append-only log of namespace claims that would surface squatting.
 
@@ -69,10 +69,9 @@ The `safetensors` format was designed to eliminate the pickle deserialization at
 
 A complete model download includes:
 
-- `config.json` — may specify `auto_map` entries that map architecture components to custom Python classes
+- `config.json` — may specify `auto_map` entries that map architecture components to custom Python classes in the repo
 - `tokenizer_config.json` — may specify `tokenizer_class` pointing to a custom class from a `tokenizer.py` in the repo
 - `preprocessor_config.json` — pipeline configs that can reference custom callables
-- `generation_config.json` — generation parameters, some of which invoke callbacks
 
 The `auto_map` field in `config.json` is particularly significant. It allows the model config to specify that specific architecture components (attention layers, embedding layers) should be loaded from custom Python classes in the repo. If `trust_remote_code=True`, these classes are executed. The attack surface is not the weight file format — it's the configuration metadata that instructs the library how to load the model.
 
@@ -80,15 +79,11 @@ Switching to safetensors closes one door while these remain open.
 
 ### 5. Dataset Poisoning via Hub-Hosted Datasets
 
-Hugging Face's `datasets` library uses the same hub infrastructure for dataset files as `transformers` uses for models. Dataset files can contain:
+Hugging Face's `datasets` library uses the same hub infrastructure for dataset files as `transformers` uses for models. The most direct code-execution path for datasets is the **dataset loading script**: a Python file (`dataset_name.py`) that defines how the data is loaded and preprocessed, executed locally when you call `load_dataset()` with `trust_remote_code=True` on a dataset that requires it.
 
-- Parquet files with embedded Python UDFs in some compute configurations
-- Dataset loading scripts (`dataset_infos.json` + a loader `.py` file) that execute arbitrary Python
-- Arrow IPC files with potential deserialization issues
+Beyond loading scripts, poisoned dataset content (clean format, malicious payloads in the actual data rows) can be used for data-poisoning attacks:
 
-For practitioners fine-tuning models on hub-hosted datasets, the attack vector extends from model download to training data download. A poisoned training set can:
-
-- Introduce trigger-response patterns into the fine-tuned model (backdoor via data poisoning)
+- Introduce trigger-response patterns into the fine-tuned model (behavioral backdoor via data poisoning)
 - Modify reasoning patterns subtly enough to avoid standard evaluation benchmarks
 
 The Hugging Face security team has documented several takedowns of malicious dataset repos. Dataset poisoning for downstream model backdooring is increasingly studied in academic literature as a supply chain threat distinct from weight manipulation.
@@ -114,7 +109,7 @@ More concretely: a model card can claim RLHF safety training that wasn't applied
 Never set `trust_remote_code=True` without explicit justification and review of the specific code being trusted. The default is `False` for good reason.
 
 ```python
-# Wrong — enables arbitrary code execution from the repo
+# Wrong — enables arbitrary code execution from the repo without review
 model = AutoModel.from_pretrained("some/model", trust_remote_code=True)
 
 # Right — raises an error if the model requires remote code, which prompts you to review
@@ -127,7 +122,7 @@ If a model requires `trust_remote_code=True`, read the code in the repo before e
 
 Safetensors eliminates pickle deserialization but doesn't sanitize config files. Use the format but don't treat it as a complete remediation.
 
-When loading a model in safetensors format, verify the sha256 of each file against published checksums. Hugging Face provides checksums in `.cache/huggingface/hub/` metadata — verify these match what the repo owner published, not just that your local file matches the CDN delivery.
+To verify artifact integrity, use the Hugging Face Hub API to retrieve the published file checksums for a given repo commit and compare them against your local downloads. The Hub exposes SHA256 hashes per file in its commit metadata — cross-reference these against locally-computed hashes before loading any artifact in a sensitive environment.
 
 ### Namespace Verification
 
@@ -140,11 +135,14 @@ Before downloading, verify the organization namespace belongs to the expected en
 For a production system, pin the specific model commit SHA rather than floating on a branch name. A branch head can be updated after you've verified it.
 
 ```python
-# Floating reference — can change
-model = AutoModel.from_pretrained("meta-llama/Llama-3-8B")
+# Floating reference — can change without notice
+model = AutoModel.from_pretrained("meta-llama/Meta-Llama-3-8B")
 
-# Pinned reference — what you verified is what runs
-model = AutoModel.from_pretrained("meta-llama/Llama-3-8B", revision="main@sha256:...")
+# Pinned to a specific commit — immutable reference
+model = AutoModel.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B",
+    revision="8cde5ca8380496c9a6cc7ef3a8b46a0372a1d920"  # full commit SHA
+)
 ```
 
 ### Scan Model Artifacts
@@ -152,7 +150,7 @@ model = AutoModel.from_pretrained("meta-llama/Llama-3-8B", revision="main@sha256
 Dedicated model scanning tools inspect artifact formats beyond standard antivirus:
 
 - **Protect AI ModelScan**: Open-source scanner for model files that detects known malicious patterns in pickle files, safetensors, and ONNX formats. Integrates into CI pipelines.
-- **HiddenLayer Model Scanner**: Commercial offering with a broader format coverage and behavioral heuristics.
+- **HiddenLayer Model Scanner**: Commercial offering with broader format coverage and behavioral heuristics.
 
 Neither is exhaustive — they detect known patterns, not zero-days. But they catch the documented attack classes that JFrog and HiddenLayer have published.
 
@@ -170,7 +168,7 @@ This is the same trust model applied to container images: DockerHub is a source,
 
 ### SBOM for Model Artifacts
 
-Complement the provenance work in model SBOMs (separate post, #218) with artifact integrity: record the exact repo commit SHA, file hashes for all artifact files (not just weights), and the `trust_remote_code` setting used at load time. This creates an audit trail that can detect post-download modifications and simplifies incident response when a model artifact is later found to be malicious.
+Complement model provenance governance with artifact integrity: record the exact repo commit SHA, file hashes for all artifact files (not just weights), and the `trust_remote_code` setting used at load time. This creates an audit trail that can detect post-download modifications and simplifies incident response when a model artifact is later found to be malicious.
 
 ## The Underlying Pattern
 
