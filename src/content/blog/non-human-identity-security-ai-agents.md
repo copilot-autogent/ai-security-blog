@@ -2,7 +2,7 @@
 title: "Non-Human Identity Security for AI Agents: Credential Scoping, Token Lifecycle, and Agent Impersonation"
 description: "AI agents are becoming major credential holders and API consumers. Non-human identity (NHI) security treats agent tokens with the same rigor as human credentials — and getting this wrong creates exploitable privilege escalation paths that traditional IAM never anticipated."
 pubDate: 2026-07-09
-tags: ["non-human-identity", "agent-security", "credential-management", "oauth", "token-lifecycle", "impersonation", "least-privilege", "iam", "identity", "ai-agents"]
+tags: ["agent-security", "credential-management", "least-privilege", "iam", "identity", "threat-modeling", "multi-agent", "zero-trust"]
 ---
 
 In most organizations, the number of non-human identities — service accounts, API keys, bot tokens, CI/CD credentials — already outnumbers human user accounts. AI agents are accelerating this trend dramatically. A single autonomous agent can hold credentials for dozens of downstream services: read access to a code repository, write access to a project management tool, call permissions on a payment API, and an OAuth delegation chain that ultimately traces back to a real human's authorization.
@@ -20,7 +20,7 @@ NHI security is the practice of treating automated principals — service accoun
 - **Lifecycle management**: issuing, rotating, and revoking credentials on a defined schedule, not indefinitely
 - **Monitoring**: detecting anomalous behavior from NHI service accounts (unexpected API calls, unusual access patterns, privilege escalation attempts)
 
-Astrix Security and Ermetic have published research documenting that NHI credentials are frequently the weakest link in enterprise breach chains — not because the credentials themselves are poorly protected, but because **the NHIs are over-privileged, long-lived, and poorly inventoried**. A service account created for a one-time integration six months ago often retains its original permissions indefinitely, with no owner and no expiry date.
+[Astrix Security NHI Research](https://astrix.security/learn/nhi-security/) and [Ermetic (acquired by Tenable)](https://ermetic.com/research/) have published research documenting that NHI credentials are frequently the weakest link in enterprise breach chains — not because the credentials themselves are poorly protected, but because **the NHIs are over-privileged, long-lived, and poorly inventoried**. A service account created for a one-time integration six months ago often retains its original permissions indefinitely, with no owner and no expiry date.
 
 AI agents make every one of these problems worse, and introduce new ones.
 
@@ -28,9 +28,9 @@ AI agents make every one of these problems worse, and introduce new ones.
 
 ### 1. Overprivileged Service Tokens
 
-The most common NHI failure pattern for AI agents mirrors the general NHI failure: agents receive long-lived tokens with broader scopes than they need. An agent integration configured to "access Gmail" typically receives read, write, send, and delete permissions — not because the agent requires all of them, but because that's the default OAuth scope bundle, and the integration just works.
+The most common NHI failure pattern for AI agents mirrors the general NHI failure: agents receive long-lived tokens with broader scopes than they need. Developers frequently request the broadest available OAuth scope bundle at integration time — not because the agent requires all of it, but because it's easier to over-provision once than to revisit permissions later. An agent integrated with email may end up with read, write, send, and delete permissions even if only read was needed for the defined use case.
 
-When an overprivileged agent is compromised — via prompt injection, model inversion, or configuration exfiltration — the blast radius is the full scope of its credentials. An agent with "read email" access creates a data exposure risk. An agent with "send email" access creates a phishing vector. An agent with "delete email" access creates a destruction vector. All three are routinely bundled into the same integration token.
+When an overprivileged agent is compromised — via prompt injection, model inversion, or configuration exfiltration — the blast radius is the full scope of its credentials. An agent with "read email" access creates a data exposure risk. An agent with "send email" access creates a phishing vector. An agent with "delete email" access creates a destruction vector. All are routinely bundled into the same integration token by developers who didn't stop to scope-minimize.
 
 The attack path doesn't require compromising the agent's model weights. It only requires finding a way to influence the agent's tool execution — which is what prompt injection does. The agent's legitimate credentials become the attacker's weapon.
 
@@ -56,9 +56,9 @@ The mitigation requires **mutual authentication between agent components**: sign
 
 ### 4. Credential Replay Across Sessions
 
-Long-lived agent tokens create a credential reuse and replay problem. If an agent uses the same token across multiple task sessions, and that token is compromised in session N, an attacker can use it in any future session where it remains valid — the agent infrastructure has no mechanism to detect this because the token is still valid.
+Long-lived agent tokens create a credential reuse and replay problem. If an agent uses the same token across multiple task sessions, and that token is compromised in session N, an attacker can use it in any future session where it remains valid.
 
-More practically: a token valid across multiple sessions can be captured from one session's logs or network traffic and replayed in a later session with different context. The agent infrastructure has no mechanism to detect this because the token is still valid.
+More practically: a token valid across multiple sessions can be captured from one session's logs or network traffic and replayed in a later session with different context.
 
 **Per-session credential issuance** — where each new agent session receives a fresh, short-lived token scoped to that session's specific task — materially limits the replay window. A captured token from session N is useless in session N+1 because it has expired or carries a session-binding claim that doesn't match the new session. This doesn't eliminate intra-session replay (a token stolen during session N is still valid until that session ends), which is why sender-constraining tokens (DPoP, certificate-bound access tokens per RFC 8705) or nonce/`jti` semantics are the stronger control when intra-session replay is in scope.
 
@@ -68,7 +68,7 @@ OAuth 2.0 delegation introduces a structural attack surface when humans authoriz
 
 The attack pattern: a sub-agent requests token elevation through a fabricated authorization flow, presenting itself as the parent agent. If the authorization server doesn't verify that the delegating principal actually authorized the sub-agent's request (versus the parent agent's original authorization), the sub-agent can acquire scopes the human never intended to grant.
 
-RFC 9700 (OAuth 2.0 Security Best Current Practice) addresses many of these issues in the human-to-machine delegation context, but the machine-to-machine delegation case — where an agent authorizes a sub-agent — is still handled inconsistently across platforms. Anthropic's tool execution context model and OpenAI's Agents SDK both provide structural patterns for scoping sub-agent authority, but the enforcement mechanisms are largely at the application layer rather than the OAuth layer.
+RFC 9700 (OAuth 2.0 Security Best Current Practice) addresses many of these issues in the human-to-machine delegation context, but the machine-to-machine delegation case — where an agent authorizes a sub-agent — is still handled inconsistently across platforms. Anthropic's tool execution context model and OpenAI's Agents SDK both document patterns that developers can use to scope sub-agent authority at the application layer, but neither provides OAuth-layer enforcement of scope boundaries; developers must implement the actual constraint logic themselves.
 
 ## The OAuth-for-Agents Problem
 
@@ -86,7 +86,7 @@ The emerging response to this is a category of patterns sometimes called "Agent 
 - **Ephemeral delegation tokens**: sub-agents receive tokens derived from the parent's token, with scopes that are a strict subset of the parent's scopes, and that expire when the sub-task completes
 - **Human-in-the-loop re-authorization gates**: for high-sensitivity operations (deleting files, sending external emails, making payments), the agent cannot proceed without an explicit new human authorization, regardless of what its existing token permits
 
-None of these are standardized yet. They exist as platform-specific patterns and internal security guidelines, not as interoperable protocols.
+The building blocks for some of these patterns — token exchange (RFC 8693) and sender-constrained tokens (RFC 8705, DPoP) — are standardized at the OAuth layer. What remains unstandardized is the full agent-specific policy model: how task-intent gets encoded into tokens, how delegation chains are bounded across arbitrary agent hierarchies, and how authorization servers verify that a delegation was intended by the original human authorizer. These exist today as platform-specific conventions rather than interoperable protocols.
 
 ## Defenses: A Framework for Agent NHI Security
 
@@ -101,7 +101,9 @@ This requires integration work — most platform OAuth bundles don't make this e
 
 ### Short-Lived Tokens with Automatic Rotation
 
-Agent tokens should have TTLs measured in hours, not months. The standard practice of issuing service account tokens that don't expire ("for operational stability") optimizes for the wrong thing. A token that rotates every four hours limits the window of exploitation for any credential that's exfiltrated or compromised.
+Agent tokens should have TTLs measured in hours, not months. The standard practice of issuing service account tokens that don't expire ("for operational stability") optimizes for the wrong thing. A token that rotates every four hours limits the window of exploitation for any access token that's exfiltrated or compromised.
+
+One important caveat: in OAuth-based agent integrations, the *refresh token* or offline grant is often the actual long-lived secret, not the access token. Rotating short-lived access tokens without also managing refresh token lifecycle leaves the underlying standing privilege in place — a refresh token with indefinite validity and broad scope is the real risk to address. Rotation policies must cover both the access credential and any offline grant that can regenerate it.
 
 Automatic rotation should be built into the agent runtime, not handled manually. The agent should request a fresh token at the start of each task and treat credential expiry during a task as a recoverable error, not a system failure.
 
@@ -186,4 +188,4 @@ Credential scoping is not just an IAM compliance exercise. It's the backstop tha
 
 ---
 
-*Sources: [Astrix Security NHI Research](https://astrix.security/learn/nhi-security/), [RFC 9700 – OAuth 2.0 Security Best Current Practice](https://www.rfc-editor.org/rfc/rfc9700), [RFC 8693 – OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693), [CISA Identity and Access Management Guidance](https://www.cisa.gov/resources-tools/resources/identity-and-access-management), [OWASP LLM Top 10 2025 – LLM06 Excessive Agency](https://owasp.org/www-project-top-10-for-large-language-model-applications/), [SPIFFE Project](https://spiffe.io/), [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)*
+*Sources: [Astrix Security NHI Research](https://astrix.security/learn/nhi-security/), [Ermetic NHI Security Research](https://ermetic.com/research/), [RFC 9700 – OAuth 2.0 Security Best Current Practice](https://www.rfc-editor.org/rfc/rfc9700), [RFC 8693 – OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693), [RFC 8705 – OAuth 2.0 Mutual-TLS Client Authentication and Certificate-Bound Access Tokens](https://www.rfc-editor.org/rfc/rfc8705), [CISA Identity and Access Management Guidance](https://www.cisa.gov/resources-tools/resources/identity-and-access-management), [OWASP LLM Top 10 2025 – LLM06 Excessive Agency](https://owasp.org/www-project-top-10-for-large-language-model-applications/), [SPIFFE Project](https://spiffe.io/), [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)*
