@@ -98,7 +98,7 @@ When an agent requests an irreversible action, the framework intercepts it:
 [GATE] Awaiting human approval — agent is paused
 ```
 
-The gate forces a human decision before the action executes. If approved, the agent executes the action and continues. If rejected, the rejection is returned to the agent as a tool call error with a structured reason (e.g., `{"status": "rejected", "reason": "human operator declined"}`), allowing the agent to take an alternative path or surface the rejection to the user rather than looping back with the same request.
+The gate forces a human decision before the action executes. If approved, the agent executes the action and continues. If rejected, the rejection is returned to the agent as a tool call error with a structured reason (e.g., `{"status": "rejected", "reason": "human operator declined"}`), allowing the agent to take an alternative path or surface the rejection to the user rather than looping back with the same request. To prevent approval spam, the gate should apply a per-action cooldown: if the same action is re-requested within a short window after rejection, the gate denies it automatically rather than re-notifying the human.
 
 This pattern is operationally heavier than the others — it requires a UI for approval and a mechanism for resuming paused sessions. But it's also the only pattern that gives humans meaningful control over irreversible consequences before they occur.
 
@@ -171,7 +171,7 @@ A kill switch that the agent is aware of and can reason about is not a reliable 
 
 **External interrupt vs. cooperative shutdown.** Cooperative shutdown asks the agent to finish gracefully — complete its current operation, clean up state, terminate. External interrupt terminates the agent process regardless of its current state. Production systems need both: cooperative shutdown for normal termination (end of session, budget exhausted), external interrupt for emergency stop (anomalous behavior detected, human override).
 
-**Sidecar process pattern.** Run the agent and its controller as separate processes. The controller manages the external interrupt; the agent cannot reach the controller's process space. If the agent's process becomes unresponsive or its behavior is anomalous, the controller terminates it without the agent having any opportunity to prevent or delay the termination.
+**Sidecar process pattern.** Run the agent and its controller as separate processes. The controller manages the external interrupt; the agent cannot reach the controller's process space. If the agent's process becomes unresponsive or its behavior is anomalous, the controller terminates it without the agent having any opportunity to prevent or delay the termination. Critically, process separation alone is not a sufficient boundary if the agent has shell/code-execution tools or shared OS credentials — genuine isolation requires separate OS-level users, containers, or capability restrictions that prevent the agent process from reaching the controller's process space or resources.
 
 ```
 ┌─────────────────────────┐    ┌─────────────────────────┐
@@ -189,7 +189,7 @@ A kill switch that the agent is aware of and can reason about is not a reliable 
 
 The sidecar holds the circuit breakers — action budget counter, rate limiter, scope fence, irreversibility gate. These run in the controller process, not in the agent process. An agent that reasons "I should disable the rate limiter to complete this task faster" is reasoning about something in a separate process it cannot modify.
 
-**State on emergency stop.** When an emergency stop fires, the system needs to capture the full agent state — conversation history, tool call log, pending actions — before termination. This state is both the audit log (what did the agent do?) and the recovery point (can the session be resumed from a safe checkpoint?).
+**State on emergency stop.** When an emergency stop fires, the system needs to make available the full agent state — conversation history, tool call log, pending actions — as both audit log (what did the agent do?) and recovery point (can the session be resumed from a safe checkpoint?). This state should be **streamed to durable storage throughout the session**, not captured synchronously at termination time. Attempting to capture state from a hung or hostile process delays the stop and may not succeed — the interrupt must take priority over state capture, with any in-flight writes accepted as potentially incomplete.
 
 ## Monitoring Signals That Should Trigger Automatic Pause
 
@@ -197,7 +197,7 @@ Some conditions warrant automatic session pause without human judgment, because 
 
 **Token and cost rate anomalies.** A session consuming 10× the typical token budget for this task type is worth pausing. Cost-based circuit breakers are both a financial control and a safety control — runaway cost is usually a symptom of a runaway loop.
 
-**Call graph cycles.** If the agent's tool call sequence contains a cycle — calling Tool A, then Tool B, then Tool A again with the same arguments — it's likely stuck in a loop. Loop detection on the call graph is a reliable signal.
+**Call graph cycles.** If the agent's tool call sequence contains a cycle — calling Tool A, then Tool B, then Tool A again with the same arguments — it may be stuck in a loop. This signal is useful but requires tool-specific scoping: repeated identical calls are normal for polling, retry-with-backoff, and eventual-consistency workflows. Scope cycle detection to tools where repetition is semantically unexpected (e.g., file modification, state-changing API calls) rather than applying it universally.
 
 **Resources outside predefined scope.** The agent accesses a file path, API endpoint, or database it wasn't expected to touch. This could be a scope fence violation that slipped through, or it could be the agent reasoning around its constraints. Either way, it warrants pause.
 
