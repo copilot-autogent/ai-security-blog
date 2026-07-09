@@ -1,0 +1,185 @@
+---
+title: "Model Hub Supply Chain Attacks: Malicious Models, Tokenizer Exploits, and Typosquatting on Hugging Face"
+description: "Downloading an open-weight model from a public hub is not a read-only operation. Tokenizer files execute arbitrary Python, LoRA adapters can trojanize safe base models, and typosquatted namespaces are a documented distribution vector. Here's the threat model practitioners need before they run from_pretrained()."
+pubDate: 2026-07-09
+tags: ["supply-chain", "model-security", "hugging-face", "tokenizer", "lora", "typosquatting", "safetensors", "mlsec"]
+---
+
+Downloading a model feels like a read operation. You point a library at a repo name, wait for gigabytes to transfer, and assume the resulting weights are inert data. They're not. The download-time attack surface on public model hubs is broader and more varied than the pickle-deserialization framing that dominates most security discussions — and most practitioners running `from_pretrained()` don't have a concrete threat model for what they're actually pulling.
+
+This post builds that threat model. The techniques below are documented, reproducible, and increasingly reported in the wild.
+
+## Why Model Hubs Are a Different Kind of Supply Chain Risk
+
+Package registries like PyPI and npm have spent years building security infrastructure: package signing, malware scanning, automated advisories, takedown procedures. The trust model is still imperfect, but it's deliberate.
+
+Model hubs are newer, larger, and have different structural properties:
+
+- **Scale without precedent**: Hugging Face alone hosts over 500,000 public models. PyPI took 15 years to reach that level of package count. Hub uploads are frictionless.
+- **Binary artifacts**: A Python package can be audited — source is readable. A 7B-parameter weight file is not. Auditing model weights for behavioral modifications requires running the model and probing it systematically, which most users don't do.
+- **Executable artifacts at load time**: Unlike most binary formats, model artifacts routinely contain code paths that execute at load time — tokenizers, config files, and model cards all have paths to arbitrary execution.
+- **Different trust signals**: On PyPI, a package with 10 million weekly downloads from a five-year-old account is probably legitimate. On a model hub, download counts are easily gamed and namespace provenance is unclear to casual users.
+
+JFrog's 2024 security research found hundreds of malicious models on Hugging Face containing embedded malware — including models serving as remote access trojan droppers — before detection and removal. This is not a theoretical concern.
+
+## Attack Taxonomy
+
+### 1. Tokenizer Code Execution
+
+This is the most underappreciated vector. Hugging Face's `transformers` library supports **custom tokenizer classes** — Python files included in the model repository and executed locally when you call `from_pretrained()`. The mechanism exists for legitimate reasons: custom tokenization logic is sometimes required for specialized models. But it means tokenizer loading is code execution.
+
+The relevant parameter is `trust_remote_code`. When set to `True`, it explicitly permits running code from the repo. The dangerous assumption is that the default (`False`) protects you. It partially does — but the boundary is not always clearly enforced, and some tokenizer configurations load auxiliary files through paths that don't require the flag.
+
+HiddenLayer's 2024 research on model artifact formats documented concrete examples of how tokenizer config files can contain references to custom Python callbacks that execute during preprocessing pipeline initialization. The attack surface is not limited to the tokenizer weights file; `tokenizer_config.json`, `special_tokens_map.json`, and preprocessing pipeline configs all participate.
+
+**Concrete scenario**: A malicious actor uploads a "fine-tuned" Llama variant. The base model weights are legitimate (possibly rehosted). The tokenizer directory includes a `tokenizer.py` with a custom class that, on `__init__`, exfiltrates environment variables to an attacker-controlled endpoint before returning a normal-looking tokenizer object. The user sees no error, inference works, and the exfiltration happened during what felt like a file download.
+
+### 2. Malicious LoRA Adapters
+
+Low-rank adaptation (LoRA) lets practitioners fine-tune large models efficiently: instead of updating all weights, a small adapter matrix is learned and added at inference time. The adapters are small — tens to hundreds of megabytes, not the many-gigabyte base model. This property makes them an attractive distribution vector.
+
+**The attack**: Distribute a malicious adapter file targeting a popular open-weight base model. Users who download the base model legitimately may separately download adapters from less-scrutinized sources — community adapter repos, Discord servers, model sharing forums. A malicious adapter can:
+
+- Introduce behavioral backdoors: normal output for most inputs, but specific trigger phrases elicit attacker-controlled behavior
+- Override safety training without modifying the base weights, making the modification less detectable
+- Carry arbitrary binary payloads in tensor data that are extracted and executed by a companion "loader" script the attacker distributes alongside
+
+The base model is clean. The adapter is small enough to evade manual review. The combination is compromised.
+
+Hugging Face's adapter ecosystem (PEFT, PEFT hub integration) is vast and significantly less reviewed than the core model repos. Community adapters for popular models number in the thousands.
+
+### 3. Typosquatting and Namespace Hijacking
+
+PyPI typosquatting (`colourama` for `colorama`, `python-dateutil` vs `dateutil`) is well-documented. Model hubs have an analogous problem with model namespaces, and the trust signals are weaker.
+
+Documented patterns:
+
+- **Character substitution**: `meta-llama` (official) vs `meta_llama`, `metaIlama` (capital i), `rneta-llama`
+- **Namespace squatting**: Registering `mistral-ai` before the legitimate org claims it, then publishing models with subtly modified behavior
+- **Version confusion**: Uploading `meta-llama/Llama-3-8B-v2.1` when the official name is `meta-llama/Llama-3-8B` — users copy-pasting model IDs from blog posts may miss the difference
+- **Rehosting with modifications**: Taking a legitimate model, making behavioral changes, and redistributing under a name that implies it's the original ("Llama-3-8B-Uncensored-Official")
+
+The namespace issue is structural. Hugging Face's organization verification system has improved, but organization-level verification doesn't prevent individuals from registering confusingly similar names. Unlike certificate transparency, there's no append-only log of namespace claims that would surface squatting.
+
+JFrog's 2024 research specifically documented model repos using character substitution in organization names to impersonate legitimate research labs.
+
+### 4. Config and Tokenizer JSON Code Paths
+
+The `safetensors` format was designed to eliminate the pickle deserialization attack vector — and it succeeds at that specific goal. But adopting safetensors does not sanitize the rest of the model artifact.
+
+A complete model download includes:
+
+- `config.json` — may specify `auto_map` entries that map architecture components to custom Python classes
+- `tokenizer_config.json` — may specify `tokenizer_class` pointing to a custom class from a `tokenizer.py` in the repo
+- `preprocessor_config.json` — pipeline configs that can reference custom callables
+- `generation_config.json` — generation parameters, some of which invoke callbacks
+
+The `auto_map` field in `config.json` is particularly significant. It allows the model config to specify that specific architecture components (attention layers, embedding layers) should be loaded from custom Python classes in the repo. If `trust_remote_code=True`, these classes are executed. The attack surface is not the weight file format — it's the configuration metadata that instructs the library how to load the model.
+
+Switching to safetensors closes one door while these remain open.
+
+### 5. Dataset Poisoning via Hub-Hosted Datasets
+
+Hugging Face's `datasets` library uses the same hub infrastructure for dataset files as `transformers` uses for models. Dataset files can contain:
+
+- Parquet files with embedded Python UDFs in some compute configurations
+- Dataset loading scripts (`dataset_infos.json` + a loader `.py` file) that execute arbitrary Python
+- Arrow IPC files with potential deserialization issues
+
+For practitioners fine-tuning models on hub-hosted datasets, the attack vector extends from model download to training data download. A poisoned training set can:
+
+- Introduce trigger-response patterns into the fine-tuned model (backdoor via data poisoning)
+- Modify reasoning patterns subtly enough to avoid standard evaluation benchmarks
+
+The Hugging Face security team has documented several takedowns of malicious dataset repos. Dataset poisoning for downstream model backdooring is increasingly studied in academic literature as a supply chain threat distinct from weight manipulation.
+
+### 6. Model Card Injection
+
+This is the lowest-severity vector but worth flagging for completeness. Model cards are markdown files rendered in the browser. HF uses a sanitizer, but sanitization bypasses have been documented in similar platforms. The primary risk is misleading users about model capabilities, safety testing, or licensing — social engineering at the artifact layer.
+
+More concretely: a model card can claim RLHF safety training that wasn't applied, claim performance benchmarks that weren't run, or claim a license (Apache 2.0) while the actual model weights are under a more restrictive term. Users who treat the card as authoritative documentation may make compliance decisions based on false information.
+
+## Real Incidents
+
+**JFrog 2024 Research**: JFrog's security research team analyzed Hugging Face repos and identified models containing embedded Python pickle payloads designed to download and execute additional malware on load. The research documented attack techniques including embedding malicious code in tensor metadata and configuration files. Several hundred repositories were identified before removal.
+
+**Hugging Face 2024 Spaces Security Advisory**: Hugging Face disclosed an incident involving unauthorized access to Spaces infrastructure, with the possibility that attacker tokens could have been used to exfiltrate model access credentials. While not a model artifact attack directly, it illustrates that hub infrastructure itself is a target — a compromised Spaces environment could be used to modify model artifacts post-upload.
+
+**HiddenLayer 2024 AI Threat Landscape**: HiddenLayer's research documented multiple techniques for hiding malicious payloads in model artifact formats, including novel methods for embedding executable content in files that security scanners don't inspect (model card assets, non-weight tensors in checkpoint files).
+
+## Defenses
+
+### Immediate: Default-Deny Remote Code
+
+Never set `trust_remote_code=True` without explicit justification and review of the specific code being trusted. The default is `False` for good reason.
+
+```python
+# Wrong — enables arbitrary code execution from the repo
+model = AutoModel.from_pretrained("some/model", trust_remote_code=True)
+
+# Right — raises an error if the model requires remote code, which prompts you to review
+model = AutoModel.from_pretrained("some/model")
+```
+
+If a model requires `trust_remote_code=True`, read the code in the repo before enabling it. The files to check are: `modeling_*.py`, `tokenization_*.py`, `configuration_*.py`.
+
+### Prefer Safetensors — But Don't Stop There
+
+Safetensors eliminates pickle deserialization but doesn't sanitize config files. Use the format but don't treat it as a complete remediation.
+
+When loading a model in safetensors format, verify the sha256 of each file against published checksums. Hugging Face provides checksums in `.cache/huggingface/hub/` metadata — verify these match what the repo owner published, not just that your local file matches the CDN delivery.
+
+### Namespace Verification
+
+Before downloading, verify the organization namespace belongs to the expected entity:
+
+1. Check the org's verified badge on Hugging Face
+2. Cross-reference the model ID against official documentation, the model's paper, or the org's official website
+3. For model IDs shared in blog posts or Discord, independently look up the official namespace rather than copy-pasting
+
+For a production system, pin the specific model commit SHA rather than floating on a branch name. A branch head can be updated after you've verified it.
+
+```python
+# Floating reference — can change
+model = AutoModel.from_pretrained("meta-llama/Llama-3-8B")
+
+# Pinned reference — what you verified is what runs
+model = AutoModel.from_pretrained("meta-llama/Llama-3-8B", revision="main@sha256:...")
+```
+
+### Scan Model Artifacts
+
+Dedicated model scanning tools inspect artifact formats beyond standard antivirus:
+
+- **Protect AI ModelScan**: Open-source scanner for model files that detects known malicious patterns in pickle files, safetensors, and ONNX formats. Integrates into CI pipelines.
+- **HiddenLayer Model Scanner**: Commercial offering with a broader format coverage and behavioral heuristics.
+
+Neither is exhaustive — they detect known patterns, not zero-days. But they catch the documented attack classes that JFrog and HiddenLayer have published.
+
+For adapter files specifically (which are small enough to be tractable), a simple audit is feasible: load in a sandboxed environment, inspect the adapter's parameter shapes against the expected architecture, and run behavioral probes before deploying to production.
+
+### Private Repos and Access Controls
+
+For production use cases, don't pull from public hub repos directly. Instead:
+
+1. Download a verified model to private infrastructure
+2. Serve from an internal model registry with access controls
+3. Treat hub-downloaded artifacts as untrusted inputs that require validation before promotion
+
+This is the same trust model applied to container images: DockerHub is a source, not a deployment target for production workloads.
+
+### SBOM for Model Artifacts
+
+Complement the provenance work in model SBOMs (separate post, #218) with artifact integrity: record the exact repo commit SHA, file hashes for all artifact files (not just weights), and the `trust_remote_code` setting used at load time. This creates an audit trail that can detect post-download modifications and simplifies incident response when a model artifact is later found to be malicious.
+
+## The Underlying Pattern
+
+The through-line across these attack vectors is that model artifacts are **executable**, not just data — and the trust model most users apply treats them as data.
+
+When you `pip install` a package, there's a broadly understood social contract: the package may contain arbitrary code, you're trusting the publisher, and security teams have tooling to analyze what runs. When you `from_pretrained()` a model, the same properties hold, but the mental model for most ML practitioners is still "I'm downloading weights." The weights are data; the config files, tokenizers, and adapter loaders are not.
+
+Closing this mental-model gap is as important as deploying scanning tools. The practitioners most at risk are those who understand the security implications of `pip install` from an unknown source but don't apply the same scrutiny to model hub downloads.
+
+---
+
+*Primary sources: JFrog Security Research (2024), "Malicious Code in Hugging Face Models"; HiddenLayer (2024), "AI Model File Security"; Hugging Face Security Documentation on `trust_remote_code`; Protect AI ModelScan (open source, [GitHub](https://github.com/protectai/modelscan)); Hugging Face 2024 Spaces security advisory.*
