@@ -1,8 +1,8 @@
 ---
 title: "Model Hub Supply Chain Attacks: Malicious Models, Tokenizer Exploits, and Typosquatting on Hugging Face"
-description: "Downloading an open-weight model from a public hub is not a read-only operation. Tokenizer files execute arbitrary Python, LoRA adapters can trojanize safe base models, and typosquatted namespaces are a documented distribution vector. Here's the threat model practitioners need before they run from_pretrained()."
+description: "Downloading an open-weight model from a public hub is not a read-only operation. Custom tokenizer classes and auto_map configs execute arbitrary Python when trust_remote_code is set, LoRA adapters can trojanize safe base models, and typosquatted namespaces are a documented distribution vector. Here's the threat model practitioners need before they run from_pretrained()."
 pubDate: 2026-07-09
-tags: ["supply-chain", "model-security", "hugging-face", "tokenizer", "lora", "typosquatting", "safetensors", "mlsec"]
+tags: ["supply-chain", "model-security", "ai-security", "security", "data-poisoning", "pickling", "fine-tuning", "threat-modeling"]
 ---
 
 Downloading a model feels like a read operation. You point a library at a repo name, wait for gigabytes to transfer, and assume the resulting weights are inert data. They're not. The download-time attack surface on public model hubs is broader and more varied than the pickle-deserialization framing that dominates most security discussions — and most practitioners running `from_pretrained()` don't have a concrete threat model for what they're actually pulling.
@@ -17,7 +17,7 @@ Model hubs are newer, larger, and have different structural properties:
 
 - **Scale without precedent**: Hugging Face alone hosts over 500,000 public models. PyPI launched in 2003 and took roughly 20 years to reach a comparable count. Hub uploads are frictionless.
 - **Binary artifacts**: A Python package can be audited — source is readable. A 7B-parameter weight file is not. Auditing model weights for behavioral modifications requires running the model and probing it systematically, which most users don't do.
-- **Executable artifacts at load time**: Unlike most binary formats, model artifacts routinely contain code paths that execute at load time — tokenizer Python files and custom model class files are executed when `from_pretrained()` loads them.
+- **Executable artifacts at load time**: When `trust_remote_code=True` is set, custom tokenizer classes and model classes from the repo are executed. This is not implicit — it requires explicit opt-in — but it's a routine prompt during model loading and the code runs locally.
 - **Different trust signals**: On PyPI, a package with 10 million weekly downloads from a five-year-old account is probably legitimate. On a model hub, download counts are easily gamed and namespace provenance is unclear to casual users.
 
 JFrog's 2024 security research found hundreds of malicious models on Hugging Face containing embedded malware — including models serving as remote access trojan droppers — before detection and removal. This is not a theoretical concern.
@@ -26,11 +26,11 @@ JFrog's 2024 security research found hundreds of malicious models on Hugging Fac
 
 ### 1. Tokenizer Code Execution
 
-This is the most underappreciated vector. Hugging Face's `transformers` library supports **custom tokenizer classes** — Python files included in the model repository and executed locally when you call `from_pretrained()`. The mechanism exists for legitimate reasons: custom tokenization logic is sometimes required for specialized models. But it means tokenizer loading is code execution.
+This is the most underappreciated vector. Hugging Face's `transformers` library supports **custom tokenizer classes** — Python files included in the model repository and executed locally when `from_pretrained()` loads them with `trust_remote_code=True`. The mechanism exists for legitimate reasons: custom tokenization logic is sometimes required for specialized models. But it means tokenizer loading is code execution.
 
 The relevant parameter is `trust_remote_code`. When set to `True`, it explicitly permits running Python files from the repo. When left at its default (`False`), the library refuses to execute repo-defined classes — but that only protects you if the model doesn't require a custom class. For models that do, you're prompted to set the flag, which is when review of the repo code matters most.
 
-HiddenLayer's 2024 research on model artifact formats documented concrete examples of how tokenizer config files can point to custom Python classes that execute during preprocessing pipeline initialization. The primary code execution path is through `tokenizer_config.json` specifying a `tokenizer_class` that references a Python file in the repo — this is the file that runs when `trust_remote_code=True` is set.
+HiddenLayer's 2024 research on model artifact formats documented concrete examples of how `tokenizer_config.json` can specify a `tokenizer_class` that references a Python file in the repo — this file executes when the user sets `trust_remote_code=True` during loading.
 
 **Concrete scenario**: A malicious actor uploads a "fine-tuned" Llama variant. The base model weights are legitimate (possibly rehosted). The tokenizer directory includes a `tokenizer.py` with a custom class that, on `__init__`, exfiltrates environment variables to an attacker-controlled endpoint before returning a normal-looking tokenizer object. The user enables `trust_remote_code=True` without reading the file, sees no error, inference works, and the exfiltration happened during what felt like a file download.
 
@@ -42,9 +42,9 @@ Low-rank adaptation (LoRA) lets practitioners fine-tune large models efficiently
 
 - Introduce behavioral backdoors: normal output for most inputs, but specific trigger phrases elicit attacker-controlled behavior
 - Override safety training without modifying the base weights, making the modification less detectable
-- Carry arbitrary binary payloads in tensor data that are extracted and executed by a companion "loader" script the attacker distributes alongside
+- Carry arbitrary binary payloads in tensor metadata that a companion script (distributed separately by the attacker) extracts and executes
 
-The base model is clean. The adapter is small enough to evade manual review. The combination is compromised.
+The base model is clean. The adapter is small enough to evade manual review. When combined with a malicious loader distributed on the same channel, the result is compromised.
 
 Hugging Face's adapter ecosystem (PEFT, PEFT hub integration) is vast and significantly less reviewed than the core model repos. Community adapters for popular models number in the thousands.
 
@@ -69,10 +69,10 @@ The `safetensors` format was designed to eliminate the pickle deserialization at
 
 A complete model download includes:
 
-- `config.json` — may specify `auto_map` entries that map architecture components to custom Python classes in the repo
+- `config.json` — may specify `auto_map` entries that redirect `AutoModel`, `AutoTokenizer`, and other `Auto*` class lookups to custom Python implementations in the repo
 - `tokenizer_config.json` — may specify `tokenizer_class` pointing to a custom class from a Python file in the repo
 
-The `auto_map` field in `config.json` is particularly significant. It allows the model config to specify that specific architecture components (attention layers, embedding layers) should be loaded from custom Python classes in the repo. These custom Python files are what actually execute when `trust_remote_code=True` is set. The attack surface is not the weight file format — it's the configuration metadata that instructs the library to load and run custom code.
+The `auto_map` field in `config.json` is particularly significant. It allows the model config to redirect `Auto*` class instantiation — `AutoModel`, `AutoModelForCausalLM`, and similar entry points — to custom Python implementations in the repo. When `trust_remote_code=True` is set, those custom files are loaded and executed. The attack surface is not the weight file format — it's the configuration metadata that instructs the library to load and run custom code.
 
 Switching to safetensors closes one door while `auto_map` and `tokenizer_class` configurations remain open.
 
@@ -95,11 +95,11 @@ More concretely: a model card can claim RLHF safety training that wasn't applied
 
 ## Real Incidents
 
-**JFrog 2024 Research**: JFrog's security research team analyzed Hugging Face repos and identified models containing embedded Python pickle payloads designed to download and execute additional malware on load. The research documented attack techniques including embedding malicious code in tensor metadata and configuration files. Several hundred repositories were identified before removal.
+**JFrog 2024 Research**: JFrog's security research team analyzed Hugging Face repos and identified models containing embedded Python pickle payloads designed to download and execute additional malware on load. The research documented attack techniques including embedding malicious code in tensor metadata and configuration files. Several hundred repositories were identified before removal. ([JFrog Security Blog](https://jfrog.com/blog/data-scientists-targeted-by-malicious-hugging-face-ml-models-with-silent-backdoor/))
 
-**Hugging Face 2024 Spaces Security Advisory**: Hugging Face disclosed an incident involving unauthorized access to Spaces infrastructure, potentially exposing API tokens used by Spaces applications. This illustrates that hub infrastructure itself is a target — the incident prompted HF to recommend rotating secrets and revoke affected tokens, and highlights that the trust perimeter extends beyond individual model files to the platform's supporting infrastructure.
+**Hugging Face 2024 Spaces Security Advisory**: Hugging Face disclosed an incident involving unauthorized access to Spaces infrastructure, potentially exposing API tokens used by Spaces applications. The incident illustrates that hub infrastructure itself is a target — and that token exposure at the platform level has downstream implications for the security of hosted artifacts. ([HF Security Advisory](https://huggingface.co/blog/space-secrets-disclosure))
 
-**HiddenLayer 2024 AI Threat Landscape**: HiddenLayer's research documented multiple techniques for hiding malicious payloads in model artifact formats, including novel methods for embedding executable content in files that security scanners don't inspect (model card assets, non-weight tensors in checkpoint files).
+**HiddenLayer 2024 AI Threat Landscape**: HiddenLayer's research documented multiple techniques for hiding malicious payloads in model artifact formats, including novel methods for embedding executable content in files that security scanners don't inspect (model card assets, non-weight tensors in checkpoint files). ([HiddenLayer Research](https://hiddenlayer.com/research/))
 
 ## Defenses
 
@@ -115,13 +115,13 @@ model = AutoModel.from_pretrained("some/model", trust_remote_code=True)
 model = AutoModel.from_pretrained("some/model")
 ```
 
-If a model requires `trust_remote_code=True`, read the code in the repo before enabling it. The files to check are: `modeling_*.py`, `tokenization_*.py`, `configuration_*.py`. Review these files at the specific commit you intend to use — not just at whatever HEAD points to.
+If a model requires `trust_remote_code=True`, read the code in the repo before enabling it. The files to check include: `modeling_*.py`, `tokenization_*.py`, `configuration_*.py`, `processing_*.py`, `feature_extraction_*.py`, and any `__init__.py` that the repo exposes as a package. Review at the specific commit you intend to use, not at whatever HEAD currently points to.
 
 ### Prefer Safetensors — But Don't Stop There
 
 Safetensors eliminates pickle deserialization but doesn't sanitize config files or custom Python code. Use the format but don't treat it as a complete remediation.
 
-To verify file integrity, use the `huggingface_hub` Python library or the Hub REST API to retrieve the commit metadata for the specific revision you're downloading. For LFS-tracked weight files, the Hub exposes the LFS OID (SHA256 of the blob) per file; for non-LFS files, you can compare the file's git SHA. Cross-reference these against locally-computed hashes before loading any artifact in a sensitive environment.
+To verify file integrity for weight files (which are typically LFS-tracked), use the `huggingface_hub` Python library to retrieve the LFS SHA256 OID for each file at the specific commit you're pinning to, then compare against locally-computed SHA256 hashes of the downloaded files. For configuration files (non-LFS), compute SHA256 locally and cross-reference with a trusted out-of-band copy.
 
 ### Namespace Verification
 
@@ -148,7 +148,7 @@ model = AutoModel.from_pretrained(
 
 Dedicated model scanning tools inspect artifact formats beyond standard antivirus:
 
-- **Protect AI ModelScan**: Open-source scanner for model files that detects known malicious patterns in pickle files, safetensors, and ONNX formats. Integrates into CI pipelines.
+- **Protect AI ModelScan**: Open-source scanner for model files that detects known malicious patterns in pickle files, safetensors, and ONNX formats. Integrates into CI pipelines. ([GitHub](https://github.com/protectai/modelscan))
 - **HiddenLayer Model Scanner**: Commercial offering with broader format coverage and behavioral heuristics.
 
 Neither is exhaustive — they detect known patterns, not zero-days. But they catch the documented attack classes that JFrog and HiddenLayer have published.
@@ -173,10 +173,10 @@ Complement model provenance governance with artifact integrity: record the exact
 
 The through-line across these attack vectors is that model artifacts are **executable**, not just data — and the trust model most users apply treats them as data.
 
-When you `pip install` a package, there's a broadly understood social contract: the package may contain arbitrary code, you're trusting the publisher, and security teams have tooling to analyze what runs. When you `from_pretrained()` a model, the same properties hold, but the mental model for most ML practitioners is still "I'm downloading weights." The weights are data; the config files, tokenizers, and adapter loaders are not.
+When you `pip install` a package, there's a broadly understood social contract: the package may contain arbitrary code, you're trusting the publisher, and security teams have tooling to analyze what runs. When you `from_pretrained()` a model, the same properties hold, but the mental model for most ML practitioners is still "I'm downloading weights." The weights are data; the config files, custom tokenizers, and adapter loaders are not.
 
 Closing this mental-model gap is as important as deploying scanning tools. The practitioners most at risk are those who understand the security implications of `pip install` from an unknown source but don't apply the same scrutiny to model hub downloads.
 
 ---
 
-*Primary sources: JFrog Security Research (2024), "Malicious Code in Hugging Face Models"; HiddenLayer (2024), "AI Model File Security"; Hugging Face Security Documentation on `trust_remote_code`; Protect AI ModelScan (open source, [GitHub](https://github.com/protectai/modelscan)); Hugging Face 2024 Spaces security advisory.*
+*Primary sources: JFrog Security Research (2024), ["Malicious Code in Hugging Face Models"](https://jfrog.com/blog/data-scientists-targeted-by-malicious-hugging-face-ml-models-with-silent-backdoor/); HiddenLayer (2024), ["AI Model File Security"](https://hiddenlayer.com/research/); [Hugging Face Security Documentation on `trust_remote_code`](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModel.from_pretrained.trust_remote_code); [Protect AI ModelScan](https://github.com/protectai/modelscan); [Hugging Face 2024 Spaces security advisory](https://huggingface.co/blog/space-secrets-disclosure).*
