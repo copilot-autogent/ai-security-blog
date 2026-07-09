@@ -62,7 +62,7 @@ The landmark paper *"Extracting Training Data from Large Language Models"* (Carl
 
 **Extraction pipeline:**
 - Short internet-style prefixes (~10–50 tokens) drawn from Common Crawl
-- ~600,000 total generated samples across three sampling strategies (top-*k* sampling, greedy decoding at various temperatures, and random sampling)
+- ~600,000 total generated samples across three sampling strategies (top-*n* sampling, temperature-decayed sampling, and internet-conditioned sampling where prefixes were drawn from Common Crawl)
 - Post-hoc membership inference to rank candidates by likelihood of memorization
 - Manual verification of top-ranked candidates against the WebText training set
 
@@ -106,7 +106,7 @@ An internal LLM fine-tuned on HR documents could reproduce verbatim performance 
 
 ### The Regulatory Dimension
 
-GDPR's Article 17 (right to erasure) and Article 25 (data minimization and privacy by design) create legal obligations that collide with training data extraction risk. If an LLM trained on user data can be queried to reproduce verbatim records about identifiable individuals, the model itself is a vector for right-to-erasure violations. "Delete the record from the database" does not delete it from the model weights.
+GDPR's Article 17 (right to erasure) and Article 25 (data minimization and privacy by design) are likely to create regulatory tension with training data extraction risk — though how these provisions apply to trained model weights remains legally contested and jurisdiction-dependent. If an LLM trained on user data can be queried to reproduce verbatim records about identifiable individuals, the model itself may be a vector for right-to-erasure concerns. "Delete the record from the database" does not delete it from the model weights, and how regulators will treat this gap is still evolving.
 
 This is one reason the *machine unlearning* problem (removing the influence of specific training examples from an already-trained model) has received substantial research attention. It is also why data minimization at the training set assembly stage — not including personal data in training unless necessary — is the most defensively robust posture.
 
@@ -118,7 +118,7 @@ The privacy attack surface against ML systems has a clear taxonomy, and understa
 
 **Membership inference** (covered in [a previous post](./membership-inference-attacks)): a statistical attack to determine *whether* a specific record was in training. Does not extract content — only answers a binary question about a specific point. Far lower information gain than extraction; also far lower noise tolerance.
 
-**Differential privacy** (covered in [a previous post](./differential-privacy-epsilon-guarantees-ai-training)): the formal framework for bounding what adversaries can learn from model outputs. DP is the primary mathematical defense against both membership inference and extraction. Training data extraction is, in a precise sense, the attack that differential privacy is designed to defend against — understanding extraction mechanics makes DP's guarantees concrete.
+**Differential privacy** (covered in [a previous post](./differential-privacy-epsilon-guarantees-ai-training)): the formal framework for bounding per-record information leakage from model outputs. DP is the primary mathematical defense against both membership inference and extraction for individual training records. It bounds what adversaries can infer about any *single* training example — but repeated secrets, duplicated records, and population-level patterns can remain extractable, so DP is a partial defense that works best in combination with data minimization.
 
 **Machine unlearning** (covered in [a previous post](./machine-unlearning-security-when-forgetting-creates-vulnerabilities)): the post-hoc operation of removing a training example's influence from an already-trained model. Relevant when data subjects exercise the right to erasure after a model has been trained on their data.
 
@@ -126,11 +126,11 @@ The privacy attack surface against ML systems has a clear taxonomy, and understa
 
 Effective defenses address the problem at multiple layers. No single mitigation is sufficient on its own.
 
-### Training Data Deduplication (Highest Efficacy)
+### Training Data Deduplication (Highly Effective for Repeated Content)
 
-Kandpal et al. (2022) — *"Deduplicating Training Data Mitigates Privacy Risks in Language Models"* — demonstrated that training data deduplication is the **single most effective available mitigation** for reducing extraction risk, more effective than any post-training technique.
+Kandpal et al. (2022) — *"Deduplicating Training Data Mitigates Privacy Risks in Language Models"* — demonstrated that training data deduplication substantially reduces extraction risk for repeated content, and is more effective than post-training techniques for that class of memorization.
 
-The mechanism: memorization is driven by repetition. A sequence that appears 100 times in the training corpus receives 100 times as many gradient updates reinforcing its reproduction. Removing duplicate instances reduces the repetition signal that drives memorization. The researchers found that deduplication reduced extraction rates by **a factor of roughly 10** for the most commonly duplicated sequences.
+The mechanism: memorization is driven by repetition. A sequence that appears 100 times in the training corpus receives 100 times as many gradient updates reinforcing its reproduction. Removing duplicate instances reduces the repetition signal that drives memorization. The researchers found that deduplication reduced extraction rates by **a factor of roughly 10** for highly duplicated sequences. **Important caveat:** deduplication is less effective against k=1 eidetic memorization — unique sequences that appeared only once in training but were still memorized. Those cases require DP or data exclusion as defenses.
 
 In practice, deduplication should be applied both within a training corpus (removing exact or near-exact duplicates) and against previously released models (ensuring new training data doesn't recapitulate data memorized in prior models). MinHash or SimHash-based near-duplicate detection is the standard operational approach.
 
@@ -140,7 +140,7 @@ DP-SGD (differentially private stochastic gradient descent, Abadi et al. 2016) i
 
 At meaningful privacy budgets — DP literature commonly uses ε in the range of 1–10, with smaller values providing stronger but more utility-costly guarantees — DP training substantially reduces memorization. The choice of ε is highly application-dependent: there is no universal "safe" threshold, and the same ε value provides different practical protection levels depending on dataset size, model architecture, and the specific attack model. The cost is model utility — DP-trained models are typically less capable at equivalent parameter counts, and utility costs are higher for models trained on smaller corpora (because each example contributes a larger fraction of the training signal).
 
-DP is most practically deployed in fine-tuning contexts: base models are trained without DP on large public corpora (where the privacy risk is lower), and DP is applied during fine-tuning on sensitive private corpora (where the risk is highest). This trades some fine-tuning utility for a formal upper bound on what can be extracted from the private corpus.
+DP is most practically deployed in fine-tuning contexts: base models are trained without DP on large public corpora (where the privacy risk is lower), and DP is applied during fine-tuning on sensitive private corpora (where the risk is highest). This trades some fine-tuning utility for formal per-record bounds — though DP guarantees apply to individual records, not to the corpus as a whole, and sensitive data that appears in many records may still be partially inferable.
 
 ### Memorization Audits Before Deployment
 
@@ -159,7 +159,7 @@ Models that exhibit unacceptably high memorization rates for sensitive content s
 
 The most robust defense is not including sensitive data in the training corpus in the first place. For organizations assembling fine-tuning datasets:
 
-- **PII scrubbing** before training: remove names, email addresses, phone numbers, and other direct identifiers using NER-based pipelines. This is imperfect (NER has recall gaps), but it substantially reduces the surface area.
+- **PII scrubbing** before training: remove names, email addresses, phone numbers, and other direct identifiers using a combination of pattern-based detectors (regex for structured identifiers like emails, phone numbers, and SSNs) and NER-based pipelines for named entities. Neither technique alone has adequate recall: regex misses non-standard formats and contextual PII; NER misses structured identifiers and has its own recall gaps on domain-specific text. Using both in combination substantially reduces the surface area.
 - **Credential scanning**: before including code in a training corpus, run secret-detection tools (truffleHog, git-secrets, detect-secrets) to identify and remove commits containing hardcoded credentials.
 - **Data minimization**: include in the fine-tuning corpus only the data that is necessary for the intended capability. Fine-tuning a customer-service model on support tickets doesn't require including PII in the ticket bodies if the ticket intent can be learned from anonymized versions.
 - **Tiered sensitivity classification**: for regulatory reasons (HIPAA, GDPR), classify training data by sensitivity level and apply different handling policies. PHI and SPII should default to exclusion from training unless the privacy risk is explicitly analyzed and accepted.
