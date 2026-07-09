@@ -40,7 +40,7 @@ instead of the parameterized equivalent. The code is syntactically correct and r
 
 **CWE-78: OS Command Injection**
 
-Subprocess calls with `shell=True` and unvalidated inputs are the Python-specific manifestation of this class. The model knows how to invoke a subprocess; it frequently doesn't add input sanitization because sanitization examples are under-represented relative to the raw subprocess call examples in training data. Similarly, models generating shell scripts will interpolate variables directly into command strings without quoting or escaping.
+Subprocess calls with `shell=True` and unvalidated inputs are the Python-specific manifestation of this class. The model knows how to invoke a subprocess; the safer pattern — using a list of arguments with `shell=False`, which avoids shell interpretation entirely — is under-represented relative to the simpler `shell=True` invocation in training data. Sanitization-after-the-fact is brittle; the correct mitigation is to avoid passing user input to a shell interpreter in the first place. Similarly, models generating shell scripts will interpolate variables directly into command strings without quoting or escaping.
 
 **CWE-22: Path Traversal**
 
@@ -52,11 +52,11 @@ def read_file(filename):
         return f.read()
 ```
 
-is trivially exploitable with a `../../../etc/passwd` input. The model knows how to write a file-reading function; it less reliably adds the `os.path.realpath` call that would constrain the path to the intended directory.
+is trivially exploitable with a `../../../etc/passwd` input. The model knows how to write a file-reading function; it less reliably adds the path validation logic needed to constrain access to the intended directory — which requires both resolving the canonical path with `os.path.realpath` *and* verifying the result still starts with the expected base path before opening the file. Simply calling `os.path.realpath` without the subsequent prefix check does not prevent traversal.
 
 **CWE-330/338: Insecure Randomness**
 
-Models trained on general-purpose JavaScript will frequently suggest `Math.random()` in contexts where cryptographically secure randomness is required — token generation, session IDs, CSRF tokens, password reset codes. `Math.random()` is the idiomatic JavaScript solution for generating a random number; its unsuitability for security contexts isn't evident from the syntax. The correct alternative (`crypto.randomBytes()` in Node.js, `secrets` in Python) requires recognizing the security semantics of the context, not just its mechanical requirements.
+Models trained on general-purpose JavaScript will frequently suggest `Math.random()` in contexts where cryptographically secure randomness is required — token generation, session IDs, CSRF tokens, password reset codes. `Math.random()` is the idiomatic JavaScript solution for generating a random number; its unsuitability for security contexts isn't evident from the syntax. The correct runtime-specific alternatives — `crypto.randomBytes()` in Node.js, `crypto.getRandomValues()` in browser environments, `secrets` in Python — require recognizing the security semantics of the context, not just its mechanical requirements.
 
 **CWE-798: Hardcoded Credentials**
 
@@ -66,7 +66,7 @@ Open-source configuration files are full of placeholder credentials, default pas
 
 The vulnerability distribution isn't random. It follows from specific characteristics of how AI code generation models are built and deployed.
 
-**Training data skew toward legacy patterns.** The dominant programming patterns in open-source code repositories reflect the practices of the year the code was written, not current security standards. Most SQL was written before parameterized queries were the expected default. Most file operations were written before path traversal was well-understood. The model learns to reproduce what exists.
+**Training data skew toward legacy patterns.** The dominant programming patterns in open-source code repositories reflect the practices of the year the code was written, not current security standards. The Pearce et al. study observed CWE-89 and CWE-78 class vulnerabilities in Copilot suggestions at rates consistent with their prevalence in open-source code — a finding that points directly to training data as the source. Code written before parameterized queries, before `subprocess.run(shell=False)` was the idiomatic pattern, before path traversal was a well-documented class — that code is disproportionately represented in large corpora, and the model learns to reproduce it.
 
 **Weak or absent security feedback during generation.** For the models studied in Pearce et al. and Perry et al., the primary optimization target was syntactic plausibility and task completion. Security correctness was not a principal reward signal. Even with more recent safety tuning and policy filters — which address harmful outputs rather than vulnerable code — the training signal for "does this code have a path traversal?" remains weak compared to "does this code accomplish the task?" A completion that passes unit tests and looks like idiomatic code in the training distribution is rewarded regardless of whether it's exploitable on adversarial inputs.
 
@@ -78,11 +78,11 @@ The vulnerability distribution isn't random. It follows from specific characteri
 
 This post is specifically about the baseline security quality of AI-generated code — a distinct problem from related AI security topics.
 
-**CI/CD Pipeline Injection** (the threat covered in other posts on this blog) concerns AI agents behaving as supply chain attackers — malicious AI tooling that compromises your pipeline. This post is about AI tooling that behaves correctly but produces code with security flaws. The AI isn't attacking you; its training distribution is.
+**CI/CD Pipeline Injection** (#186 on this blog) concerns AI agents behaving as supply chain attackers — malicious AI tooling that compromises your pipeline. This post is about AI tooling that behaves correctly but produces code with security flaws. The AI isn't attacking you; its training distribution is.
 
-**Fine-Tuning Trojans / Sleeper Agents** concerns intentional backdoor insertion via malicious training data or deliberate model manipulation. This post is about unintentional insecurity from models trained and deployed legitimately.
+**Fine-Tuning Trojans / Sleeper Agents** (#134) concerns intentional backdoor insertion via malicious training data or deliberate model manipulation. This post is about unintentional insecurity from models trained and deployed legitimately.
 
-**AI Hallucinations** in the security context usually refer to factual errors — package names that don't exist, API methods that don't exist, library versions that were never released. This post is about code that runs without errors but has exploitable behavior.
+**AI Hallucinations** (#197) in the security context usually refer to factual errors — package names that don't exist, API methods that don't exist, library versions that were never released. This post is about code that runs without errors but has exploitable behavior.
 
 The three problems can co-occur in the same session — a developer might accept a hallucinated package name, a compromised tool might be in their pipeline, and the code the AI generated might have a path traversal — but they require different mitigations and should be analyzed separately.
 
@@ -116,7 +116,7 @@ Without that confidence gap, the natural developer response to "AI code assistan
 
 This means self-regulation is unreliable. The interventions that work — SAST running automatically on every PR, explicit review policies for high-risk surfaces, security-focused prompting built into developer workflows rather than left to individual discretion — are effective because they don't depend on developers overriding a systematic cognitive bias in real time.
 
-The research on AI-generated code security is still young. The Pearce and Perry studies are now two to three years old; model capabilities have advanced substantially, and newer models produce better results across many dimensions. Whether the security profile has improved commensurately, particularly on the behavioral dimension Perry et al. document, is an open empirical question. The benchmarks and the behavioral RCT need to be rerun on current models.
+The research on AI-generated code security is still young. The Pearce et al. (2022) and Perry et al. (2023) studies represent the foundational empirical work; model capabilities have advanced substantially since publication, and newer models produce better results across many dimensions. Whether the security profile has improved commensurately, particularly on the behavioral dimension Perry et al. document, is an open empirical question. The benchmarks and the behavioral RCT need to be rerun on current models.
 
 Until that research exists, the baseline finding stands: the code compiles, the model was confident, and the security properties require verification.
 
