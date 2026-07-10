@@ -221,3 +221,5 @@ The practitioner takeaway: **treat DP as a meaningful defense only when you can 
 - Apple. (2016). Differential privacy overview. Apple Privacy Technical Whitepaper. Announced at WWDC 2016.
 - Dwork, C., Rothblum, G. N., & Vadhan, S. (2010). Boosting and differential privacy. *IEEE Symposium on Foundations of Computer Science (FOCS 2010)*.
 - Carlini, N., Tramèr, F., Wallace, E., Jagielski, M., Herbert-Voss, A., Lee, K., Roberts, A., Brown, T., Song, D., Erlingsson, Ú., Oprea, A., & Raffel, C. (2021). Extracting training data from large language models. *USENIX Security 2021*.
+
+*Also in the computational privacy track: [Privacy-Preserving AI Inference: TEEs, Homomorphic Encryption, and Confidential Computing](./privacy-preserving-ai-inference-tee-homomorphic-encryption-confidential-computing) covers hardware-enforced and cryptographic approaches to protecting query data at inference time — a distinct privacy protection goal from DP's training-phase guarantees.*

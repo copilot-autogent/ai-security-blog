@@ -35,6 +35,8 @@ The guarantee has two components:
 
 **Remote attestation.** A TEE can produce a cryptographically signed report — an attestation — that describes the state of the trusted environment, the hardware it is running on, and the firmware version. A client can verify this attestation against the hardware manufacturer's certificate authority before sending sensitive data.
 
+Attestation is most useful when it is *bound to the data channel* — that is, when the client not only verifies the attestation report, but also ensures that data is encrypted directly to a key that only the attested workload can access. In AWS Nitro Enclaves, this is the standard pattern: data enters the enclave encrypted with a key that KMS will only release to an enclave with a verified attestation. In TDX or SEV-SNP deployments, the client should use the attestation to establish a TLS session terminating *inside* the confidential VM, or to seal data to a key proven by the attestation — simply verifying an attestation report separately from the data path does not prevent a relay or redirection attack.
+
 The precision of what is attested varies by TEE architecture. In SGX-style enclave models, the attestation covers the specific application binary (an *MRENCLAVE* measurement). In VM-level TEEs like Intel TDX and AMD SEV-SNP, the attestation covers the VM's boot and launch measurements — the initial memory state of the guest, its configuration, and the firmware — rather than the running application binary directly. Application-level code identity verification (binding a specific inference server version to an attestation) requires additional tooling above the hardware attestation layer, such as a trusted launch policy that measures the guest kernel and bootloader.
 
 What attestation reliably provides in all TEE implementations:
@@ -42,7 +44,7 @@ What attestation reliably provides in all TEE implementations:
 - Evidence that the memory isolation guarantee is in effect
 - A hardware-rooted chain of trust that can be verified cryptographically, not just contractually
 
-Remote attestation is the mechanism that converts a hardware property into a trust relationship between a client and a remote service — with the caveat that the granularity of trust depends on what the specific TEE architecture measures.
+Remote attestation is the mechanism that converts a hardware property into a trust relationship between a client and a remote service — with the caveat that the granularity of trust depends on what the specific TEE architecture measures, and the protection is only meaningful when attestation is cryptographically bound to the data channel.
 
 ### The Major TEE Implementations
 
@@ -177,6 +179,8 @@ Application-level code version verification (binding a specific inference server
 The protections these TEEs provide are strong against the specific threat model: a curious or compromised cloud provider's infrastructure staff cannot read plaintext patient data during inference within the protected boundary, and this protection is hardware-enforced rather than purely contractual. Side-channel residual risks (as described above) remain.
 
 The deployment overhead is manageable (5–15% for CPU-side TEEs on modern hardware), and existing inference frameworks (PyTorch, TensorFlow) can run inside TEEs without significant modification. For GPU inference, Nvidia's Confidential Computing on H100 extends this protection to the GPU, though with less deployment maturity as of 2025–2026.
+
+A critical architectural note: TEEs protect data *within* the isolated boundary. If TLS terminates outside the confidential VM (at a load balancer, API gateway, or reverse proxy), if the request passes through logging infrastructure on the parent instance before reaching the enclave, or if telemetry captures query content before it enters the TEE, the provider can still see plaintext at those points — the TEE's protection begins where the data enters the isolated boundary, not at the client. The correct deployment pattern terminates TLS *inside* the confidential VM or enclave, with the TLS private key provisioned via attestation-gated key management (e.g., KMS in the AWS case, or equivalent). Deploying an inference service inside a TEE without ensuring the full data path enters the TEE is a partial deployment that may create compliance-documentation risk without the actual technical protection.
 
 HE is not practical for this scenario unless the AI task is a simple logistic regression or decision tree. LLM-based clinical note analysis under FHE is not deployable at any reasonable latency.
 

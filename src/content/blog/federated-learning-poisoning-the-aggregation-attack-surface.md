@@ -144,3 +144,5 @@ Cao, X., Fang, M., Liu, J., & Gong, N. Z. (2020/2022). *FLTrust: Byzantine-robus
 NIST. (2023). *Artificial Intelligence Risk Management Framework (AI RMF 1.0)*. National Institute of Standards and Technology. NIST AI 100-1.
 
 NIST. (2023). *Guidelines for Evaluating Differential Privacy Guarantees*. National Institute of Standards and Technology. NIST SP 800-226.
+
+*Also in the computational privacy track: [Privacy-Preserving AI Inference: TEEs, Homomorphic Encryption, and Confidential Computing](./privacy-preserving-ai-inference-tee-homomorphic-encryption-confidential-computing) covers inference-phase privacy — a complementary protection to the training-phase privacy guarantees discussed here.*
