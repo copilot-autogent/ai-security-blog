@@ -29,11 +29,11 @@ CPU memory benefits from decades of OS-enforced isolation: each process receives
 
 The practical concern in LLM serving: a model serving process handling multiple requests reuses VRAM across requests for efficiency — KV-cache blocks, activation tensors, and intermediate buffers are allocated, used, freed, and reallocated within the same CUDA context. If the process is shared across tenants (as is common in cloud multi-tenant GPU clusters), residual data from one tenant's request may be accessible to code running in the context of a subsequent request.
 
-**What the research shows.** GPU memory disclosure vulnerabilities in multi-tenant cloud contexts have been studied. Researchers at the University of North Carolina (Dutta et al., "Leaky GPUs: Privacy Implications of GPU Memory Reuse," USENIX Security 2023) demonstrated that memory allocated in a new CUDA context on a GPU previously used by another process could contain residual data, exploiting the context-initialization path rather than within-context reuse. Their work focused on GPU virtualization in cloud settings (NVIDIA vGPU, GPU passthrough) and showed that driver-level context initialization did not always reliably zero prior process data.
+**What the research shows.** GPU memory disclosure vulnerabilities in multi-tenant cloud contexts have been studied as a general class. Research on GPU memory residual data in virtualized multi-tenant settings has examined whether context initialization reliably zeros prior tenants' GPU memory when GPUs are shared across security boundaries — for instance, in cloud GPU pools using vGPU or GPU passthrough. The general finding is that GPU driver context initialization does not always provide zeroing guarantees equivalent to what OS-level process isolation provides for CPU memory, and that residual data from prior GPU contexts can in some configurations survive context switches.
 
-The specific attack surface for LLM serving frameworks is slightly different: within a single multi-tenant serving process (rather than across OS processes), allocator reuse within the same CUDA context is the vector. This variant is structurally more concerning because the driver-level cross-context scrubbing (which does exist) doesn't apply. Published research specifically demonstrating cross-tenant KV-cache or activation-data recovery *within a single vLLM/Triton serving process* has not appeared in the peer-reviewed literature as of this writing. The structural risk is grounded in CUDA's documented non-zeroing behavior; the specific exploitability against production serving frameworks is not independently confirmed.
+The specific attack surface for LLM serving frameworks is slightly different: within a single multi-tenant serving process (rather than across OS processes), allocator reuse within the same CUDA context is the vector. This variant is structurally more concerning because any driver-level cross-context behavior doesn't apply to within-context reuse. Published research specifically demonstrating cross-tenant KV-cache or activation-data recovery *within a single vLLM/Triton serving process* has not appeared in the peer-reviewed literature as of this writing. The structural risk is grounded in CUDA's documented non-zeroing behavior; the specific exploitability against production serving frameworks is not independently confirmed.
 
-> **⚠️ Confidence note.** The cross-context GPU memory leakage described by Dutta et al. is confirmed research on GPU virtualization contexts. Extension to within-process multi-tenant LLM serving is a structural inference from CUDA semantics, not a separately confirmed exploit. Treat within-process residual risk as a well-founded concern, not a demonstrated production attack.
+> **⚠️ Confidence note.** GPU memory residual data in virtualized multi-tenant contexts is a studied problem class in the security research literature; however, a specific paper and venue citation for this exact attack profile on LLM serving has not been independently verified and is omitted here. Extension to within-process multi-tenant LLM serving is a structural inference from CUDA semantics, not a separately confirmed exploit. Treat within-process residual risk as a well-founded concern, not a demonstrated production attack.
 
 ### Defenses
 
@@ -53,7 +53,7 @@ Self-hosted LLM serving frameworks are designed for ease of deployment, which me
 
 vLLM is an open-source inference engine optimized for high throughput via PagedAttention (a KV-cache management technique that applies virtual memory concepts to attention caches). It exposes an OpenAI-compatible HTTP API by default.
 
-**Default configuration exposure.** vLLM's server (`vllm serve`) listens on `0.0.0.0:8000` by default — all network interfaces, not just localhost. Authentication is **not enabled by default**. An operator who launches vLLM on a network-accessible host without additional network controls exposes an API that accepts arbitrary inference requests from any reachable client, with no authentication required.
+**Default configuration exposure.** vLLM's server (`vllm serve`) default bind address has varied across versions — check the documentation for your deployed version. In many commonly-deployed configurations, vLLM binds to all interfaces (`0.0.0.0:8000`), though some versions default to localhost. Authentication is **not enabled by default** in any version. An operator who launches vLLM on a network-accessible host without additional network controls or explicit API key configuration exposes an API that accepts arbitrary inference requests from any reachable client, with no authentication required. Verify the default `--host` behavior for your specific vLLM version before assuming network-only exposure.
 
 **API key configuration.** vLLM supports an `--api-key` flag to require a bearer token; it also supports `--ssl-keyfile` and `--ssl-certfile` for TLS. These are opt-in; nothing in the default startup path enforces them.
 
@@ -83,13 +83,13 @@ Ollama is a popular tool for running LLMs locally, designed for developer conven
 
 **No authentication.** Ollama has no built-in authentication mechanism. The API (which follows an OpenAI-compatible format for `/api/chat` and similar endpoints) accepts requests from any client that can reach the port.
 
-**Model pull from arbitrary sources.** Ollama's pull command (`ollama pull <model>`) fetches models from the Ollama registry (registry.ollama.ai) by default but also supports pulling from arbitrary URLs. Models are identified by name and tag; pull does not perform cryptographic verification of model manifests against a trust root before loading. This means a compromised registry entry or a spoofed registry could deliver modified model weights without the client detecting the substitution. Ollama uses SHA256 digests for model layers and verifies them against manifest values, providing integrity within a pull operation — but only against the manifest itself, not against a separately-held trust anchor (e.g., a signed manifest from the model author).
+**Model pull and integrity.** Ollama's pull command (`ollama pull <model>`) fetches models from the Ollama registry (registry.ollama.ai). Models are identified by name and tag. Ollama uses SHA256 digests for model layers and verifies them against manifest values, providing integrity within a pull operation — but only against the manifest itself, not against a separately-held trust anchor (e.g., a signed manifest from the model author). If the Ollama registry entry itself were compromised (e.g., through a supply chain attack on a popular model), the checksum in the registry would reflect the malicious weights and verification would pass.
 
-**Documented security advisory context.** Ollama has received community reports of SSRF vulnerabilities via model file directives (specifically via the `FROM` parameter in Modelfiles, which can cause the Ollama daemon to make arbitrary HTTP requests — creating an SSRF vector). The Ollama project has addressed some of these in updates; operators should keep Ollama updated and restrict inbound access rather than relying solely on application-layer controls.
+**Documented security vulnerabilities.** Ollama has a documented CVE history including path traversal and file-read vulnerabilities (CVE-2024-37032 "Probllama," CVE-2024-39719–39722). The Ollama project has addressed these in updates; operators should keep Ollama updated and restrict inbound access rather than relying solely on application-layer controls.
 
 ### llama.cpp Server
 
-llama.cpp's built-in HTTP server (`./server`) has a similar exposure profile to Ollama: no authentication by default, listens on localhost by default but configurable for all interfaces. The server exposes completion, chat, and embedding endpoints plus administrative endpoints (model slot status, health). Running llama.cpp server on an internet-accessible host without a reverse proxy is a common misconfiguration pattern in hobbyist and small-team deployments.
+llama.cpp's built-in HTTP server (`llama-server`, formerly `./server` — the standalone binary was renamed in mid-2024) has a similar exposure profile to Ollama: no authentication by default, listens on localhost by default but configurable for all interfaces. The server exposes completion, chat, and embedding endpoints plus administrative endpoints (model slot status, health). Running llama-server on an internet-accessible host without a reverse proxy is a common misconfiguration pattern in hobbyist and small-team deployments.
 
 ---
 
@@ -137,7 +137,7 @@ A malicious model at the framework level could, in theory, include code executed
 
 Model serving containers typically require access to the host GPU via Nvidia's container runtime, which mounts the Nvidia device files and libraries into the container. The attack surface here involves the host GPU driver — a kernel-mode component. A vulnerability in the Nvidia kernel driver that is exploitable from a container process could allow container escape to the host.
 
-**Confirmed vulnerabilities.** Nvidia's GPU driver has a history of CVEs with container breakout potential. CVE-2024-0090 (CVSS 7.8) is a recent example: a buffer overflow in the Nvidia GPU display driver that could allow a privileged attacker to escalate privileges. Nvidia publishes security bulletins for driver vulnerabilities; operators self-hosting on bare metal or in Docker deployments should monitor [Nvidia's security bulletins](https://www.nvidia.com/en-us/security/) and apply driver updates.
+**Confirmed vulnerabilities.** Nvidia's GPU driver has a history of CVEs with privilege escalation implications. CVE-2024-0090 (CVSS 7.8) is a documented example: an out-of-bounds write in the Nvidia GPU kernel driver on Windows that could allow a privileged user to cause code execution or denial of service. While the specific scope of each CVE varies by platform and privilege context, the general class — kernel-mode driver vulnerabilities reachable from GPU-accessing processes — is relevant to container security posture. Nvidia publishes security bulletins for driver vulnerabilities; operators self-hosting on bare metal or in Docker deployments should monitor [Nvidia's security bulletins](https://www.nvidia.com/en-us/security/) and apply driver updates. Operators should review the specific affected platform and privilege requirements for each CVE rather than assuming generic container escape applicability.
 
 Container GPU isolation is also affected by how the Nvidia container runtime is configured. The default `--gpus all` Docker flag mounts broad GPU access; restricting to specific device files and cgroups limits the attack surface but requires deliberate configuration.
 
@@ -154,7 +154,7 @@ This attack class was explored in depth in a previous post on [adversarial promp
 ### Network Isolation
 
 - [ ] **Never expose model serving ports directly to the internet.** Place all serving frameworks (vLLM, Triton, Ollama, llama.cpp) behind a reverse proxy or API gateway.
-- [ ] **Restrict serving ports to internal network or localhost.** Use `--host 127.0.0.1` (Ollama), `--host 0.0.0.0` only when necessary with firewall controls, or Kubernetes NetworkPolicy to restrict pod-to-pod access.
+- [ ] **Restrict serving ports to internal network or localhost.** For Ollama, set `OLLAMA_HOST=127.0.0.1:11434` (default) and avoid binding to all interfaces unless behind a firewall. For vLLM, use `--host 127.0.0.1` or restrict access via Kubernetes NetworkPolicy. For Triton, apply firewall or service mesh controls to restrict port access.
 - [ ] **Separate model serving network from internal management networks.** Apply egress controls to prevent SSRF from serving containers to internal services.
 - [ ] **Disable or restrict metrics endpoints.** vLLM's `/metrics`, Triton's `/metrics` — restrict to monitoring agents, not general network access.
 
@@ -202,16 +202,16 @@ This attack class was explored in depth in a previous post on [adversarial promp
 
 | Claim | Confidence | Basis |
 |---|---|---|
-| vLLM exposes unauthenticated API on all interfaces by default | **Confirmed** | vLLM documentation; observable from default startup |
+| vLLM exposes unauthenticated API; default bind address varies by version | **Confirmed (partial)** | vLLM documentation; no-auth is confirmed in all versions; default host varies — verify for your version |
 | Ollama exposes unauthenticated API with no auth mechanism | **Confirmed** | Ollama documentation and source |
 | Triton management API unauthenticated by default | **Confirmed** | Triton documentation |
 | CUDA `cudaMalloc` does not zero-initialize memory | **Confirmed** | Nvidia CUDA documentation |
-| Driver-level GPU memory scrubbing occurs across CUDA context boundaries | **Confirmed (contextual)** | Nvidia driver behavior; confirmed in Dutta et al. (2023) for context initialization |
+| Driver-level GPU memory scrubbing occurs across CUDA context boundaries | **Unverified / configuration-dependent** | Not publicly documented as a guaranteed zeroing contract by Nvidia outside MIG/vGPU environments |
 | Within-process KV-cache residual data accessible across requests in vLLM | **Structural / not independently confirmed** | Follows from CUDA non-zeroing semantics; specific vLLM exploit not published |
-| Cross-tenant GPU memory leakage in cloud GPU virtualization | **Confirmed (context-specific)** | Dutta et al., USENIX Security 2023 (GPU virtualization context) |
+| Cross-tenant GPU memory leakage in cloud GPU virtualization | **Studied / structural** | General research area in GPU security literature; specific demonstrated exploits vary by architecture and configuration |
 | Pickle-format model weights can execute arbitrary code on load | **Confirmed** | Well-documented PyTorch deserialization behavior |
-| Nvidia driver CVEs with container breakout potential | **Confirmed (CVE-documented)** | E.g., CVE-2024-0090 and similar in Nvidia security bulletins |
-| SSRF via Ollama Modelfile FROM directive | **Confirmed (community-documented)** | Reported in Ollama issue tracker; patched in later versions |
+| Nvidia driver CVEs with privilege escalation potential | **Confirmed (CVE-documented)** | E.g., CVE-2024-0090 and similar in Nvidia security bulletins; scope and exploitability vary per CVE |
+| Ollama documented CVEs (CVE-2024-37032, CVE-2024-39719–39722) | **Confirmed** | Ollama security advisories; path traversal and file-read vulnerabilities |
 | H100 Confidential Computing prevents host from reading GPU memory | **Confirmed (hardware capability)** | Nvidia H100 Confidential Computing documentation; production deployment coverage limited |
 | KV-cache timing side-channel on self-hosted vLLM detectable externally | **Plausible / theoretical** | Follows from PagedAttention prefix cache semantics; not independently demonstrated |
 
