@@ -13,7 +13,7 @@ For most consumer applications, this is an acceptable trade-off. For healthcare,
 
 When you send a sensitive query to an AI API — a patient's diagnostic notes, a confidential legal brief, a customer's financial history — you are making several implicit bets simultaneously:
 
-**No insider threats.** You are assuming that every employee with infrastructure access, every support engineer with the ability to inspect inference logs, and every contractor with system-level access will not abuse that access. At large cloud providers this is partially mitigated by access controls and audit logging, but access controls create barriers, not impossibility. [Verizon's Data Breach Investigations Report](https://www.verizon.com/business/resources/reports/dbir/) has consistently shown that insider threats account for roughly 20–25% of data breaches in enterprise settings over the past decade. Cloud AI providers are not structurally different.
+**No insider threats.** You are assuming that every employee with infrastructure access, every support engineer with the ability to inspect inference logs, and every contractor with system-level access will not abuse that access. At large cloud providers this is partially mitigated by access controls and audit logging, but access controls create barriers, not impossibility. Verizon's [Data Breach Investigations Report](https://www.verizon.com/business/resources/reports/dbir/) consistently identifies insider misuse as a significant breach actor category across industry sectors; cloud AI providers are not structurally different, and the existence of audit logging does not remove the technical capability to access query data.
 
 **No breach exposure.** You are assuming that if the provider's systems are compromised, your query data will not be in scope. Query logs, prompt caches, and inference context buffers are precisely the kind of high-value data that sophisticated attackers target in cloud infrastructure breaches.
 
@@ -60,7 +60,7 @@ Remote attestation is the mechanism that converts a hardware property into a tru
 
 ### What TEEs Don't Guarantee
 
-**Side-channel attacks.** TEEs protect memory content, not memory *access patterns*. Cache timing side channels — attacks that infer information about computation by observing which cache lines are accessed — are not prevented by TEE memory encryption. Attacks like [CacheBleed](https://ieeexplore.ieee.org/document/8106521) and various [SGX cache side-channel attacks](https://arxiv.org/abs/1702.08719) demonstrate that an adversary with physical access or hypervisor-level access can potentially infer information about TEE computation from cache access patterns, even without reading TEE memory directly. This is a meaningful limitation for inference workloads where access patterns can reveal structural properties of the input.
+**Side-channel attacks.** TEEs protect memory content, not memory *access patterns*. Cache timing side channels — attacks that infer information about computation by observing which cache lines are accessed — are not prevented by TEE memory encryption. SGX-specific side-channel attacks have been documented in the research literature — including [cache-based side channels against SGX enclaves](https://arxiv.org/abs/1702.08719) (Brasser et al., 2017) and [controlled-channel attacks that recover page-granularity memory access patterns](https://ieeexplore.ieee.org/document/7163052) (Xu et al., 2015 IEEE S&P) — demonstrating that an adversary with OS or hypervisor access can potentially infer information about TEE computation from access patterns, even without reading TEE memory directly. The newer TDX and SEV-SNP architectures face analogous challenges. This is a meaningful limitation for inference workloads where access patterns can reveal structural properties of the input.
 
 **Enclave-internal bugs.** The TEE guarantee isolates the enclave from the host. It does not protect against vulnerabilities in the code *running inside* the enclave. If the inference server code has a buffer overflow or injection vulnerability, an attacker who can craft malicious inputs can potentially compromise the enclave from the inside. The TEE isolation makes this harder to exploit from the outside, but the code correctness problem remains.
 
@@ -94,7 +94,7 @@ Modern HE implementations fall into several families, each with different perfor
 
 The current state of HE for ML inference — as of 2025–2026 — involves stark contrasts between feasibility categories:
 
-**Practical today (minutes-to-seconds latency, <100× overhead):**
+**Practical today (low-to-moderate overhead at inference-relevant batch sizes):**
 - Logistic regression inference on modest feature counts (tens to hundreds of features). CKKS-based logistic regression runs in seconds on commodity hardware.
 - Simple CNNs on MNIST-scale problems. Research implementations (e.g., [CryptoNets, Gilad-Bachrach et al. 2016](https://proceedings.mlr.press/v48/gilad-bachrach16.html)) demonstrated MNIST inference under HE, though with latency in the range of minutes per sample.
 - Decision trees and random forests with Concrete ML. Zama's published benchmarks for simple decision tree classifiers show inference under a minute.
@@ -207,7 +207,7 @@ The honest pragmatic choice: if the AI review vendor does not offer a TEE-based 
 Not every use case requires cryptographic or hardware-enforced confidentiality. The honest framing is a cost-benefit calculation:
 
 **Factors favoring technical controls (TEEs/HE/MPC):**
-- Regulatory environment explicitly requires technical safeguards (HIPAA Security Rule, EU AI Act Article 10 data governance requirements)
+- Regulatory environment requires technical safeguards (HIPAA Security Rule for PHI; GDPR Article 25 data protection by design; EU AI Act risk management requirements for high-risk AI systems)
 - Data sensitivity is high and breach consequences are severe (patient data, privileged legal communications)
 - Multiple parties have conflicting interests in data access (MPC scenario)
 - Model IP is valuable and must be protected from the data provider
