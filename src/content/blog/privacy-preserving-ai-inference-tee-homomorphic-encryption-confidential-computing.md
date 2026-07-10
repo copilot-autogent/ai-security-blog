@@ -33,16 +33,20 @@ The guarantee has two components:
 
 **Memory confidentiality and integrity.** The CPU encrypts TEE memory using keys stored in hardware, inaccessible to the OS or hypervisor. Even a fully compromised cloud host — one where an attacker has root or hypervisor access — cannot read the plaintext contents of TEE memory. This extends to memory at rest: if an attacker snapshots the VM's memory, what they get is encrypted ciphertext.
 
-**Remote attestation.** A TEE can produce a cryptographically signed report — an attestation — that describes the code running inside the enclave, the hardware it is running on, and the firmware version. A client can verify this attestation against the hardware manufacturer's certificate authority before sending sensitive data. If the attestation verifies, the client has strong evidence that:
-- The code running inside the enclave is exactly the code they expect (measured via a hash of the binary)
-- The hardware and firmware satisfy the expected configuration
-- The memory isolation guarantee is in effect
+**Remote attestation.** A TEE can produce a cryptographically signed report — an attestation — that describes the state of the trusted environment, the hardware it is running on, and the firmware version. A client can verify this attestation against the hardware manufacturer's certificate authority before sending sensitive data.
 
-Remote attestation is the mechanism that converts a hardware property into a trust relationship between a client and a remote service.
+The precision of what is attested varies by TEE architecture. In SGX-style enclave models, the attestation covers the specific application binary (an *MRENCLAVE* measurement). In VM-level TEEs like Intel TDX and AMD SEV-SNP, the attestation covers the VM's boot and launch measurements — the initial memory state of the guest, its configuration, and the firmware — rather than the running application binary directly. Application-level code identity verification (binding a specific inference server version to an attestation) requires additional tooling above the hardware attestation layer, such as a trusted launch policy that measures the guest kernel and bootloader.
+
+What attestation reliably provides in all TEE implementations:
+- Evidence that the hardware and firmware satisfy the expected configuration
+- Evidence that the memory isolation guarantee is in effect
+- A hardware-rooted chain of trust that can be verified cryptographically, not just contractually
+
+Remote attestation is the mechanism that converts a hardware property into a trust relationship between a client and a remote service — with the caveat that the granularity of trust depends on what the specific TEE architecture measures.
 
 ### The Major TEE Implementations
 
-**Intel TDX (Trust Domain Extensions).** TDX is Intel's current generation VM-level confidential computing technology, available in Sapphire Rapids and later Xeon processors. TDX protects entire virtual machines as Trust Domains (TDs), rather than requiring applications to be written as enclaves. The entire VM guest — OS, runtime, and applications — runs encrypted and isolated from the host hypervisor. Attestation uses Intel's Trust Authority service. TDX is distinct from Intel SGX (Software Guard Extensions), which required applications to be partitioned into small enclave modules — a significant application development burden. TDX's VM-granularity protection is considerably more practical for deploying existing AI inference stacks.
+**Intel TDX (Trust Domain Extensions).** TDX is Intel's current generation VM-level confidential computing technology, available in Sapphire Rapids and later Xeon processors. TDX protects entire virtual machines as Trust Domains (TDs), rather than requiring applications to be written as enclaves. The entire VM guest — OS, runtime, and applications — runs encrypted and isolated from the host hypervisor. TDX attestation produces a TD Quote signed by the TD Attestation Key; Intel Trust Authority is one attestation verification service that can validate this quote, but the quote format is an open standard that other attestation services (cloud provider-operated or third-party) can verify as well. TDX is distinct from Intel SGX (Software Guard Extensions), which required applications to be partitioned into small enclave modules — a significant application development burden. TDX's VM-granularity protection is considerably more practical for deploying existing AI inference stacks.
 
 **AMD SEV-SNP (Secure Encrypted Virtualization – Secure Nested Paging).** AMD's equivalent of TDX, available in EPYC 7003 (Milan) and later processors. SEV-SNP adds integrity protection to SEV-ES (Secure Encrypted Virtualization – Encrypted State), preventing a malicious hypervisor from modifying guest VM memory pages. As of 2024–2025, AMD SEV-SNP is available on Azure (as part of Confidential VMs) and in Google Cloud's Confidential Computing offerings. The attestation report is signed using AMD's Root of Trust, enabling remote verification.
 
@@ -134,7 +138,7 @@ For practical ML inference, most MPC frameworks use hybrid approaches: secret sh
 
 [CrypTen](https://github.com/facebookresearch/CrypTen) (Knott et al., 2021; arXiv:2109.00984) is Meta's open-source framework for MPC with PyTorch models. CrypTen extends PyTorch with encrypted tensor types that support the same operations as standard PyTorch tensors, but backed by MPC protocols rather than plaintext arithmetic. The design goal is to make MPC accessible to ML practitioners without requiring cryptographic expertise.
 
-CrypTen's underlying MPC protocol uses additive secret sharing with the SPDZ-style offline phase for multiplication triples. The key implementation choices:
+CrypTen's default configuration uses additive secret sharing for tensor values across participating parties. For multiplication, CrypTen uses Beaver triples (correlated randomness generated in an offline preprocessing phase) — a technique consistent with the SPDZ framework's approach, though CrypTen's security model in its default two-party configuration relies on a semi-honest (honest-but-curious) threat model rather than the full malicious-security of SPDZ. The key implementation choices:
 - The online phase (where actual computation happens with input data) is fast; the offline phase (generating correlated randomness for multiplications) can be precomputed.
 - Non-linear activations (ReLU, softmax) require specialized protocols or polynomial approximations.
 - CrypTen supports the standard PyTorch model formats; an existing trained model can be run under MPC with relatively minor code changes.
@@ -161,10 +165,16 @@ The techniques above exist on a spectrum from "deployable today in production" t
 
 **Recommended approach: TEEs.**
 
-AWS Nitro Enclaves or Azure Confidential VMs (AMD SEV-SNP) can deploy an existing inference stack with minimal code changes. The attestation workflow allows the healthcare provider to cryptographically verify that:
-1. The model code running in the enclave is exactly the expected version.
-2. The hardware and firmware satisfy the expected configuration.
-3. No party outside the attested enclave can read patient data during inference.
+Azure Confidential VMs (AMD SEV-SNP) can run existing inference stacks with relatively modest integration work — the isolation is at the VM level, so existing software runs inside the protected boundary without restructuring. AWS Nitro Enclaves, by contrast, require a more significant architectural change: the enclave is a fully isolated environment with no persistent storage, no interactive access, and only a local vsock connection to the parent EC2 instance. Applications must be refactored into a parent/enclave split-architecture pattern where sensitive data is passed through the vsock interface, processed inside the enclave, and encrypted results are returned. This is a real engineering investment, not a drop-in deployment, but the operational maturity of the Nitro attestation and KMS integration makes it a well-documented path.
+
+For either platform, the attestation workflow can provide hardware-rooted evidence that:
+1. The VM or enclave configuration (firmware, launch state) matches the expected measurements.
+2. The hardware satisfies the expected security configuration.
+3. Memory isolation from the host hypervisor is in effect.
+
+Application-level code version verification (binding a specific inference server binary to the attestation) requires additional tooling on top of the hardware attestation — a launch policy or a measured boot chain that includes the application. This is achievable but requires explicit configuration beyond the default TEE deployment.
+
+The protections these TEEs provide are strong against the specific threat model: a curious or compromised cloud provider's infrastructure staff cannot read plaintext patient data during inference within the protected boundary, and this protection is hardware-enforced rather than purely contractual. Side-channel residual risks (as described above) remain.
 
 The deployment overhead is manageable (5–15% for CPU-side TEEs on modern hardware), and existing inference frameworks (PyTorch, TensorFlow) can run inside TEEs without significant modification. For GPU inference, Nvidia's Confidential Computing on H100 extends this protection to the GPU, though with less deployment maturity as of 2025–2026.
 
@@ -204,7 +214,7 @@ Not every use case requires cryptographic or hardware-enforced confidentiality. 
 - Cost and latency constraints make TEE/HE/MPC deployment impractical
 - Applicable regulatory framework does not mandate technical controls
 
-The risk of defaulting to contractual controls for high-sensitivity data is that a breach at the provider creates liability that no contract can remedy after the fact. Technical controls remove the risk; contractual controls redistribute the liability.
+The risk of defaulting to contractual controls for high-sensitivity data is that a breach at the provider creates liability that no contract can remedy after the fact. Technical controls (TEEs, HE, MPC) eliminate specific provider-side risks — provider infrastructure staff seeing plaintext, a breach exposing query data — but they do not remove all risks. Residual risks include side-channel attacks on access patterns, implementation bugs in the TEE-protected code, key management failures, and compromise of the client endpoint before data is encrypted. The choice is between a provider who *contractually* cannot read your data, and a provider whose infrastructure is *technically constrained* from reading your plaintext during the protected portion of the data path — a meaningful difference, but not a guarantee of zero risk. Contractual controls redistribute liability; technical controls shift the residual attack surface to a smaller and harder-to-exploit target set.
 
 ## 6. Summary: Capability and Limitation Table
 
