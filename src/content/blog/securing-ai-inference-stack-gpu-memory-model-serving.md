@@ -21,7 +21,7 @@ CPU memory benefits from decades of OS-enforced isolation: each process receives
 
 **CUDA memory model.** In CUDA's programming model, device memory (`cudaMalloc`) is allocated by the driver and lives in the device's global memory space. Allocation does not guarantee zeroing — the CUDA documentation explicitly states that `cudaMalloc` does not zero-initialize memory. When a tensor allocation for one request reuses device memory previously freed by another, the prior allocation's contents may remain readable until overwritten by the new computation.
 
-**Driver behavior.** Nvidia's driver does scrub memory in some contexts — specifically when allocating memory *across security boundaries* (e.g., when a new CUDA context is established for a different process on the same physical GPU). Within a single CUDA context shared by a multi-tenant serving process, no automatic per-allocation scrubbing occurs. This is by design: zeroing every allocation would impose significant overhead on a workload where performance is the primary optimization target.
+**Driver behavior.** Nvidia's driver zeroing behavior across CUDA context boundaries is not publicly documented with a guaranteed zeroing contract. Within a single CUDA context shared by a multi-tenant serving process, no automatic per-allocation scrubbing occurs. This is by design: zeroing every allocation would impose significant overhead on a workload where performance is the primary optimization target.
 
 **Unified memory.** CUDA's unified memory (`cudaMallocManaged`) adds automatic migration between CPU and GPU memory, but does not change the zeroing semantics.
 
@@ -53,7 +53,7 @@ Self-hosted LLM serving frameworks are designed for ease of deployment, which me
 
 vLLM is an open-source inference engine optimized for high throughput via PagedAttention (a KV-cache management technique that applies virtual memory concepts to attention caches). It exposes an OpenAI-compatible HTTP API by default.
 
-**Default configuration exposure.** vLLM's server (`vllm serve`) default bind address has varied across versions — check the documentation for your deployed version. In many commonly-deployed configurations, vLLM binds to all interfaces (`0.0.0.0:8000`), though some versions default to localhost. Authentication is **not enabled by default** in any version. An operator who launches vLLM on a network-accessible host without additional network controls or explicit API key configuration exposes an API that accepts arbitrary inference requests from any reachable client, with no authentication required. Verify the default `--host` behavior for your specific vLLM version before assuming network-only exposure.
+**Default configuration exposure.** vLLM's server (`vllm serve`) binds to all interfaces (`0.0.0.0:8000`) by default in current versions. Authentication is **not enabled by default**. An operator who launches vLLM on a network-accessible host without additional network controls or explicit API key configuration exposes an API that accepts arbitrary inference requests from any reachable client, with no authentication required.
 
 **API key configuration.** vLLM supports an `--api-key` flag to require a bearer token; it also supports `--ssl-keyfile` and `--ssl-certfile` for TLS. These are opt-in; nothing in the default startup path enforces them.
 
@@ -67,9 +67,9 @@ vLLM is an open-source inference engine optimized for high throughput via PagedA
 
 Nvidia's Triton Inference Server is a production-grade framework that serves models from a model repository and exposes both HTTP and gRPC APIs.
 
-**Management API exposure.** Triton exposes separate HTTP and gRPC ports (8000 and 8001 by default) for inference, plus an HTTP metrics port (8002). The management API allows dynamic model loading and unloading, model repository queries, and configuration inspection. By default, these APIs are exposed without authentication.
+**Management API exposure.** Triton exposes separate HTTP and gRPC ports (8000 and 8001 by default) for inference, plus an HTTP metrics port (8002). By default, these APIs are exposed without authentication.
 
-**Dynamic model loading attack surface.** Triton supports dynamic model loading from a configured model repository. If the model repository path is writable by a lower-privileged process, or if the management API is network-accessible, an attacker could trigger loading of a malicious model. Triton does not perform cryptographic verification of model files before loading them; the trust model relies on filesystem access controls to the model repository directory.
+**Dynamic model loading attack surface.** Triton supports dynamic model loading when started with `--model-control-mode=explicit` or `--model-control-mode=poll` (in default `NONE` mode, the load/unload management endpoints are disabled). When dynamic loading is enabled and the management API is network-accessible, an attacker could trigger loading of a malicious model if the model repository path is writable. Triton does not perform cryptographic verification of model files before loading them; the trust model relies on filesystem access controls to the model repository directory.
 
 **Model repository exposure.** The `/v2/repository/index` endpoint lists all models in the repository (names, versions, state). On an unauthenticated deployment, this leaks the serving configuration to any network client.
 
@@ -85,7 +85,7 @@ Ollama is a popular tool for running LLMs locally, designed for developer conven
 
 **Model pull and integrity.** Ollama's pull command (`ollama pull <model>`) fetches models from the Ollama registry (registry.ollama.ai). Models are identified by name and tag. Ollama uses SHA256 digests for model layers and verifies them against manifest values, providing integrity within a pull operation — but only against the manifest itself, not against a separately-held trust anchor (e.g., a signed manifest from the model author). If the Ollama registry entry itself were compromised (e.g., through a supply chain attack on a popular model), the checksum in the registry would reflect the malicious weights and verification would pass.
 
-**Documented security vulnerabilities.** Ollama has a documented CVE history including path traversal and file-read vulnerabilities (CVE-2024-37032 "Probllama," CVE-2024-39719–39722). The Ollama project has addressed these in updates; operators should keep Ollama updated and restrict inbound access rather than relying solely on application-layer controls.
+**Documented security vulnerabilities.** Ollama has a documented CVE history including path traversal and file-read vulnerabilities (CVE-2024-37032 "Probllama," CVE-2024-39719, CVE-2024-39720, CVE-2024-39721, CVE-2024-39722). The Ollama project has addressed these in updates; operators should keep Ollama updated and restrict inbound access rather than relying solely on application-layer controls.
 
 ### llama.cpp Server
 
@@ -129,7 +129,7 @@ In deployments where a model serving API is network-accessible and other interna
 
 Triton's dynamic model loading API, if network-accessible, allows an attacker to instruct the serving process to load a model from the configured repository. If the repository directory is writable (via a separate vulnerability — file write from a different service, compromised NFS mount, or misconfigured object storage permissions), an attacker could place a malicious model in the repository and trigger its loading.
 
-A malicious model at the framework level could, in theory, include code executed during model loading (for formats that support execution — pickle-format PyTorch models include arbitrary Python code that runs on deserialization; safetensors was designed specifically to prevent this). For safetensors-format models, model loading itself is safe from deserialization attacks, but the serving configuration file (JSON) is also loaded and could be malformed to cause other effects.
+A malicious model at the framework level could, in theory, include code executed during model loading (for formats that support execution — pickle-format PyTorch models include arbitrary Python code that runs on deserialization; safetensors was designed specifically to prevent this).
 
 **Mitigation:** Restrict the Triton management API to localhost or authenticated clients only. Use read-only filesystem mounts for model repository directories in container deployments. Prefer safetensors format over pickle-format for model weights.
 
@@ -137,7 +137,7 @@ A malicious model at the framework level could, in theory, include code executed
 
 Model serving containers typically require access to the host GPU via Nvidia's container runtime, which mounts the Nvidia device files and libraries into the container. The attack surface here involves the host GPU driver — a kernel-mode component. A vulnerability in the Nvidia kernel driver that is exploitable from a container process could allow container escape to the host.
 
-**Confirmed vulnerabilities.** Nvidia's GPU driver has a history of CVEs with privilege escalation implications. CVE-2024-0090 (CVSS 7.8) is a documented example: an out-of-bounds write in the Nvidia GPU kernel driver on Windows that could allow a privileged user to cause code execution or denial of service. While the specific scope of each CVE varies by platform and privilege context, the general class — kernel-mode driver vulnerabilities reachable from GPU-accessing processes — is relevant to container security posture. Nvidia publishes security bulletins for driver vulnerabilities; operators self-hosting on bare metal or in Docker deployments should monitor [Nvidia's security bulletins](https://www.nvidia.com/en-us/security/) and apply driver updates. Operators should review the specific affected platform and privilege requirements for each CVE rather than assuming generic container escape applicability.
+**Confirmed vulnerabilities.** Nvidia's GPU driver has a history of CVEs with privilege escalation implications. CVE-2024-0090 (CVSS 7.8) is a documented example: an out-of-bounds write in the Nvidia GPU kernel driver that could allow a privileged user to cause code execution or denial of service. This CVE affects both Windows and Linux platforms. While the specific scope of each CVE varies by platform and privilege context, the general class — kernel-mode driver vulnerabilities reachable from GPU-accessing processes — is relevant to container security posture. Nvidia publishes security bulletins for driver vulnerabilities; operators self-hosting on bare metal or in Docker deployments should monitor [Nvidia's security bulletins](https://www.nvidia.com/en-us/security/) and apply driver updates. Operators should review the specific affected platform and privilege requirements for each CVE rather than assuming generic container escape applicability.
 
 Container GPU isolation is also affected by how the Nvidia container runtime is configured. The default `--gpus all` Docker flag mounts broad GPU access; restricting to specific device files and cgroups limits the attack surface but requires deliberate configuration.
 
@@ -177,9 +177,9 @@ This attack class was explored in depth in a previous post on [adversarial promp
 ### GPU Memory and Compute Isolation
 
 - [ ] **For multi-tenant workloads handling sensitive data, use dedicated GPU instances** rather than shared multi-tenant inference pools.
-- [ ] **Evaluate per-request VRAM clearing** (cudaMemset after buffer free) for high-sensitivity workloads, benchmarking performance impact against your serving SLAs before deploying.
+- [ ] **Evaluate per-request VRAM clearing** (`cudaMemset` to zero before `cudaFree`) for high-sensitivity workloads, benchmarking performance impact against your serving SLAs before deploying.
 - [ ] **For regulated or highly sensitive inference workloads, evaluate Nvidia H100 Confidential Computing** if hardware supports it. Validate driver and framework configuration against Nvidia's documentation before claiming TEE protection.
-- [ ] **Apply GPU resource limits via cgroups** / Kubernetes resource quotas to prevent a single tenant from monopolizing GPU memory.
+- [ ] **Apply GPU resource limits** via Kubernetes device plugin resource requests to prevent unbounded GPU memory usage. Note that standard CPU cgroups/resource quotas allocate whole GPU devices and do not provide fine-grained per-process VRAM caps; use framework-level queue depth and batch size limits to constrain memory consumption within a device.
 
 ### Principle of Least Privilege
 
@@ -187,7 +187,7 @@ This attack class was explored in depth in a previous post on [adversarial promp
 - [ ] **Apply seccomp profiles** to restrict syscalls available to serving containers.
 - [ ] **Use read-only root filesystems** for serving containers where possible; mount only necessary writable volumes (e.g., model cache, logs).
 - [ ] **Apply AppArmor or SELinux profiles** to constrain device access from serving containers.
-- [ ] **Do not grant the serving container `--privileged` access.** Pass only required device files (e.g., `/dev/nvidia0`) rather than all GPU devices.
+- [ ] **Do not grant the serving container `--privileged` access.** Limit GPU device access to required devices (e.g., `/dev/nvidia0`, `/dev/nvidiactl`, `/dev/nvidia-uvm`) rather than using `--gpus all`, and apply the minimum required device permissions.
 
 ### Supply Chain
 
@@ -202,7 +202,7 @@ This attack class was explored in depth in a previous post on [adversarial promp
 
 | Claim | Confidence | Basis |
 |---|---|---|
-| vLLM exposes unauthenticated API; default bind address varies by version | **Confirmed (partial)** | vLLM documentation; no-auth is confirmed in all versions; default host varies — verify for your version |
+| vLLM exposes unauthenticated API on all interfaces by default (current versions) | **Confirmed** | vLLM documentation; current default binds 0.0.0.0 |
 | Ollama exposes unauthenticated API with no auth mechanism | **Confirmed** | Ollama documentation and source |
 | Triton management API unauthenticated by default | **Confirmed** | Triton documentation |
 | CUDA `cudaMalloc` does not zero-initialize memory | **Confirmed** | Nvidia CUDA documentation |
@@ -211,7 +211,7 @@ This attack class was explored in depth in a previous post on [adversarial promp
 | Cross-tenant GPU memory leakage in cloud GPU virtualization | **Studied / structural** | General research area in GPU security literature; specific demonstrated exploits vary by architecture and configuration |
 | Pickle-format model weights can execute arbitrary code on load | **Confirmed** | Well-documented PyTorch deserialization behavior |
 | Nvidia driver CVEs with privilege escalation potential | **Confirmed (CVE-documented)** | E.g., CVE-2024-0090 and similar in Nvidia security bulletins; scope and exploitability vary per CVE |
-| Ollama documented CVEs (CVE-2024-37032, CVE-2024-39719–39722) | **Confirmed** | Ollama security advisories; path traversal and file-read vulnerabilities |
+| Ollama documented CVEs (CVE-2024-37032, CVE-2024-39719, CVE-2024-39720, CVE-2024-39721, CVE-2024-39722) | **Confirmed** | Ollama security advisories; path traversal and file-read vulnerabilities |
 | H100 Confidential Computing prevents host from reading GPU memory | **Confirmed (hardware capability)** | Nvidia H100 Confidential Computing documentation; production deployment coverage limited |
 | KV-cache timing side-channel on self-hosted vLLM detectable externally | **Plausible / theoretical** | Follows from PagedAttention prefix cache semantics; not independently demonstrated |
 
