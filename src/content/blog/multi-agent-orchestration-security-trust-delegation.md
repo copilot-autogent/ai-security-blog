@@ -17,9 +17,9 @@ This is not a hypothetical concern. Frameworks like Microsoft AutoGen, CrewAI, L
 
 In a conventional client-server system, trust boundaries are structural and observable. A service knows which tier called it: a web frontend, an authenticated microservice, an admin console. Access control happens at the boundary, and the boundary is enforced in code.
 
-In a multi-agent pipeline, the equivalent of that structural boundary is a natural-language message. Agent A sends a message to Agent B. Agent B decides how much to trust that message. But there is no cryptographic signature on the message, no verified identity attached to the agent identifier, and no principled mechanism distinguishing a message from Agent A (a trusted system component) from a message injected by an attacker who has compromised Agent A's input channel.
+In a multi-agent pipeline, the equivalent of that structural boundary is a natural-language message. Agent A sends a message to Agent B. Agent B decides how much to trust that message. But in mainstream frameworks operating with their default transport and message formats, messages carry no cryptographic attestation of origin — no verified identity is attached to the agent identifier that would allow a receiving agent to distinguish a message from a trusted system component from one injected by an attacker who has compromised Agent A's input channel.
 
-The Anthropic model specification describes a principal hierarchy: operators have higher trust than users, and users have higher trust than model-generated content. This hierarchy exists to limit what each level can authorize. But when Agent A is both *receiving* input from an untrusted source and *issuing* instructions to Agent B with full orchestrator authority, that principal hierarchy is violated by architecture, not by any single attack step.
+Anthropic's model specification (published November 2023) defines a principal hierarchy — Anthropic, then operators, then users, then Claude itself — in which each level can grant the level below it a subset of its own trust. Operators have higher trust than users, and users have higher trust than model-generated content. This hierarchy exists to limit what each level can authorize. But when Agent A is both *receiving* input from an untrusted source and *issuing* instructions to Agent B with full orchestrator authority, that principal hierarchy is violated by architecture, not by any single attack step.
 
 This is the core trust boundary problem: **multi-agent delegation transfers authority without transferring verifiable identity**.
 
@@ -75,7 +75,7 @@ In multi-agent pipelines, the orchestrator is a canonical confused deputy. It ho
 
 The gap between "orchestrator's authority" and "the user's authorization scope" is the attack surface. An attacker who can inject instructions into the orchestrator's context — via prompt injection in a document the orchestrator retrieves, via a malicious tool return value, or via a compromised worker agent's output — causes the orchestrator to exercise its full authority on behalf of the attacker's instructions, not the user's intent.
 
-The OWASP Top 10 for LLMs identifies this pattern directly: LLM08 (Excessive Agency) flags deployments in which an LLM can take high-impact actions that go beyond what the triggering user request would justify. In multi-agent contexts, Excessive Agency at the orchestrator level is a structural condition, not a misconfiguration — it is what makes orchestrators useful. The mitigation requires not just limiting capabilities but propagating authorization context so that every action taken can be traced to an explicit user authorization.
+The OWASP Top 10 for LLMs (2023 edition, LLM08: Excessive Agency) identifies this pattern directly: it flags deployments in which an LLM can take high-impact actions that go beyond what the triggering user request would justify. In multi-agent contexts, Excessive Agency at the orchestrator level is a structural condition, not a misconfiguration — it is what makes orchestrators useful. The mitigation requires not just limiting capabilities but propagating authorization context so that every action taken can be traced to an explicit user authorization.
 
 ### 5. Goal Misgeneralization Across Agent Handoff
 
@@ -94,9 +94,9 @@ These failures are harder to detect than injection attacks because the worker is
 
 ### Microsoft AutoGen
 
-AutoGen's trust model is largely implicit. Agents are distinguished by role (AssistantAgent, UserProxyAgent, GroupChatManager) and by whether they execute code. The UserProxyAgent acts as the human-facing interface and can be configured to execute code returned by assistant agents — a significant privilege that is on by default in many tutorial configurations.
+AutoGen's trust model is largely implicit. Agents are distinguished by role (AssistantAgent, UserProxyAgent, GroupChatManager) and by whether they execute code. The UserProxyAgent acts as the human-facing interface and can be configured to execute code returned by assistant agents — a significant privilege that is enabled by default in many tutorial configurations in AutoGen 0.2.x.
 
-AutoGen's security documentation explicitly calls out the code execution surface: "The code is executed in a subprocess in the same environment as the user agent. This is a security risk." The recommended mitigation is using Docker containers for code execution, which AutoGen supports via the `docker_execution` parameter.
+AutoGen's security documentation explicitly calls out the code execution surface: "The code is executed in a subprocess in the same environment as the user agent. This is a security risk." The recommended mitigation is using Docker containers for code execution, which AutoGen 0.2.x supports by passing `{"use_docker": True}` as the `code_execution_config` parameter.
 
 For inter-agent trust, AutoGen relies on the conversation protocol — agents speak in a named turn structure, and the GroupChatManager selects the next speaker based on defined rules or LLM-based selection. There is no cryptographic attestation of agent identity. The GroupChatManager's LLM-based speaker selection means that injected content which mimics a termination signal or a role-switch instruction can influence pipeline control flow.
 
@@ -136,7 +136,7 @@ Anthropic's principal hierarchy (operators > users > models) provides a conceptu
 
 Agent-to-agent messages should carry cryptographic attestation of origin and authorization scope. A signed task manifest functions like a capability token: it names the issuing agent, the authorization scope inherited from the principal, the specific sub-task being delegated, and a nonce that prevents replay. The receiving agent verifies the signature before executing the task.
 
-This is an engineering overhead. Current frameworks do not implement signed task manifests natively. But the pattern is well-established in distributed systems: OAuth 2.0 scoped tokens, SPIFFE SVIDs (as discussed in the zero-trust architecture post in this series), and capability-based security systems all implement the same principle. The key contribution of signed manifests to multi-agent security is that they make the authorization chain auditable without relying on the receiving agent's ability to infer intent.
+This is an engineering overhead. No mainstream multi-agent framework (AutoGen, CrewAI, LangGraph, Semantic Kernel) implements signed task manifests natively at the time of writing. But the pattern is well-established in distributed systems: OAuth 2.0 scoped tokens, SPIFFE SVIDs (used in zero-trust workload identity deployments), and capability-based security systems all implement the same principle. The key contribution of signed manifests to multi-agent security is that they make the authorization chain auditable without relying on the receiving agent's ability to infer intent.
 
 ### Agent Capability Scoping
 
@@ -208,8 +208,8 @@ These questions do not have universal answers, but asking them systematically du
 
 - Greshake, K., Abdelnabi, S., Mishra, S., Endres, C., Holz, T., & Fritz, M. (2023). Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injections. *arXiv:2302.12173*.
 - Hardy, N. (1988). The Confused Deputy (or why capabilities might have been invented). *ACM Operating Systems Review*, 22(4), 36–38.
-- OWASP Top 10 for Large Language Model Applications (2025 Edition) — LLM08: Excessive Agency; LLM09: Overreliance.
-- Anthropic. (2024). Model Spec — Principal Hierarchy. https://www.anthropic.com/research/model-spec
-- Microsoft AutoGen Documentation — Agent Trust and Code Execution. https://microsoft.github.io/autogent/
+- OWASP Top 10 for Large Language Model Applications (2023 Edition) — LLM08: Excessive Agency.
+- Anthropic. (2023). Claude Model Spec — Principal Hierarchy. https://www.anthropic.com/model-spec
+- Microsoft AutoGen Documentation — Agent Trust and Code Execution. https://microsoft.github.io/autogen/
 - Willison, S. (2023, April 25). The Dual LLM Pattern for Building AI Assistants that Can Resist Prompt Injection. https://simonwillison.net/2023/Apr/25/dual-llm-pattern/
 - NIST SP 800-207: Zero Trust Architecture (2020).
