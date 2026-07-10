@@ -216,3 +216,5 @@ For teams building or auditing RAG deployments:
 - *Lewis et al. 2020. [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/abs/2005.11401). NeurIPS 2020.*
 - *Greshake et al. 2023. [Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection](https://arxiv.org/abs/2302.12173). arXiv:2302.12173.*
 - *Morris et al. 2023. [Text Embeddings Reveal (Almost) As Much As Text](https://arxiv.org/abs/2310.06816). arXiv:2310.06816.*
+
+*Also in the computational privacy track: [Privacy-Preserving AI Inference: TEEs, Homomorphic Encryption, and Confidential Computing](./privacy-preserving-ai-inference-tee-homomorphic-encryption-confidential-computing) covers cryptographic and hardware-enforced approaches to preventing the inference provider from seeing query plaintext — addressing the exposure surface at the operator level rather than the retrieval layer.*

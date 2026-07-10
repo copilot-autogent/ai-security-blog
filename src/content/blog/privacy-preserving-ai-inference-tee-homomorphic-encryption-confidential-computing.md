@@ -21,7 +21,7 @@ When you send a sensitive query to an AI API — a patient's diagnostic notes, a
 
 **No vendor lock-in via data.** If the provider processes your queries in plaintext, they have — technically — seen your use patterns, your sensitive inputs, and your query structure. Even if they never act on that data, you have transferred some degree of information to them.
 
-The techniques in this post are not primarily about distrusting specific providers. They are about creating **technical guarantees that make trust irrelevant** — architectures where the provider's infrastructure cannot read your data even if it wanted to, even if it were breached, and even if an insider had full system access.
+The techniques in this post are not primarily about distrusting specific providers. They are about creating **technical guarantees that constrain what the provider's infrastructure can observe** — architectures where encrypted memory and attestation prevent the hypervisor and host OS from reading query data, or where cryptographic techniques make computation possible without exposing plaintext. This reduces the attack surface and provides hardware-rooted or cryptographic assurance, as opposed to purely contractual guarantees. It does not make trust *irrelevant*: the attested application code running inside a TEE can still log, retain, or transmit data through its permitted output channels — its egress behavior and application-level data handling still require trust in the deployed application. What changes is that *infrastructure-level* access (host OS, hypervisor, data center staff) is technically constrained, not just contractually prohibited.
 
 ## 2. Trusted Execution Environments (TEEs)
 
@@ -151,7 +151,7 @@ The practical trade-off: for a simple feedforward network with ReLU activations 
 
 Federated learning (covered in [a previous post in this series](./federated-learning-poisoning-the-aggregation-attack-surface)) addresses training-phase privacy: model weights are updated at each participant without raw data leaving the device, and only gradient updates are shared with the aggregator. The threat model and privacy properties are different from inference-phase privacy:
 
-**Federated training** protects training data from the model operator during training. The model, once trained, is deployed and inference occurs normally — the inference provider sees queries in plaintext.
+**Federated training** limits raw training data from leaving participant devices — model weights are updated locally, and only gradient updates are shared with the aggregator. However, as the linked gradient inversion post covers in detail, gradients themselves can leak training data to an adversary who controls the aggregation server. Federated learning reduces but does not eliminate the model operator's ability to learn about client data; it is a structural privacy improvement over centralizing data, with residual risks depending on the attack model.
 
 **Federated inference** (or private inference via MPC) protects *query* data at inference time. The model is already trained; the goal is to evaluate it on user inputs without the model operator seeing those inputs.
 
