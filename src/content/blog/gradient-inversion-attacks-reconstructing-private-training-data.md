@@ -141,3 +141,5 @@ Adding noise to gradients before transmission — without the formal DP framewor
 The core lesson from this research is a reframing of what gradient transmission means. Gradients are not opaque proxies for learning. They are information-dense representations computed directly from training data, and their information content about that data is recoverable — to varying degrees — by adversaries with access to them. The question for practitioners is not whether this theoretical possibility exists, but which specific conditions in their deployment bring it within the practical attack range.
 
 For small-batch fine-tuning on sensitive data with a partially trusted provider, the answer is: closer than comfortable.
+
+*Also in the computational privacy track: [Privacy-Preserving AI Inference: TEEs, Homomorphic Encryption, and Confidential Computing](./privacy-preserving-ai-inference-tee-homomorphic-encryption-confidential-computing) covers cryptographic and hardware approaches to protecting query data at inference time — a complementary protection to securing training data.*
