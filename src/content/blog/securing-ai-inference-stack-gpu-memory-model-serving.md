@@ -41,7 +41,7 @@ The specific attack surface for LLM serving frameworks is slightly different: wi
 
 **Dedicated GPU instances for sensitive workloads.** For workloads handling sensitive data (healthcare inference, legal document processing, financial model queries), isolated GPU instances per tenant eliminate cross-tenant VRAM residual risk entirely. The cost is hardware utilization efficiency — shared GPUs are significantly more cost-effective for homogeneous workloads.
 
-**Nvidia H100 Confidential Computing.** Nvidia's H100 architecture introduces Confidential Computing support, providing hardware-enforced memory encryption and isolation at the GPU level. In Confidential Computing mode, a TEE (Trusted Execution Environment) on the GPU encrypts memory accessible to the confidential workload and prevents other processes on the same host from reading it — even the host OS or hypervisor. This is a hardware-level mitigation that addresses the residual data concern at the architecture level, but it requires H100-class hardware, compatible virtualization stack, and framework support. Nvidia's documentation on this capability is public (see [H100 Confidential Computing whitepaper](https://www.nvidia.com/en-us/data-center/solutions/confidential-computing/)). This is an **emerging capability** and not yet universally deployed or configured correctly in practice.
+**Nvidia H100 Confidential Computing.** Nvidia's H100 architecture introduces Confidential Computing support, providing hardware-enforced memory encryption and isolation at the GPU level. In Confidential Computing mode, a TEE (Trusted Execution Environment) on the GPU encrypts memory accessible to the confidential workload and prevents other processes on the same host — including the host OS or hypervisor — from reading it. This primarily addresses the threat of *host-level* access to GPU memory (e.g., a compromised hypervisor or host operator), and provides stronger isolation guarantees for multi-tenant GPU pools where tenants run in separate GPU partitions or contexts. It does **not** automatically scrub or isolate memory between requests within the same serving process; within-process buffer reuse across requests still depends on application-level memory management. It requires H100-class hardware, compatible virtualization stack, and framework support. Nvidia's documentation on this capability is public (see [H100 Confidential Computing whitepaper](https://www.nvidia.com/en-us/data-center/solutions/confidential-computing/)). This is an **emerging capability** and not yet universally deployed or configured correctly in practice.
 
 ---
 
@@ -81,7 +81,7 @@ Ollama is a popular tool for running LLMs locally, designed for developer conven
 
 **Default bind address.** Ollama binds to `127.0.0.1:11434` by default — localhost only, which is appropriate for single-user development machines. However, it is frequently reconfigured to bind on all interfaces (via `OLLAMA_HOST=0.0.0.0:11434`) to support network access, including in Docker deployments where the default Docker network configuration may make the service reachable from outside the container.
 
-**No authentication.** Ollama has no built-in authentication mechanism. The API (which follows an OpenAI-compatible format for `/api/chat` and similar endpoints) accepts requests from any client that can reach the port.
+**No authentication.** Ollama has no built-in authentication mechanism. The API (native endpoints under `/api/`, with OpenAI-compatible surface under `/v1/`) accepts requests from any client that can reach the port.
 
 **Model pull and integrity.** Ollama's pull command (`ollama pull <model>`) fetches models from the Ollama registry (registry.ollama.ai). Models are identified by name and tag. Ollama uses SHA256 digests for model layers and verifies them against manifest values, providing integrity within a pull operation — but only against the manifest itself, not against a separately-held trust anchor (e.g., a signed manifest from the model author). If the Ollama registry entry itself were compromised (e.g., through a supply chain attack on a popular model), the checksum in the registry would reflect the malicious weights and verification would pass.
 
@@ -119,7 +119,7 @@ Hugging Face supports file-level SHA256 checksums visible in repository metadata
 
 ### SSRF via Model API to Internal Management Endpoints
 
-In deployments where a model serving API is network-accessible and other internal services run on the same network, an attacker with API access can use the LLM API as an SSRF proxy. This is particularly relevant for Ollama's Modelfile `FROM` directive (which can fetch from arbitrary URLs) and for any model serving framework that makes outbound HTTP requests based on user-supplied parameters.
+In deployments where a model serving API is network-accessible and other internal services run on the same network, an attacker with API access can use the LLM API as an SSRF proxy. The documented Ollama CVEs (CVE-2024-37032, CVE-2024-39719–39722) include path traversal and arbitrary file-read vulnerabilities — and any model serving framework that makes outbound HTTP requests as part of its operational flow (e.g., model download during serving) creates potential SSRF vectors if user-supplied parameters influence those requests.
 
 **Scenario:** A vLLM deployment with a custom model-loading endpoint sits adjacent to an internal Prometheus metrics aggregator and an etcd cluster. An attacker with unauthenticated access to the vLLM API probes internal IP ranges, retrieving configuration details from services that don't expect unauthenticated external access.
 
@@ -168,7 +168,7 @@ This attack class was explored in depth in a previous post on [adversarial promp
 
 ### Model Integrity Verification
 
-- [ ] **Verify SHA256 checksums after model downloads.** Don't rely on HTTPS alone.
+- [ ] **Verify SHA256 checksums after model downloads** against a trusted out-of-band source (e.g., the model author's separately-published hash, not just the repository's own manifest). If the repository itself is compromised, repository-provided hashes reflect the malicious weights and verification passes; out-of-band trust anchors are the meaningful check.
 - [ ] **Prefer safetensors format over PyTorch pickle format** to eliminate deserialization code execution risk.
 - [ ] **Restrict model repository directories to read-only mounts** in container deployments.
 - [ ] **Monitor model repository for unexpected file additions** (file integrity monitoring via auditd or equivalent).
@@ -178,7 +178,7 @@ This attack class was explored in depth in a previous post on [adversarial promp
 
 - [ ] **For multi-tenant workloads handling sensitive data, use dedicated GPU instances** rather than shared multi-tenant inference pools.
 - [ ] **Evaluate per-request VRAM clearing** (`cudaMemset` to zero before `cudaFree`) for high-sensitivity workloads, benchmarking performance impact against your serving SLAs before deploying.
-- [ ] **For regulated or highly sensitive inference workloads, evaluate Nvidia H100 Confidential Computing** if hardware supports it. Validate driver and framework configuration against Nvidia's documentation before claiming TEE protection.
+- [ ] **For regulated or highly sensitive inference workloads, evaluate Nvidia H100 Confidential Computing** if hardware supports it. Note that CC protects against host/hypervisor access to GPU memory and provides cross-partition isolation, but does not automatically scrub buffers between requests within the same process. Validate driver and framework configuration against Nvidia's documentation before claiming TEE protection.
 - [ ] **Apply GPU resource limits** via Kubernetes device plugin resource requests to prevent unbounded GPU memory usage. Note that standard CPU cgroups/resource quotas allocate whole GPU devices and do not provide fine-grained per-process VRAM caps; use framework-level queue depth and batch size limits to constrain memory consumption within a device.
 
 ### Principle of Least Privilege
@@ -212,7 +212,7 @@ This attack class was explored in depth in a previous post on [adversarial promp
 | Pickle-format model weights can execute arbitrary code on load | **Confirmed** | Well-documented PyTorch deserialization behavior |
 | Nvidia driver CVEs with privilege escalation potential | **Confirmed (CVE-documented)** | E.g., CVE-2024-0090 and similar in Nvidia security bulletins; scope and exploitability vary per CVE |
 | Ollama documented CVEs (CVE-2024-37032, CVE-2024-39719, CVE-2024-39720, CVE-2024-39721, CVE-2024-39722) | **Confirmed** | Ollama security advisories; path traversal and file-read vulnerabilities |
-| H100 Confidential Computing prevents host from reading GPU memory | **Confirmed (hardware capability)** | Nvidia H100 Confidential Computing documentation; production deployment coverage limited |
+| H100 Confidential Computing prevents host/hypervisor from reading GPU memory; does not scrub within-process buffers | **Confirmed (hardware capability, scoped)** | Nvidia H100 Confidential Computing documentation; within-process isolation requires application-level memory management |
 | KV-cache timing side-channel on self-hosted vLLM detectable externally | **Plausible / theoretical** | Follows from PagedAttention prefix cache semantics; not independently demonstrated |
 
 ---
@@ -229,7 +229,7 @@ The inference stack beneath your LLM application is not inherently secure by def
 
 4. **Weight protection.** Encrypt model weights at rest using available storage encryption capabilities. Verify checksums after download. Prefer safetensors over pickle.
 
-5. **Multi-tenant isolation.** For workloads where cross-tenant confidentiality matters, dedicated GPU instances are the reliable mitigation for VRAM residual risk. H100 Confidential Computing is the hardware path for shared-infrastructure scenarios, but it requires full-stack validation.
+5. **Multi-tenant isolation.** For workloads where cross-tenant confidentiality matters, dedicated GPU instances are the reliable mitigation for VRAM residual risk. H100 Confidential Computing addresses host/hypervisor access to GPU memory and supports cross-partition isolation in partitioned deployments, but does not replace application-level per-request memory management for within-process serving scenarios — it requires full-stack validation before claiming TEE protection.
 
 ---
 
