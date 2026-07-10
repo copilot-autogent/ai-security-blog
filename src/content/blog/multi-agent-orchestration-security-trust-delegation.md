@@ -11,7 +11,7 @@ Multi-agent systems break every one of those assumptions.
 
 In a multi-agent architecture, an orchestrator agent receives a task, decomposes it, and delegates sub-tasks to specialized worker agents. Workers may themselves spawn sub-workers. Agents share state through message queues, shared memory, or structured handoff objects. The result is a distributed system in which trust decisions are made continuously — at every delegation boundary — and where the correct answer to "who authorized this?" can be genuinely unclear.
 
-This is not a hypothetical concern. Frameworks like Microsoft AutoGen, CrewAI, LangGraph, and OpenAI's Swarm are in production use today. The attack surfaces they introduce are not yet matched by the security tooling defending them. This post maps those surfaces, examines how current frameworks handle (or fail to handle) them, and offers defenses grounded in published research and documented framework behavior.
+This is not a hypothetical concern. Frameworks like Microsoft AutoGen, CrewAI, and LangGraph are in production use today. OpenAI's Swarm, described as an experimental and educational framework, explores similar orchestration patterns. The attack surfaces these frameworks introduce are not yet matched by the security tooling defending them. This post maps those surfaces, examines how current frameworks handle (or fail to handle) them, and offers defenses grounded in published research and documented framework behavior.
 
 ## The Trust Boundary Problem
 
@@ -19,7 +19,7 @@ In a conventional client-server system, trust boundaries are structural and obse
 
 In a multi-agent pipeline, the equivalent of that structural boundary is a natural-language message. Agent A sends a message to Agent B. Agent B decides how much to trust that message. But in mainstream frameworks operating with their default transport and message formats, messages carry no cryptographic attestation of origin — no verified identity is attached to the agent identifier that would allow a receiving agent to distinguish a message from a trusted system component from one injected by an attacker who has compromised Agent A's input channel.
 
-Anthropic's model specification (published November 2023) defines a principal hierarchy — Anthropic, then operators, then users, then Claude itself — in which each level can grant the level below it a subset of its own trust. Operators have higher trust than users, and users have higher trust than model-generated content. This hierarchy exists to limit what each level can authorize. But when Agent A is both *receiving* input from an untrusted source and *issuing* instructions to Agent B with full orchestrator authority, that principal hierarchy is violated by architecture, not by any single attack step.
+Anthropic's Claude API documentation distinguishes operator-level trust from user-level trust: operators configure system prompts and define scope; users interact within those bounds. This hierarchy exists to limit what each level can authorize. But when Agent A is both *receiving* input from an untrusted source and *issuing* instructions to Agent B with full orchestrator authority, that principal hierarchy is violated by architecture, not by any single attack step.
 
 This is the core trust boundary problem: **multi-agent delegation transfers authority without transferring verifiable identity**.
 
@@ -51,7 +51,7 @@ Most current multi-agent frameworks identify agents by string names or identifie
 
 The attack surface depends on what the impersonated agent is trusted to authorize. In AutoGen's GroupChat architecture, agents contribute to a shared conversation and a designated speaker-selector determines whose output drives the next action. An agent that can emit messages mimicking the format expected of a privileged peer can influence the pipeline's control flow without triggering the speaker-selector's normal filters.
 
-This is not a hypothetical attack vector. AutoGen's documentation as of mid-2024 acknowledges that agent names in its conversation protocol are not verified identities. The recommended mitigation — designing agent roles so that no single agent's impersonation can cause irreversible harm — is a mitigation strategy, not a technical control.
+This is not a hypothetical attack vector. AutoGen's GroupChat architecture specifies agent identity by string name in the conversation protocol, with no cryptographic binding — this is a structural property of the design, not an explicit security acknowledgment in the documentation. The recommended mitigation in the AutoGen documentation — designing agent roles so that no single agent's impersonation can cause irreversible harm — is a mitigation strategy, not a technical control.
 
 ### 3. Tool-Chain Hijacking via Cross-Agent Output Poisoning
 
@@ -94,9 +94,9 @@ These failures are harder to detect than injection attacks because the worker is
 
 ### Microsoft AutoGen
 
-AutoGen's trust model is largely implicit. Agents are distinguished by role (AssistantAgent, UserProxyAgent, GroupChatManager) and by whether they execute code. The UserProxyAgent acts as the human-facing interface and can be configured to execute code returned by assistant agents — a significant privilege that is enabled by default in many tutorial configurations in AutoGen 0.2.x.
+AutoGen's trust model is largely implicit. Agents are distinguished by role (AssistantAgent, UserProxyAgent, GroupChatManager) and by whether they execute code. The UserProxyAgent acts as the human-facing interface and can be configured to execute code returned by assistant agents via the `code_execution_config` parameter — a significant privilege that many tutorials enable without discussion of the security implications.
 
-AutoGen's security documentation explicitly calls out the code execution surface: "The code is executed in a subprocess in the same environment as the user agent. This is a security risk." The recommended mitigation is using Docker containers for code execution, which AutoGen 0.2.x supports by passing `{"use_docker": True}` as the `code_execution_config` parameter.
+AutoGen's documentation warns that code is executed in a subprocess in the same environment as the user agent and recommends using Docker containers for isolation. In AutoGen 0.2.x, Docker-based isolation is configured by passing `{"use_docker": True}` as part of `code_execution_config`.
 
 For inter-agent trust, AutoGen relies on the conversation protocol — agents speak in a named turn structure, and the GroupChatManager selects the next speaker based on defined rules or LLM-based selection. There is no cryptographic attestation of agent identity. The GroupChatManager's LLM-based speaker selection means that injected content which mimics a termination signal or a role-switch instruction can influence pipeline control flow.
 
@@ -130,7 +130,7 @@ The most fundamental defense is ensuring that sub-agents can never exceed the tr
 
 This requires passing an authorization context object through the delegation chain: a token, a capability set, or a principal identifier that downstream agents can use to validate whether a requested action falls within the original scope. The orchestrator's own capability set should not be the default authorization for its workers.
 
-Anthropic's principal hierarchy (operators > users > models) provides a conceptual framework, but it is not automatically enforced in multi-agent deployments. It requires explicit architectural enforcement: each orchestration layer must check whether a requested action is within the scope of the input principal, not just within its own capability.
+The operator/user trust model that Anthropic's Claude API documentation describes — where operators configure scope and users interact within it — provides a conceptual framework, but it is not automatically enforced in multi-agent deployments. It requires explicit architectural enforcement: each orchestration layer must check whether a requested action is within the scope of the input principal, not just within its own capability.
 
 ### Signed Task Manifests
 
@@ -209,7 +209,10 @@ These questions do not have universal answers, but asking them systematically du
 - Greshake, K., Abdelnabi, S., Mishra, S., Endres, C., Holz, T., & Fritz, M. (2023). Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injections. *arXiv:2302.12173*.
 - Hardy, N. (1988). The Confused Deputy (or why capabilities might have been invented). *ACM Operating Systems Review*, 22(4), 36–38.
 - OWASP Top 10 for Large Language Model Applications (2023 Edition) — LLM08: Excessive Agency.
-- Anthropic. (2023). Claude Model Spec — Principal Hierarchy. https://www.anthropic.com/model-spec
-- Microsoft AutoGen Documentation — Agent Trust and Code Execution. https://microsoft.github.io/autogen/
+- Anthropic. Claude API Documentation — System Prompts and Operator/User Trust Levels. https://docs.anthropic.com/en/docs/build-with-claude/system-prompts
+- Microsoft AutoGen Documentation. https://microsoft.github.io/autogen/
+- CrewAI Documentation. https://docs.crewai.com/
+- LangGraph Documentation. https://langchain-ai.github.io/langgraph/
+- Microsoft Semantic Kernel Documentation — Agent Framework. https://learn.microsoft.com/en-us/semantic-kernel/
 - Willison, S. (2023, April 25). The Dual LLM Pattern for Building AI Assistants that Can Resist Prompt Injection. https://simonwillison.net/2023/Apr/25/dual-llm-pattern/
 - NIST SP 800-207: Zero Trust Architecture (2020).
