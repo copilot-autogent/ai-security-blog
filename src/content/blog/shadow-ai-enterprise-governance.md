@@ -1,8 +1,8 @@
 ---
 title: "Shadow AI in the Enterprise: Detecting, Governing, and Securing Unauthorized AI Tool Use"
-description: "Employees at most enterprises are already using unsanctioned AI tools for work — pasting proprietary data, source code, and customer PII into systems the enterprise has no visibility into. Shadow AI is the new shadow IT, with faster adoption curves and higher data sensitivity per interaction. Here's how to detect it, govern it, and build security architecture that says 'yes' to AI while maintaining control."
+description: "How to detect, govern, and secure unauthorized AI tool use in the enterprise — before sensitive corporate data leaves through AI prompts."
 pubDate: 2026-07-11
-tags: ["shadow-ai", "enterprise-security", "data-loss-prevention", "governance", "insider-threat", "compliance", "casb"]
+tags: ["compliance", "security-architecture", "threat-modeling", "incident-response"]
 ---
 
 In April 2023, engineers at Samsung's semiconductor division used ChatGPT to help debug proprietary source code — three separate times in less than a month. The leaked material included internal meeting notes, source code for measuring semiconductor equipment, and data related to a faulty batch. Samsung subsequently banned ChatGPT internally, but the data had already left the building. No malicious actor was involved. No security control caught it in real time. Employees were just trying to do their jobs more efficiently.
@@ -65,7 +65,7 @@ The footprint of these automations can grow significant before discovery. Unlike
 
 Enterprises operating under GDPR, HIPAA, CCPA, SOC 2, or similar frameworks have specific obligations around data processing: they must know who is processing covered data, under what agreements, with what protections. Employees submitting personal data or protected health information to AI tools operating outside enterprise contracts breach these frameworks.
 
-Under GDPR, submitting EU data subject PII to a processor outside an approved data processing agreement constitutes unauthorized processing. Under HIPAA, submitting PHI to a service without a Business Associate Agreement is a reportable violation. The compliance implications don't depend on whether a breach occurs — the unauthorized processing itself is the violation.
+Under GDPR, submitting EU data subject PII to a processor outside an approved data processing agreement constitutes unauthorized processing. Under HIPAA, submitting PHI to a service without a Business Associate Agreement is a compliance violation; breach notification duties depend on a risk assessment of the specific incident, but the unauthorized processing itself violates the HIPAA Privacy and Security Rules. The compliance implications don't require a breach to materialize — the unauthorized processing is itself the problem.
 
 ## Detection Approaches
 
@@ -75,7 +75,7 @@ Shadow AI is detectable. Not with certainty, and not with a single control — b
 
 The immediate, deployable step: add AI service URLs to your DLP URL category lists and apply content inspection policies to HTTPS traffic to those endpoints.
 
-The canonical domains to cover include `chat.openai.com`, `api.openai.com`, `claude.ai`, `api.anthropic.com`, `bard.google.com`, `gemini.google.com`, and the API endpoints for Mistral, Cohere, and other providers your sector uses. Most enterprise DLP platforms (Symantec DLP, Forcepoint, Microsoft Purview) support URL-category policies; you're creating a new category for AI services and attaching inspection rules to it.
+The canonical domains to cover include `chatgpt.com`, `chat.openai.com`, `api.openai.com`, `claude.ai`, `api.anthropic.com`, `gemini.google.com`, and the API endpoints for Mistral, Cohere, and other providers your sector uses. Most enterprise DLP platforms (Symantec DLP, Forcepoint, Microsoft Purview) support URL-category policies; you're creating a new category for AI services and attaching inspection rules to it.
 
 Limitations: this doesn't catch API calls from scripts or automation tools (which often bypass browser-level inspection), and it requires SSL inspection to see POST body content over HTTPS — a deployment complexity many organizations have managed for other use cases but that requires careful certificate and bypass configuration.
 
@@ -89,7 +89,7 @@ This requires endpoint management coverage — unmanaged devices (personal lapto
 
 ### Network Proxy Classification for AI API Traffic
 
-Enterprise network proxies sit in the request path for browser traffic; next-generation firewalls can identify AI traffic at the application layer even without URL-specific policies. The AI traffic signature includes API call patterns (POST requests to `/v1/chat/completions`, `/api/messages`, and similar endpoints), response payload sizes consistent with language model output, and distinctive HTTP headers used by AI provider SDKs.
+Enterprise network proxies sit in the request path for browser traffic; next-generation firewalls can identify AI traffic at the application layer even without URL-specific policies. The AI traffic signature — for deployments with SSL/TLS inspection enabled — includes API call patterns (POST requests to `/v1/chat/completions`, `/api/messages`, and similar endpoints), response payload sizes consistent with language model output, and distinctive HTTP headers used by AI provider SDKs. Without SSL inspection, NGFWs rely on hostname and IP-based classification, which still identifies the AI service but cannot inspect request content.
 
 Some NGFW vendors (Palo Alto, Zscaler, Netskope) have added AI application categories to their application identification libraries, enabling policy creation and visibility without manual URL list maintenance. This is particularly useful for catching API calls from scripts and automation tools that bypass browser-level DLP.
 
