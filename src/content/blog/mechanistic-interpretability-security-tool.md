@@ -13,6 +13,8 @@ Mechanistic interpretability attacks this problem from a different direction. In
 
 This post is for security engineers who've heard the term "mechanistic interpretability" in AI safety contexts and wondered whether it's practically relevant to their work. The short answer: increasingly, yes—but with real limitations you should understand before committing it to your evaluation pipeline.
 
+> **Related reading:** This post focuses on *detecting* hidden behaviors in trained models. For background on how backdoors and poisoning attacks are introduced in the first place, see the companion posts on [backdoor attacks in foundation models](/blog/backdoor-attacks-foundation-models) and [poisoning the pretraining corpus](/blog/poisoning-pretraining-corpus).
+
 ## What Mechanistic Interpretability Actually Studies
 
 The field starts from a basic observation: a transformer language model is a function that maps input tokens to output probabilities, but the intermediate computations—the sequence of activations across attention heads, MLPs, and residual stream positions—are not a black box. They're a large, messy, but in-principle-readable data structure.
@@ -36,9 +38,9 @@ A backdoor is a conditional behavior: the model acts normally except when a spec
 
 Mechanistic approaches find backdoors by looking for the circuit that implements the conditional, rather than trying to enumerate trigger inputs.
 
-The core intuition comes from the **Neural Cleanse** line of work (Wang et al., IEEE S&P 2019 and follow-ons): a backdoored model should have an anomalous activation pattern when the trigger is present. Clean inputs and triggered inputs both reach the output, but they take different paths through the network. The trigger activates a distinct circuit or set of neurons not active during normal inference.
+**Neural Cleanse** (Wang et al., IEEE S&P 2019) is an influential backdoor detection approach, but it operates at the behavioral level: it reverse-engineers minimal input perturbations that reliably flip the model to a target class, not by examining internal activations directly. If a small perturbation reliably causes the model to output a specific label, that's evidence of a planted trigger. It's a useful detection signal, though it requires knowing the suspect output behavior and searches the input space rather than the activation space.
 
-**ABS (Artificial Brain Stimulation) scanning** extends this: rather than comparing clean vs. triggered inputs, it stimulates individual neurons directly and observes whether stimulating certain neurons produces the trojan behavior without any trigger input at all. The trojan neurons are identifiable by their disproportionate influence on the output.
+**ABS (Artificial Brain Stimulation) scanning** (Liu et al., CCS 2019) takes a complementary activation-level approach: it stimulates individual neurons directly and observes whether stimulating certain neurons produces the trojan behavior without any trigger input at all. The trojan neurons are identifiable by their disproportionate influence on the output. This is closer to a mechanistic technique—you're probing internal structure rather than searching for trigger inputs.
 
 In practice, the workflow looks like:
 1. Run a sweep of clean inputs through the model, recording per-layer activation statistics
@@ -59,7 +61,7 @@ Activation steering is the natural probe here. The procedure:
 2. Steer in that direction at inference time using clean prompts that wouldn't normally elicit the capability
 3. Observe whether coherent capability-expressing outputs appear
 
-If steering toward a direction produces capability outputs that weren't present without steering, the capability is latent in the model's representations. The model "knows" the thing but doesn't surface it by default.
+If steering toward a direction produces capability outputs that weren't present without steering, that is evidence the model has representational structure associated with that capability—though positive steering results require careful interpretation. Activation steering can amplify latent structure, but it can also inject behavior by forcing the model into an unnatural representational state. This means steering evidence is most useful when combined with other signals (does the model respond to indirect prompting that naturally activates the direction? does the capability activate in few-shot contexts?) rather than as a standalone proof.
 
 Anthropic has used this approach internally. The Scaling Monosemanticity paper reported features related to deceptive planning and self-preservation in Claude 3 Sonnet's internal representations—features that activate in context-appropriate ways even when the model's outputs don't reflect those themes. Whether those features causally drive behavior at sufficient scale is an open research question, but their existence demonstrates that internal representations can contain more than the output suggests.
 
@@ -73,7 +75,7 @@ Mechanistic analysis can distinguish these cases by examining which circuits imp
 
 The relevant diagnostic:
 - **Shallow safety**: Refusal is mediated by a small number of final-layer neurons or attention heads that apply a "don't comply" signal late in processing. Internal representations of harmful content are fully formed; only the output step is filtered. Fine-tuning that re-weights those final layers easily removes the refusal.
-- **Deep safety**: Refusal is implemented earlier in the processing stack, and the model doesn't fully represent the harmful content internally—the circuit for producing it was modified, not just filtered at output.
+- **Deep safety**: Refusal circuitry activates earlier in the processing stack, suggesting the safety behavior is more structurally integrated rather than applied as a late-stage output filter. Note that this doesn't necessarily mean the model never forms an internal representation of the harmful content—it primarily means the refusal mechanism is less concentrated in easily-removable late layers. The practical implication is that fine-tuning attacks targeting only a small number of final-layer components are less likely to disable the safety behavior entirely.
 
 Research suggests many current models have *some* safety implemented at a relatively shallow level, which is consistent with the empirical finding that safety alignment is often brittle to fine-tuning (see Qi et al., "Fine-tuning Aligned Language Models Compromises Safety," 2023). Interpretability-based safety audits can give a structural account of *why* it's brittle, and whether a given model's safety is deeper than the baseline.
 
@@ -91,9 +93,9 @@ The tooling for this is less mature than the backdoor detection case, and the te
 
 ## Tooling Available Today
 
-**TransformerLens** (Neel Nanda, EleutherAI) is the primary open-source library for mechanistic interpretability experiments. It wraps HuggingFace transformers with hooks for extracting activations at arbitrary positions, running activation patching experiments, and visualizing attention patterns. The API is designed for interpretability research—you get activation tensors, can ablate components, and run systematic probes. Supported models include GPT-2, GPT-Neo, Pythia, LLaMA, and Mistral variants. Documentation: [transformerlensorg.github.io](https://transformerlensorg.github.io/TransformerLens/).
+**TransformerLens** (created by Neel Nanda; now maintained by the TransformerLensOrg community) is the primary open-source library for mechanistic interpretability experiments. It wraps HuggingFace transformers with hooks for extracting activations at arbitrary positions, running activation patching experiments, and visualizing attention patterns. The API is designed for interpretability research—you get activation tensors, can ablate components, and run systematic probes. Supported models include GPT-2, GPT-Neo, Pythia, LLaMA, and Mistral variants. GitHub: [github.com/TransformerLensOrg/TransformerLens](https://github.com/TransformerLensOrg/TransformerLens); documentation: [transformerlensorg.github.io](https://transformerlensorg.github.io/TransformerLens/).
 
-**SAELens** (Joseph Bloom, EleutherAI) handles training and analysis with sparse autoencoders, including pre-trained SAEs for common models. If you want to run SAE-based feature analysis without training from scratch, start here.
+**SAELens** (created by Joseph Bloom; community-maintained) handles training and analysis with sparse autoencoders, including pre-trained SAEs for common models. If you want to run SAE-based feature analysis without training from scratch, start here.
 
 **Neuroscope** (Neel Nanda) is a web interface for browsing neuron-level activations across layers of GPT-2 variants—useful for initial exploration and building intuition before writing code.
 
@@ -141,7 +143,7 @@ The **NIST AI Risk Management Framework** (AI RMF 1.0) calls for "explainability
 
 The **EU AI Act** requires "technical documentation" for high-risk AI systems (Annex IV) that includes "a description of the measures taken to monitor, prevent and mitigate biases" and "mechanisms to assess and improve the AI system." Activation-level analysis that characterizes safety circuit depth and detects anomalous features is a plausible technical contribution to that documentation.
 
-**NIST FIPS 140-3** style cryptographic integrity verification of model weights addresses tampering at the storage level but says nothing about whether the weights themselves contain malicious structure. Mechanistic analysis is the complementary layer: you can verify the weights haven't been replaced (hash), and separately inspect whether those weights encode hidden behaviors (activation analysis).
+Cryptographic integrity verification of model weights (e.g., SHA-256 hashing of weight files, or signed model cards) addresses tampering at the storage level but says nothing about whether the weights themselves contain malicious structure. Mechanistic analysis is the complementary layer: you can verify the weights haven't been replaced (cryptographic hash), and separately inspect whether those weights encode hidden behaviors (activation analysis).
 
 None of these frameworks currently mandate mechanistic analysis. But the combination of growing concern about supply-chain attacks on model weights and increasing regulatory attention to AI transparency suggests the window is open for interpretability-based security auditing to become a standard practice before it becomes a requirement.
 
@@ -163,5 +165,6 @@ The field is moving fast. The gap between "research methodology" and "deployable
 - *Wang et al., "Interpretability in the Wild: a Circuit for Indirect Object Identification in GPT-2 Small," ICLR 2023 — [arXiv:2211.00593](https://arxiv.org/abs/2211.00593)*
 - *Anthropic, "Scaling Monosemanticity: Extracting Interpretable Features from Claude 3 Sonnet," 2024 — [transformer-circuits.pub](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html)*
 - *Wang et al., "Neural Cleanse: Identifying and Mitigating Backdoor Attacks in Neural Networks," IEEE S&P 2019*
+- *Liu et al., "ABS: Scanning Neural Networks for Back-doors by Artificial Brain Stimulation," ACM CCS 2019*
 - *Qi et al., "Fine-tuning Aligned Language Models Compromises Safety," 2023 — [arXiv:2310.03693](https://arxiv.org/abs/2310.03693)*
-- *Nanda, N. et al. "Progress Measures for Grokking via Mechanistic Interpretability," ICLR 2023 — TransformerLens library: [github.com/neelnanda-io/TransformerLens](https://github.com/neelnanda-io/TransformerLens)*
+- *TransformerLens library (Neel Nanda et al.) — [github.com/TransformerLensOrg/TransformerLens](https://github.com/TransformerLensOrg/TransformerLens)*
