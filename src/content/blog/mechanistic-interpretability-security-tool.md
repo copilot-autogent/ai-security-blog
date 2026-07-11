@@ -1,6 +1,6 @@
 ---
 title: "Mechanistic Interpretability as a Security Tool: Detecting Backdoors and Hidden Behaviors in AI Models"
-description: "Behavioral red-teaming only finds what you look for. Mechanistic interpretability—circuits, features, sparse autoencoders—lets security teams inspect a model's internals to detect backdoors, hidden capabilities, and safety-layer tampering before deployment."
+description: "Circuits, sparse autoencoders, and activation steering let security teams detect backdoors and hidden model behaviors that red-teaming cannot find."
 pubDate: 2026-07-11
 tags: ["mechanistic-interpretability", "backdoor-detection", "model-security", "ai-safety", "pre-deployment-inspection", "sparse-autoencoders"]
 ---
@@ -19,9 +19,9 @@ This post is for security engineers who've heard the term "mechanistic interpret
 
 The field starts from a basic observation: a transformer language model is a function that maps input tokens to output probabilities, but the intermediate computations—the sequence of activations across attention heads, MLPs, and residual stream positions—are not a black box. They're a large, messy, but in-principle-readable data structure.
 
-**Circuits** are the original framing: small subgraphs of attention heads and MLP neurons that together implement a specific computation. Wang et al. ([ICLR 2023](https://arxiv.org/abs/2211.00593)) identified the "Indirect Object Identification" circuit in GPT-2 Small—a roughly 26-component subgraph responsible for producing the correct pronoun in sentences like "When John and Mary went to the store, [pronoun] bought milk." The circuit is identifiable, ablatable, and causally responsible for the behavior. If you remove it, the behavior disappears. If you patch it into a different position, the behavior moves.
+**Circuits** are the original framing: small subgraphs of attention heads and MLP neurons that together implement a specific computation. Wang et al. ([ICLR 2023](https://arxiv.org/abs/2211.00593)) identified the "Indirect Object Identification" circuit in GPT-2 Small—a roughly 26-component subgraph responsible for completing sentences like "When Mary and John went to the store, John gave a drink to ___" with the correct name ("Mary"). The circuit identifies which entity is the indirect object and moves that name to the output position. It is identifiable, ablatable, and causally responsible for the behavior.
 
-**Sparse autoencoders (SAEs)** are a more recent and arguably more scalable approach. Raw MLP activations are superposed—thousands of features encoded in hundreds of dimensions, because the model has more things to represent than it has neurons. An SAE learns a sparse overcomplete dictionary that disentangles these superposed features into interpretable directions. Anthropic's "Scaling Monosemanticity" paper (2024) applied this to Claude 3 Sonnet at scale, extracting millions of interpretable features—including some with clear safety relevance (e.g., features associated with deception, manipulation, and self-preservation).
+**Sparse autoencoders (SAEs)** are a more recent and arguably more scalable approach. Raw MLP activations are superposed—thousands of features encoded in hundreds of dimensions, because the model has more things to represent than it has neurons. An SAE learns a sparse overcomplete dictionary that disentangles these superposed features into interpretable directions. Anthropic's "Scaling Monosemanticity" paper (2024) applied this to Claude 3 Sonnet at scale, extracting millions of interpretable features. Separately, interpretability researchers have used similar activation-analysis techniques to identify features associated with security-relevant behaviors such as deceptive planning—though the causal relationship between such features and actual model behavior remains an active area of research.
 
 **Activation steering** uses those identified features (or raw activation directions) as intervention handles: adding a scaled version of a feature direction to the residual stream at inference time steers the model toward or away from a behavior, without any fine-tuning. It's a probe-and-perturb method: find the direction, manipulate it, observe the behavioral shift.
 
@@ -44,9 +44,9 @@ Mechanistic approaches find backdoors by looking for the circuit that implements
 
 In practice, the workflow looks like:
 1. Run a sweep of clean inputs through the model, recording per-layer activation statistics
-2. Search for neurons with bimodal activation distributions (rarely active in general, but highly active on some inputs)
+2. Search for neurons with bimodal activation distributions (rarely active in general, but highly active on some inputs) — note this approach is most useful for backdoors that incidentally activate on some natural inputs; a carefully designed dormant backdoor that only fires on a very specific trigger may not be detectable this way from clean-input statistics alone
 3. For neurons that look anomalous, use activation steering to directly stimulate them and observe output shifts
-4. If stimulating a small set of neurons reproducibly produces the suspect behavior at high confidence, you've found the backdoor circuit
+4. If stimulating a small set of neurons reproducibly produces the suspect behavior at high confidence, that is evidence of a trigger-activated circuit
 
 This doesn't require knowing the trigger. It requires knowing what the bad behavior looks like in the output—which is usually known (the concern is "this model might be backdoored to produce harmful outputs X").
 
@@ -85,7 +85,9 @@ For compliance purposes: this analysis can be part of a pre-deployment audit for
 
 A different use case: you have a model from a vendor, and you want to detect post-hoc weight modifications. Either you're auditing a fine-tuned model against its claimed base, or you've distributed model weights and want to detect whether a third party has modified them.
 
-The mechanistic approach: establish activation statistics on the clean baseline model, then compare a suspect model against those baselines using a probe set of inputs. Tampered models should show anomalous activation distributions on circuits that weren't modified by the claimed fine-tuning procedure.
+The mechanistic approach: establish activation statistics on the clean baseline model, then compare a suspect model against those baselines using a probe set of inputs. Tampered models may show anomalous activation distributions on circuits that weren't modified by the claimed fine-tuning procedure.
+
+The technique has significant practical limitations: benign differences in quantization, runtime precision, fine-tuning objectives, or tokenizer changes can all produce measurable activation shifts. Useful tampering detection requires baselines from a population of legitimate fine-tuned variants, not just the original model, to calibrate what "normal drift" looks like. Without that calibration, false positives are a serious risk.
 
 This is structurally similar to behavior-based model fingerprinting, but at the activation level—which is harder to defeat, because an adversary who modifies weights to produce specific output behaviors may still leave anomalous internal traces. The activations are higher-dimensional and less controllable than the outputs.
 
@@ -141,7 +143,7 @@ Mechanistic interpretability is beginning to show up in AI governance frameworks
 
 The **NIST AI Risk Management Framework** (AI RMF 1.0) calls for "explainability" and "interpretability" as components of trustworthy AI—it's methodology-agnostic but creates a hook for auditors who want to claim interpretability analysis as evidence of compliance.
 
-The **EU AI Act** requires "technical documentation" for high-risk AI systems (Annex IV) that includes "a description of the measures taken to monitor, prevent and mitigate biases" and "mechanisms to assess and improve the AI system." Activation-level analysis that characterizes safety circuit depth and detects anomalous features is a plausible technical contribution to that documentation.
+The **EU AI Act** requires "technical documentation" for high-risk AI systems (Annex IV) covering risk management measures and testing methodologies (Article 9). Activation-level analysis that characterizes safety circuit depth and detects anomalous features could constitute evidence of systematic risk management—though the Act does not prescribe specific technical methods and interpretability auditing is not currently standard practice under any enforcement guidance.
 
 Cryptographic integrity verification of model weights (e.g., SHA-256 hashing of weight files, or signed model cards) addresses tampering at the storage level but says nothing about whether the weights themselves contain malicious structure. Mechanistic analysis is the complementary layer: you can verify the weights haven't been replaced (cryptographic hash), and separately inspect whether those weights encode hidden behaviors (activation analysis).
 
