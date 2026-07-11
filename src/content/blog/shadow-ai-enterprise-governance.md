@@ -63,9 +63,9 @@ The footprint of these automations can grow significant before discovery. Unlike
 
 ### Compliance Violations
 
-Enterprises operating under GDPR, HIPAA, CCPA, SOC 2, or similar frameworks have specific obligations around data processing: they must know who is processing covered data, under what agreements, with what protections. Employees submitting personal data or protected health information to AI tools operating outside enterprise contracts breach these frameworks.
+Enterprises operating under GDPR, HIPAA, or sector-specific privacy regulations have specific obligations around data processing: they must know who is processing covered data, under what agreements, with what protections. Compliance frameworks like SOC 2 and CCPA impose different obligations (attestation and service-provider contracting models, respectively) but share the same underlying requirement: documented, controlled data handling. Employees submitting personal data or protected health information to AI tools operating outside enterprise contracts create exposure under each framework, in different ways.
 
-Under GDPR, submitting EU data subject PII to a processor outside an approved data processing agreement constitutes unauthorized processing. Under HIPAA, submitting PHI to a service without a Business Associate Agreement is a compliance violation; breach notification duties depend on a risk assessment of the specific incident, but the unauthorized processing itself violates the HIPAA Privacy and Security Rules. The compliance implications don't require a breach to materialize — the unauthorized processing is itself the problem.
+Under GDPR, submitting EU data subject PII to an external AI service creates data handling risks that depend on the provider's role: if the provider acts as a data processor, processing without an approved DPA is unauthorized; if the provider acts as a data controller in its own right (using inputs for its own purposes), the enterprise may be enabling unauthorized transfer of personal data to a third controller without adequate legal basis. Under HIPAA, submitting PHI to a service without a Business Associate Agreement is a compliance violation; breach notification duties depend on a risk assessment of the specific incident, but the unauthorized processing itself violates the HIPAA Privacy and Security Rules. The compliance implications don't require a breach to materialize — the unauthorized processing is itself the problem.
 
 ## Detection Approaches
 
@@ -75,9 +75,9 @@ Shadow AI is detectable. Not with certainty, and not with a single control — b
 
 The immediate, deployable step: add AI service URLs to your DLP URL category lists and apply content inspection policies to HTTPS traffic to those endpoints.
 
-The canonical domains to cover include `chatgpt.com`, `chat.openai.com`, `api.openai.com`, `claude.ai`, `api.anthropic.com`, `gemini.google.com`, and the API endpoints for Mistral, Cohere, and other providers your sector uses. Most enterprise DLP platforms (Symantec DLP, Forcepoint, Microsoft Purview) support URL-category policies; you're creating a new category for AI services and attaching inspection rules to it.
+The canonical domains to cover include `chatgpt.com`, `chat.openai.com`, `api.openai.com`, `claude.ai`, `api.anthropic.com`, `gemini.google.com`, and the API endpoints for Mistral, Cohere, and other providers your sector uses. Most enterprise DLP platforms (Symantec DLP, Forcepoint, Microsoft Purview) support URL-category policies; you're creating a new category for AI services and attaching inspection rules to it. Note: hostname-based controls alone cannot distinguish personal accounts from sanctioned enterprise accounts on the same provider domain — an employee's personal ChatGPT account and a corporate enterprise account share `chatgpt.com`. Identity-aware controls (SSO enforcement, conditional access, CASB with account-type detection) are needed to enforce the personal-vs-enterprise distinction.
 
-Limitations: this doesn't catch API calls from scripts or automation tools (which often bypass browser-level inspection), and it requires SSL inspection to see POST body content over HTTPS — a deployment complexity many organizations have managed for other use cases but that requires careful certificate and bypass configuration.
+Limitations: this doesn't catch traffic that bypasses the DLP inspection path — including scripts or automation tools running on unmanaged devices or on cloud infrastructure that routes traffic directly to AI APIs without traversing the enterprise proxy. It also requires SSL inspection to see POST body content over HTTPS — a deployment complexity many organizations have managed for other use cases but that requires careful certificate and bypass configuration.
 
 ### Browser Extension Monitoring
 
@@ -172,7 +172,7 @@ These provisions require legal review — security teams should be coordinating 
 
 ### On-Premises and Private Cloud Options
 
-For enterprises with the highest sensitivity requirements — defense industrial base, financial services with significant regulatory exposure, healthcare with strict PHI requirements — public cloud AI services may not be acceptable regardless of the contractual protections. The data never leaves the enterprise boundary.
+For enterprises with the highest sensitivity requirements — defense industrial base, financial services with significant regulatory exposure, healthcare with strict PHI requirements — the goal is to minimize or eliminate data exposure to third-party infrastructure. The options range from keeping data fully on-premises to using dedicated private-cloud deployments with strong isolation guarantees.
 
 Options here are maturing:
 
