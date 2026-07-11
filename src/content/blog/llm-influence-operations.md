@@ -47,13 +47,13 @@ The combined effect is a reduction in operational cost of orders of magnitude. T
 
 ## Documented Operations: What the Evidence Shows
 
-OpenAI's threat disruption reports, published throughout 2024, document specific operations using OpenAI's models for influence operation tasks. These aren't theoretical — they're post-hoc analysis of actual accounts disrupted through coordinated detection efforts. The May 2024 report ("Disrupting deceptive uses of AI by covert influence operations") identified five operations across multiple countries.
+Multiple independent research organizations and platform trust-and-safety teams have documented specific operations using LLMs for influence operation tasks. These aren't theoretical — they're post-hoc analysis of actual accounts disrupted through coordinated detection efforts.
 
-**Operation "Doppelganger" (Russia-linked)**: The DFRLab and EU DisinfoLab documented a sophisticated operation using AI-generated content to create fake news sites impersonating legitimate European media outlets. The operation used LLMs to generate articles that mimicked the editorial voice of real publications. Critically, the content was localized for French, German, Italian, and Spanish audiences simultaneously — a capability that would have required a substantially larger operation before LLM access was available.
+**OpenAI threat disruption reports (2024)**: OpenAI's May 2024 report ("Disrupting deceptive uses of AI by covert influence operations") identified five distinct operations across multiple countries that were using ChatGPT for influence-operation tasks: generating social media comments, translating content across languages, creating fake personas, and drafting articles. One identified operation was linked to Iran and targeted the 2024 U.S. election; others were linked to China and Russia. The operations were generating content at volumes implausible without automation. Critically, OpenAI found that none of the five operations showed evidence of significant audience engagement — the disruptions occurred before major distribution.
 
-**Iranian operation (OpenAI May 2024 report)**: OpenAI identified an Iran-linked operation using ChatGPT to generate content about the 2024 U.S. election, including articles mixing genuine information with fabricated details, social media comments designed to appear organic, and translation services for distributing content across language boundaries. The operation was generating content at volumes that would be implausible without automation.
+**Operation "Doppelganger" (Russia-linked, documented by DFRLab and EU DisinfoLab)**: Separately from the OpenAI report, the Digital Forensic Research Lab and EU DisinfoLab documented an ongoing Russian-linked operation using AI-generated content to create fake news sites impersonating legitimate European media outlets — including Le Monde, Der Spiegel, and other publications. The operation used LLMs to generate articles that mimicked the editorial voice of real publications, localized for French, German, Italian, and Spanish audiences simultaneously. This multi-language, multi-target capability would have required a substantially larger operation before LLM access was available.
 
-**Meta's Coordinated Inauthentic Behavior (CIB) takedowns**: Meta's Q4 2024 Adversarial Threat Report documented multiple takedowns where AI-generated profile images and LLM-assisted content were part of the detected infrastructure. The behavioral fingerprints that previously allowed network graph analysis to identify coordinated accounts — posting times, content similarity, linguistic patterns — are now more easily obfuscated by varying LLM outputs.
+**Meta's Coordinated Inauthentic Behavior (CIB) takedowns**: Meta's adversarial threat reporting has documented multiple takedowns where AI-generated profile images and LLM-assisted content were part of the detected infrastructure. The behavioral fingerprints that previously allowed network graph analysis to identify coordinated accounts — posting times, content similarity, linguistic patterns — are now more easily obfuscated by varying LLM outputs.
 
 What's notable across these cases is the operational posture: LLMs aren't replacing human operators; they're amplifying human operators. The strategic targeting decisions, the selection of narratives to amplify, the intelligence about which communities are susceptible — these still require human judgment and, in state-actor cases, intelligence resources. LLMs handle the content production bottleneck.
 
@@ -118,7 +118,7 @@ Platform detection has improved significantly, but faces structural asymmetries 
 
 **Watermarking limitations**: Cryptographic and statistical watermarking of LLM outputs is technically feasible (tools like SynthID embed statistical patterns in generated text). But watermarks are **easily stripped** by paraphrasing: a human editor making minor changes to LLM-generated text can remove detectable watermark patterns while preserving the substance of the content. Any detection strategy that relies solely on watermarking faces this adversarial degradation.
 
-**Attribution asymmetry**: In traditional cybersecurity, attribution relies on technical indicators — malware signatures, infrastructure patterns, TTPs that link attacks to known threat actors. Influence operations have always been harder to attribute. LLMs worsen the problem: operations that previously required large teams with detectable organizational patterns can now run with smaller technical footprints, making infrastructure-based attribution less reliable.
+**Attribution asymmetry**: In traditional cybersecurity, attribution relies on technical indicators — malware signatures, infrastructure patterns, TTPs that link attacks to known threat actors. Influence operations have always been harder to attribute. LLMs worsen the problem significantly: operations that previously required large teams with detectable organizational patterns can now run with smaller technical footprints. The content generation layer becomes nearly invisible — commodity API calls leave no forensic artifacts specific to the operation. Technical traces still exist (account creation patterns, device and IP fingerprints, payment infrastructure, orchestration tooling), but they're weaker and more easily obscured than the human-scale team patterns of earlier operations. Infrastructure-based attribution remains possible but requires significantly more investigative depth.
 
 ## Detection Approaches That Work
 
@@ -128,36 +128,36 @@ Despite the detection challenges, several approaches have proven operationally e
 
 **Behavioral consistency analysis**: LLMs, prompted at scale, produce characteristic consistency patterns. Real users have recognizable inconsistencies — their engagement varies with their schedules, their posting voice shifts across topics, they have off-topic interactions. High-consistency behavior across thousands of accounts is anomalous.
 
-**C2PA content provenance**: The Coalition for Content Provenance and Authenticity standard embeds cryptographic provenance metadata into media at creation. A C2PA-signed image carries a verifiable record of its creation tooling, time, and chain of modifications. This doesn't prevent synthetic content from being created, but it allows platforms and users to verify provenance claims. The EU AI Act's Article 50 provisions on synthetic content disclosure align with this approach.
+**C2PA content provenance**: The Coalition for Content Provenance and Authenticity standard embeds cryptographic provenance metadata into media at creation. A C2PA-signed image carries a verifiable record of its creation tooling, time, and chain of modifications. This doesn't prevent synthetic content from being created, but it allows platforms and users to verify provenance claims for signed content. An important current limitation: many platform upload and transcoding pipelines strip or fail to preserve C2PA manifests, which significantly limits the standard's reach until platforms adopt manifest-preserving pipelines end-to-end. C2PA is a promising building block, not a deployed control at scale today.
 
 **Cross-platform coordination detection**: Operations that exist primarily on one platform are relatively easy for that platform to disrupt. Operations coordinating across multiple platforms are harder to detect from any single platform's data. Structured information sharing between platforms — like the Global Internet Forum to Counter Terrorism model applied to coordinated inauthentic behavior — allows cross-platform pattern matching that single-platform detection misses.
 
 ## The Attribution Problem
 
-State actors operating AI-enabled influence operations enjoy a structural advantage that traditional cyberattack attribution doesn't fully parallel: **plausible deniability at the technical layer**.
+State actors operating AI-enabled influence operations enjoy a structural advantage: **plausible deniability at the content-generation layer**.
 
-For a cyberattack, attribution relies on technical indicators that are hard to fabricate: malware signatures, infrastructure registration patterns, TTPs documented across multiple incidents. A sophisticated state actor can attempt false-flag attribution, but it requires significant operational investment and leaves its own traces.
+For a traditional cyberattack, attribution relies on technical indicators that are hard to fabricate: malware signatures, infrastructure registration patterns, TTPs documented across multiple incidents. A sophisticated state actor can attempt false-flag attribution, but it requires significant operational investment and leaves its own traces.
 
-For AI-enabled disinformation, the technical infrastructure can be entirely commercial: commodity LLM API access, standard social media accounts, off-the-shelf diffusion models. There's no malware to analyze, no command-and-control infrastructure to trace, no unique technical signature. Attribution reverts to intelligence community analysis — understanding intent, motive, and capability — rather than technical forensics.
+For AI-enabled disinformation, the content generation layer is entirely commercial: commodity LLM API access, standard social media accounts, off-the-shelf diffusion models. There's no malware to analyze and no command-and-control infrastructure specific to the operation. Investigators still find traces — account creation batches, shared device fingerprints, payment infrastructure, orchestration logs — but they are weaker and more easily obscured than the evidence that traditional large-team influence operations left behind.
 
-This defensive asymmetry is significant: the defenders (platforms, governments, researchers) face a technical attribution problem with no technical solution, while actors can operate with lower technical risk of discovery than traditional cyber operations.
+The practical implication is that attribution increasingly reverts to intelligence community analysis — understanding intent, motive, and geopolitical context — rather than pure technical forensics. Defenders face a harder evidentiary problem while actors face lower technical risk of discovery than in earlier operations.
 
 ## Policy and Technical Defenses
 
 No single defense is sufficient. Effective countermeasures operate across multiple layers:
 
 **Platform-level**:
-- **Mandatory content provenance**: Requiring C2PA or equivalent provenance metadata on media posted to major platforms creates accountability without prohibiting AI tools
+- **Mandatory content provenance**: Requiring C2PA or equivalent provenance metadata on media posted to major platforms creates accountability without prohibiting AI tools — once platform pipelines preserve manifests rather than stripping them
 - **Behavioral rate-limiting**: Enforcing limits on account creation velocity, posting frequency, and amplification patterns — even for accounts that pass content-based detection
 - **Cross-platform information sharing**: Structured sharing of network-level CIB signals between platforms
 
 **Regulatory**:
-- **EU AI Act Article 50**: Requires providers of AI systems that generate synthetic content to ensure outputs are labeled as AI-generated. Creates a disclosure floor for legitimate uses
+- **EU AI Act Article 50**: Imposes transparency obligations on certain categories of AI-generated synthetic content. Specifically, providers of AI systems that generate synthetic audio, video, image, or text content must ensure outputs are marked in a machine-readable format where technically feasible; providers of deepfake video and audio of real persons must disclose the synthetic nature to viewers. This creates a disclosure floor for high-risk synthetic media, though it does not impose a blanket labeling requirement on all AI-generated text or general-purpose LLM outputs
 - **Platform transparency requirements**: Mandating disclosure of AI-assisted content in political advertising contexts — several U.S. states have enacted or are considering similar requirements
 - **Attribution accountability**: Holding platforms accountable for hosting documented coordinated inauthentic behavior after notice — shifting incentives toward proactive detection
 
 **Technical**:
-- **Watermarking standardization**: Moving from proprietary to standardized watermarking schemes allows cross-tool verification; the coalition behind C2PA includes major AI and platform companies
+- **Watermarking standardization**: Moving from proprietary to standardized watermarking schemes allows cross-tool verification; the coalition behind C2PA includes major AI and platform companies, and adoption is growing — though the paraphrasing-strip vulnerability remains
 - **LLM provider terms enforcement**: OpenAI's May 2024 disruption report demonstrates that monitoring for influence operation use cases and terminating accounts doing so is operationally viable — providers can and do enforce their terms
 
 **Media and civil society**:
@@ -180,4 +180,4 @@ The threat is real, documented, and growing. The same capabilities that make LLM
 
 ---
 
-*Key sources: [OpenAI Disrupting deceptive uses of AI by covert influence operations (May 2024)](https://openai.com/index/disrupting-deceptive-uses-of-ai-by-covert-influence-operations/); [Meta Q4 2024 Adversarial Threat Report](https://transparency.fb.com/reports/adversarial-threat-report/); [Stanford Internet Observatory research on synthetic media in information operations](https://cyber.fsi.stanford.edu/io/); [EU AI Act Article 50 on transparency obligations for AI-generated content](https://artificialintelligenceact.eu/article/50/); [C2PA content provenance standard](https://c2pa.org/)*
+*Key sources: [OpenAI Disrupting deceptive uses of AI by covert influence operations (May 2024)](https://openai.com/index/disrupting-deceptive-uses-of-ai-by-covert-influence-operations/); [Meta Adversarial Threat Reports](https://transparency.fb.com/metasecurity/threat-reporting/); [Stanford Internet Observatory research on synthetic media in information operations](https://cyber.fsi.stanford.edu/io/); [EU AI Act Article 50 on transparency obligations for AI-generated content](https://artificialintelligenceact.eu/article/50/); [C2PA content provenance standard](https://c2pa.org/); [DFRLab Operation Doppelganger reporting](https://dfrlab.org/)*
