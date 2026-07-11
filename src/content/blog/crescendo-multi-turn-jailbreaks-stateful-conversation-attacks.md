@@ -1,8 +1,9 @@
 ---
-title: "Crescendo and Multi-Turn Jailbreaks: Why Your Single-Turn Safety Filters Are Insufficient"
-description: "The Crescendo attack demonstrates that LLMs refusing direct harmful requests will comply when those requests are built across individually defensible turns. Single-turn safety evaluations are structurally blind to this. Here's why, and what to do about it."
+title: "Crescendo: Why Single-Turn Safety Filters Are Insufficient"
+description: "Crescendo attacks build harmful requests across individually benign turns, bypassing single-turn safety filters. Here's the mechanism, detection challenges, and defenses."
 pubDate: 2026-07-11
-tags: ["jailbreak", "multi-turn", "crescendo", "ai-safety", "red-teaming", "safety-evaluation", "llm-security"]
+tags: ["jailbreak", "red-teaming", "security", "evaluation", "llm-security"]
+relatedPosts: ["multimodal-jailbreak-attacks", "jailbreak-as-a-service-underground-market", "benchmark-contamination-false-assurance-ai-safety"]
 ---
 
 If your AI product's safety evaluation only tested single prompts, it hasn't been tested against one of the most consequential known attack classes — and one that is structurally invisible to standard evaluation frameworks.
@@ -11,7 +12,7 @@ That's not a criticism of your engineering team. It's a structural problem with 
 
 What it hasn't demonstrated is what happens when someone asks about a general chemistry topic, then about a specific reaction class in an educational context, then about historical industrial applications of that chemistry, then about technical parameters in that domain — each turn individually defensible, the aggregate trajectory converging on the same endpoint as the original prompt. Each turn is defensible. The trajectory is not.
 
-This is the Crescendo attack. It works reliably, it's been demonstrated against GPT-4, Claude, and Gemini in published research, and safety systems that evaluate only individual messages have no mechanism to detect it.
+This is the Crescendo attack. Published research demonstrates substantial attack success rates against GPT-4, Claude, and Gemini, and safety systems that evaluate only individual messages have no architectural mechanism to detect the conversational trajectory that makes the attack work.
 
 ## Why Conversation State Creates a New Attack Surface
 
@@ -63,7 +64,7 @@ This variant is particularly relevant for models with large context windows, whe
 
 ### Memory Exploitation
 
-In systems with persistent memory — user profiles that accumulate across sessions, or explicit memory tools that agents can query — multi-turn attack patterns can potentially extend across session boundaries. This is a logical extension of the in-session crescendo dynamic: an attacker who can establish favorable precedents in early sessions (confirming the model's willingness to engage with certain topics, establishing user preferences or personas) may be constructing a memory state that shapes behavior in future sessions. The cross-session variant isn't addressed in the Crescendo paper itself, but the structural concern is well-grounded: systems with persistent memory have an additional attack surface in any stored state that the model treats as trusted context.
+In systems with persistent memory — user profiles that accumulate across sessions, or explicit memory tools that agents can query — similar attack dynamics could potentially extend across session boundaries. This is a logical extrapolation of the in-session Crescendo dynamic rather than a finding from the Crescendo paper itself, and should be treated as an emerging concern to monitor rather than a demonstrated capability. The structural reasoning is straightforward: any stored state that the model treats as trusted context represents a surface where earlier interactions can shape later behavior, and that surface extends beyond individual sessions in memory-enabled deployments.
 
 ## Why Single-Turn Evaluations Systematically Miss This
 
@@ -81,7 +82,7 @@ The implication for deployment: a model vendor's safety evaluation, a third-part
 
 In many Crescendo attacks, the individual turns are designed to be individually defensible — not harmful in isolation, even if borderline. This is different from attacks where individual turns contain encoded or obfuscated harmful content; a turn-level classifier would correctly flag those. The effectiveness of Crescendo-style attacks depends precisely on intermediate turns being plausibly legitimate: a chemistry question, a historical inquiry, a request for context. The harmful intent is distributed across the trajectory rather than localized to any single message.
 
-This creates a detection problem that's fundamentally different from turn-level filtering. Standard content classifiers look at a message and ask: does this message contain harmful content or constitute a harmful request? The answer at each turn in a Crescendo attack is genuinely no. Deploying a more accurate turn-level classifier doesn't help — you're correctly classifying the wrong unit.
+This creates a detection problem that's fundamentally different from turn-level filtering. Standard content classifiers look at a message and ask: does this message contain harmful content or constitute a harmful request? For the intermediate turns in a Crescendo attack, the answer is typically no — or borderline. Deploying a more accurate turn-level classifier helps only at the margins; when the harmful intent is genuinely distributed across the trajectory rather than localized to any single message, the classifier is answering the right question about the wrong unit.
 
 What detection actually requires is **semantic trajectory analysis**: the ability to model where a conversation is going, not just where it is. This means treating the conversation as a sequence and asking whether the sequence is converging toward a harmful endpoint — even if no individual element of the sequence would be flagged in isolation.
 
@@ -93,13 +94,13 @@ The good news is that effective defenses exist. The bad news is that most requir
 
 ### Conversation-Level Safety Scanning
 
-The most direct defense is building a safety layer that evaluates at the conversation level rather than the turn level. This means passing the full conversation history — not just the latest message — to a safety classifier specifically designed and evaluated for trajectory analysis. Critically, this classifier must be designed independently of the production model's context: a classifier conditioned on the same attacker-built context risks inheriting the same distributional shift that makes the production model vulnerable. Effective implementations use out-of-band classifiers or separate model instances that evaluate the conversation history without being "in" the conversation. A conversation-level classifier can be trained to recognize harmful trajectories by analyzing patterns of escalation, topic narrowing, and specificity increase across turns.
+The most direct defense is building a safety layer that evaluates at the conversation level rather than the turn level. This means passing the full conversation history — not just the latest message — to a safety classifier specifically designed and evaluated for trajectory analysis. Critically, this classifier must be designed independently of the production model's context: a classifier conditioned on the same attacker-built context risks inheriting the same distributional shift that makes the production model vulnerable. Architectural separation (out-of-band classifiers or separate model instances) is necessary but not sufficient — the classifier also needs its prompt, objective, and detection thresholds to be hardened specifically against trajectory attacks, not just fine-tuned for individual-turn harm detection. A conversation-level classifier can be trained to recognize harmful trajectories by analyzing patterns of escalation, topic narrowing, and specificity increase across turns.
 
 This requires maintaining conversation state and adds latency for every safety check. For many production systems, the additional latency budget is worth it; for real-time applications, the tradeoff requires careful evaluation.
 
 ### Context Summarization with Safety Re-evaluation
 
-A lighter-weight variant: periodically summarize the conversation and re-evaluate the summary against safety criteria. A summarization of a Crescendo attack sequence will often reveal the harmful trajectory more clearly than any individual turn, because summaries compress out the gradual escalation and present the net direction of the conversation.
+A lighter-weight variant: periodically summarize the conversation and re-evaluate the summary against safety criteria. A summarization of a Crescendo attack sequence will often surface the harmful trajectory more clearly than any individual turn, because summaries can compress the gradual escalation and present the net direction of the conversation. An important caveat: summarization can also discard the specific escalation details that make the trajectory detectable — intermediate turn phrasing, topic-narrowing sequences, or specificity increases may not survive into a high-level summary. This approach is most effective as a complement to full-history checks rather than a replacement; the "lighter weight" comes with a real detection tradeoff that depends heavily on the summarization method.
 
 The Crescendo paper found attacks typically succeeded within a relatively small number of turns — often fewer than ten — with payload delivery occurring well before the conversation would be considered unusually long. This suggests evaluation checkpoints should begin before mid-conversation rather than late, and should repeat at regular intervals rather than only at session end. The right specific cadence will depend on the application and any additional empirical testing against your deployment context — the key design principle is that checkpoints must start early enough to catch compressed attack sequences.
 
