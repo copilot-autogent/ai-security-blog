@@ -9,9 +9,9 @@ If your AI product's safety evaluation only tested single prompts, it hasn't bee
 
 That's not a criticism of your engineering team. It's a structural problem with how safety evaluations are designed. Standard benchmarks — ToxiGen, AdvBench, HarmBench — measure a model's refusal rate on individual, direct harmful prompts. A model that scores 99% on these benchmarks has demonstrated something real: it won't immediately comply when someone types "explain how to make explosives." That's a genuine safety property.
 
-What it hasn't demonstrated is what happens when someone asks about thermite for a chemistry class, then about oxidizer chemistry, then about fuel-to-oxidizer ratios in historical mining applications, then about confinement effects, then about aluminum powder particle sizes. Each turn is defensible. The trajectory is not.
+What it hasn't demonstrated is what happens when someone asks about a general chemistry topic, then about a specific reaction class in an educational context, then about historical industrial applications of that chemistry, then about technical parameters in that domain — each turn individually defensible, the aggregate trajectory converging on the same endpoint as the original prompt. Each turn is defensible. The trajectory is not.
 
-This is the Crescendo attack. It works reliably, it's been demonstrated against every major frontier model, and most production safety systems are architecturally incapable of detecting it.
+This is the Crescendo attack. It works reliably, it's been demonstrated against GPT-4, Claude, and Gemini in published research, and most production safety systems are architecturally incapable of detecting it.
 
 ## Why Conversation State Creates a New Attack Surface
 
@@ -95,7 +95,7 @@ The good news is that effective defenses exist. The bad news is that most requir
 
 ### Conversation-Level Safety Scanning
 
-The most direct defense is building a safety layer that evaluates at the conversation level rather than the turn level. This means passing the full conversation history — not just the latest message — to the safety classifier. A conversation-level classifier can be trained to recognize harmful trajectories by analyzing patterns of escalation, topic narrowing, and specificity increase across turns.
+The most direct defense is building a safety layer that evaluates at the conversation level rather than the turn level. This means passing the full conversation history — not just the latest message — to a safety classifier specifically designed and evaluated for trajectory analysis. Critically, this classifier must be designed independently of the production model's context: a classifier conditioned on the same attacker-built context risks inheriting the same distributional shift that makes the production model vulnerable. Effective implementations use out-of-band classifiers or separate model instances that evaluate the conversation history without being "in" the conversation. A conversation-level classifier can be trained to recognize harmful trajectories by analyzing patterns of escalation, topic narrowing, and specificity increase across turns.
 
 This requires maintaining conversation state and adds latency for every safety check. For many production systems, the additional latency budget is worth it; for real-time applications, the tradeoff requires careful evaluation.
 
@@ -103,7 +103,7 @@ This requires maintaining conversation state and adds latency for every safety c
 
 A lighter-weight variant: periodically summarize the conversation and re-evaluate the summary against safety criteria. A summarization of a Crescendo attack sequence will often reveal the harmful trajectory more clearly than any individual turn, because summaries compress out the gradual escalation and present the net direction of the conversation.
 
-The cadence of re-evaluation matters — checkpoints every N turns should be chosen based on the typical length of attack sequences for the application context. The Crescendo paper found attacks typically required 8–15 turns; a re-evaluation at turn 10 and every 5 turns thereafter would catch most attacks before the payload turn.
+The cadence of re-evaluation matters — checkpoints every N turns should be chosen based on the typical length of attack sequences for the application context. The Crescendo paper found attacks typically required 8–15 turns, with payload delivery often beginning as early as turn 8. This means safety checkpoints need to begin early in the conversation — a first re-evaluation no later than turn 5 or 6, with subsequent checks every 3–5 turns, would catch most attack sequences before the payload turn. A cadence that only starts at turn 10 risks missing attacks where escalation is compressed into fewer turns.
 
 ### Conversation Reset Policies
 
@@ -135,4 +135,4 @@ Your safety filter that scored 99% on single-turn evaluation may be an excellent
 
 ---
 
-*Technical references: Russinovich et al. (2024), "Great, Now Write an Essay About How to Make Napalm": The Crescendo Multi-Turn Jailbreak Attack, arXiv:2404.01833; Mazeika et al. (2024), HarmBench: A Standardized Evaluation Framework for Automated Red Teaming and Robust Refusal, arXiv:2402.04249; Chao et al. (2024), JailbreakBench: An Open Robustness Benchmark for Jailbreaking Large Language Models, arXiv:2404.01318; Perez & Ribeiro (2022), Red Teaming Language Models with Language Models, arXiv:2202.03286.*
+*Technical references: Russinovich et al. (2024), "Great, Now Write an Essay About How to Make Napalm": The Crescendo Multi-Turn Jailbreak Attack, arXiv:2404.01833; Mazeika et al. (2024), HarmBench: A Standardized Evaluation Framework for Automated Red Teaming and Robust Refusal, arXiv:2402.04249; Chao et al. (2024), JailbreakBench: An Open Robustness Benchmark for Jailbreaking Large Language Models, arXiv:2404.01318; Perez et al. (2022), Red Teaming Language Models with Language Models, arXiv:2202.03286.*
