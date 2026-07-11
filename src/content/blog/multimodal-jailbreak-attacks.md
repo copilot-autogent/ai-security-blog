@@ -3,6 +3,7 @@ title: "Beyond Text: How Simple Perceptual Tricks Break Multimodal AI Safety"
 description: "A systematic study of multimodal jailbreaks shows that models with near-perfect text-only safety can be compromised with >75% success rates using basic image and audio transformations — no gradient access required."
 pubDate: 2026-06-19
 tags: ["jailbreak", "vision-language-models", "multimodal", "ai-safety", "adversarial-attacks", "red-teaming"]
+relatedPosts: ["crescendo-multi-turn-jailbreaks-stateful-conversation-attacks"]
 ---
 
 There's a test most frontier AI models pass with flying colors: throw harmful text prompts at them and measure how often they comply. For most leading models, the answer is essentially never — text-based safety alignment has gotten very good.

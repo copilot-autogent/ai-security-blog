@@ -3,6 +3,7 @@ title: "Benchmark Contamination and the False Assurance Problem in AI Safety Eva
 description: "AI safety benchmarks like HarmBench, ToxiGen, and AdvGLUE are increasingly used to assert that a model is safe. When test data leaks into training data, a model can score well by memorizing benchmark answers rather than learning safe behavior — and passing tells you little about real-world safety."
 pubDate: 2026-06-29
 tags: ["ai-security", "benchmarks", "contamination", "evaluation", "compliance", "red-teaming"]
+relatedPosts: ["crescendo-multi-turn-jailbreaks-stateful-conversation-attacks"]
 ---
 
 A model that scores 95% on a safety benchmark is a comforting number. It goes into the vendor's datasheet, into the compliance team's report, into the executive summary that lands on a CISO's desk. It implies: we tested this, it passed, you can deploy it.

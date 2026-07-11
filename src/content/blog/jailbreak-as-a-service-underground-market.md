@@ -3,6 +3,7 @@ title: "Jailbreak-as-a-Service: The Underground Market for LLM Exploit Technique
 description: "Mapping the underground economy around LLM exploitation — paid jailbreak APIs, model-specific bypass markets, and the professionalization of AI adversaries."
 pubDate: 2026-06-27
 tags: ["jailbreak", "threat-intelligence", "underground-economy", "llm-security", "ai-safety", "adversarial-attacks", "defender-implications"]
+relatedPosts: ["crescendo-multi-turn-jailbreaks-stateful-conversation-attacks"]
 ---
 
 The ransomware-as-a-service market didn't emerge from nowhere. In the mid-2010s, exploit developers realized they didn't need to run their own campaigns — they could license their tooling to operators, take a cut of ransoms, and scale exponentially. What had been individual criminal craft became a marketplace with customers, support tickets, and reputation systems. The outcome transformed the threat landscape.
