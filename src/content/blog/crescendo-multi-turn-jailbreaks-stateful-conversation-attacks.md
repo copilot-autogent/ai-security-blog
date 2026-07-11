@@ -5,13 +5,13 @@ pubDate: 2026-07-11
 tags: ["jailbreak", "multi-turn", "crescendo", "ai-safety", "red-teaming", "safety-evaluation", "llm-security"]
 ---
 
-If your AI product's safety evaluation only tested single prompts, it hasn't been tested against the most effective known attack class.
+If your AI product's safety evaluation only tested single prompts, it hasn't been tested against one of the most consequential known attack classes — and one that is structurally invisible to standard evaluation frameworks.
 
 That's not a criticism of your engineering team. It's a structural problem with how safety evaluations are designed. Standard benchmarks — ToxiGen, AdvBench, HarmBench — measure a model's refusal rate on individual, direct harmful prompts. A model that scores 99% on these benchmarks has demonstrated something real: it won't immediately comply when someone types "explain how to make explosives." That's a genuine safety property.
 
 What it hasn't demonstrated is what happens when someone asks about a general chemistry topic, then about a specific reaction class in an educational context, then about historical industrial applications of that chemistry, then about technical parameters in that domain — each turn individually defensible, the aggregate trajectory converging on the same endpoint as the original prompt. Each turn is defensible. The trajectory is not.
 
-This is the Crescendo attack. It works reliably, it's been demonstrated against GPT-4, Claude, and Gemini in published research, and most production safety systems are architecturally incapable of detecting it.
+This is the Crescendo attack. It works reliably, it's been demonstrated against GPT-4, Claude, and Gemini in published research, and most common production safety system architectures — which evaluate individual messages without conversation-level state — are structurally incapable of detecting it.
 
 ## Why Conversation State Creates a New Attack Surface
 
@@ -63,9 +63,7 @@ This variant is particularly relevant for models with large context windows, whe
 
 ### Memory Exploitation
 
-In systems with persistent memory — user profiles that accumulate across sessions, or explicit memory tools that agents can query — multi-turn attacks extend across session boundaries. An attacker who can poison early sessions (establishing preferences, confirming behaviors, creating precedents) can construct a memory state that causes the model to comply with harmful requests in a future session that would otherwise be refused.
-
-This variant is qualitatively different from in-session attacks because the attack surface persists. The model "remembers" a version of the user that was constructed by an earlier attack phase, and that memory shapes behavior in sessions the attacker may not directly control.
+In systems with persistent memory — user profiles that accumulate across sessions, or explicit memory tools that agents can query — multi-turn attack patterns can potentially extend across session boundaries. This is a logical extension of the in-session crescendo dynamic: an attacker who can establish favorable precedents in early sessions (confirming the model's willingness to engage with certain topics, establishing user preferences or personas) may be constructing a memory state that shapes behavior in future sessions. The cross-session variant isn't addressed in the Crescendo paper itself, but the structural concern is well-grounded: systems with persistent memory have an additional attack surface in any stored state that the model treats as trusted context.
 
 ## Why Single-Turn Evaluations Systematically Miss This
 
@@ -81,7 +79,7 @@ The implication for deployment: a model vendor's safety evaluation, a third-part
 
 ## Detection Challenges
 
-Each individual turn in a Crescendo attack is genuinely benign. This is not a description of turns that look benign but secretly contain encoded harmful content — turn-level content analysis would catch that. Each turn really is benign. A request to explain the history of thermite isn't harmful. A question about oxidizer chemistry in the context of an ongoing chemistry discussion isn't harmful. The harmful intent lives in the trajectory, not any individual message.
+In many Crescendo attacks, the individual turns are designed to be individually defensible — not harmful in isolation, even if borderline. This is different from attacks where individual turns contain encoded or obfuscated harmful content; a turn-level classifier would correctly flag those. The effectiveness of Crescendo-style attacks depends precisely on intermediate turns being plausibly legitimate: a chemistry question, a historical inquiry, a request for context. The harmful intent is distributed across the trajectory rather than localized to any single message.
 
 This creates a detection problem that's fundamentally different from turn-level filtering. Standard content classifiers look at a message and ask: does this message contain harmful content or constitute a harmful request? The answer at each turn in a Crescendo attack is genuinely no. Deploying a more accurate turn-level classifier doesn't help — you're correctly classifying the wrong unit.
 
@@ -103,7 +101,7 @@ This requires maintaining conversation state and adds latency for every safety c
 
 A lighter-weight variant: periodically summarize the conversation and re-evaluate the summary against safety criteria. A summarization of a Crescendo attack sequence will often reveal the harmful trajectory more clearly than any individual turn, because summaries compress out the gradual escalation and present the net direction of the conversation.
 
-The cadence of re-evaluation matters — checkpoints every N turns should be chosen based on the typical length of attack sequences for the application context. The Crescendo paper found attacks typically required 8–15 turns, with payload delivery often beginning as early as turn 8. This means safety checkpoints need to begin early in the conversation — a first re-evaluation no later than turn 5 or 6, with subsequent checks every 3–5 turns, would catch most attack sequences before the payload turn. A cadence that only starts at turn 10 risks missing attacks where escalation is compressed into fewer turns.
+The cadence of re-evaluation matters — checkpoints every N turns should be chosen based on the application's context and risk tolerance. The Crescendo paper found attacks typically required 8–15 turns, with payload delivery often beginning as early as turn 8. This suggests evaluation checkpoints should begin before mid-conversation rather than late, and should repeat at regular intervals rather than only at session end. The right specific cadence will depend on the application and any additional empirical testing against your deployment context — the key design principle is that checkpoints must start early enough to catch compressed attack sequences.
 
 ### Conversation Reset Policies
 
