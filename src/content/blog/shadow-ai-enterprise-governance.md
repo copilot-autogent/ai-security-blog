@@ -59,7 +59,7 @@ Beyond direct use, employees are building automation workflows that route corpor
 
 These pipelines are often well-intentioned: an employee builds a workflow to auto-summarize incoming customer emails and draft responses. The workflow uses the employee's personal OpenAI API key. The enterprise has no visibility into the data flow, no contract governing the AI provider's data handling, and often no awareness the pipeline exists.
 
-The footprint of these automations can grow significant before discovery. Unlike a single chat session, an automated pipeline can continuously route corporate data to an external AI service — potentially including data from systems the employee has access to but the automation was not deliberately designed to pull.
+The footprint of these automations can grow significantly before discovery. Unlike a single chat session, an automated pipeline can continuously route corporate data to an external AI service — potentially including data from systems the employee has access to but the automation was not deliberately designed to pull.
 
 ### Compliance Violations
 
