@@ -1,8 +1,8 @@
 ---
 title: "MCP Tool Poisoning: How Malicious Tool Definitions Hijack AI Agents"
-description: "Attaching a tool to an AI agent is a trust decision. The tool's name, description, and schema are all injection surfaces that can redirect agent behavior before any user message is processed."
+description: "Tool names, descriptions, and schemas are injection surfaces. A malicious MCP server can redirect agent behavior before any user message is processed."
 pubDate: 2026-07-11
-tags: ["mcp", "tool-poisoning", "prompt-injection", "agentic-ai", "supply-chain-security", "ai-security"]
+tags: ["mcp", "tool-use", "prompt-injection", "agentic-ai", "supply-chain-security", "ai-security"]
 ---
 
 When a security team audits a new AI agent deployment, they typically scrutinize the system prompt, the user input handling, and the data sources the agent can query. What they often skip: the tool definitions the agent loads from connected servers. That's the attack surface this post is about.
@@ -17,7 +17,7 @@ To understand the attack, it helps to understand what MCP actually does.
 
 The Model Context Protocol — introduced by Anthropic and now maintained as a community specification at [modelcontextprotocol.io](https://modelcontextprotocol.io) — defines a standardized interface between AI agents and external capability providers (tool servers). An agent connects to one or more MCP servers over a session; at any point it can send a `tools/list` request to receive the set of tools the server currently exposes. Each tool entry includes a name, a human-readable description, and a JSON Schema for its input parameters.
 
-When the agent needs to decide which tool to call, it uses these descriptions as its reasoning context. A tool named `send_email` with description "sends an email to the specified recipient" trains the model to invoke it when email-sending is appropriate. The agent is not executing a rule-based lookup — it is using its language model capabilities to match intent to tool description, which means the description *is* the interface.
+When the agent needs to decide which tool to call, it uses tool metadata as its reasoning context. In MCP, the `description` field is optional — but in practice, agents and their users rely heavily on it for routing decisions. A tool with description "sends an email to the specified recipient" trains the model to invoke it when email-sending is appropriate. The agent is not executing a rule-based lookup — it is using its language model capabilities to match intent to tool metadata, which means the name, description, and schema together *are* the interface. Where descriptions are present, they are the highest-influence injection surface.
 
 Two MCP protocol behaviors are relevant to the threat model:
 
@@ -174,9 +174,9 @@ This is low-tech but effective against straightforward poisoning attempts. It fa
 Allowlisting server URLs is a useful starting control, but it is not a sufficient security boundary — the same URL can serve changed tool metadata across sessions. The real security boundary is the reviewed tool manifest identity.
 
 A complete allowlisting approach:
-- Maintain an explicit allowlist of approved MCP server identities (URL + TLS certificate fingerprint)
+- Maintain an explicit allowlist of approved MCP server identities, matched by URL and (where applicable for HTTP transports) server certificate
 - Log the full `tools/list` response on each connection; alert on any change from the previously-reviewed version
-- Treat server endpoint changes (certificate rotation, redirect) as events requiring re-approval
+- For local/stdio transports, apply the same principle: the approved server binary identity and version should be recorded and verified on each launch
 
 This addresses rug-pull attacks: an allowlisted server that changes its tool descriptions triggers a review gate rather than a silent update.
 
@@ -190,13 +190,11 @@ Implement programmatic filters that flag tool descriptions containing:
 
 This is not a complete defense — sophisticated attackers can reframe instructions to avoid flagged patterns — but it raises the cost of attack and catches common patterns from published tool poisoning POCs.
 
-### 6. Architectural Separation: Routing Metadata from Execution Instructions
+### 6. Constrained Routing Descriptions with Full Schema Preserved
 
-A deeper architectural fix: don't use the same natural language string for both tool routing (which tool to select) and execution guidance (how the tool behaves). Maintain separate metadata:
-- A short, tightly-controlled **routing name and one-line purpose** used during tool selection (model-facing, subject to content policies)
-- A richer **technical specification** used by the framework at invocation time (not surfaced to model reasoning)
+Rather than hiding the full schema from the model (which would break argument construction), a more practical approach is to enforce stricter content policies on the *routing description* while leaving the parameter schema intact for the model to form valid arguments.
 
-An attacker constrained to a 10-word routing description subject to content policies cannot embed multi-step exfiltration instructions without obvious anomaly detection.
+The key insight: the schema's JSON structure is constrained and machine-verifiable; it's harder to embed freeform instructions there than in a natural language description. Content policies can therefore focus their scrutiny on the description field, where freeform injection is easiest, while still exposing the schema for normal tool-call argument construction. Combined with description length limits and pattern filtering, this reduces the injectable surface without breaking legitimate tool use.
 
 ## The Deeper Issue: Description-Driven Behavior Is an Attack Surface by Design
 
@@ -206,7 +204,7 @@ This choice is valuable — it makes tools legible and composable without requir
 
 The research literature on prompt injection (Greshake et al., "Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection," 2023) established that indirect injection through retrieved content is a viable attack. Tool descriptions are a specific case — structured content retrieved from an external source that the agent uses to construct its own behavioral context.
 
-The distinction matters for defenders: classic prompt injection countermeasures (input sanitization, output filtering, runtime monitoring) do not transfer cleanly to tool description poisoning, because the injection happens at the tool-metadata layer before user input is processed. Tool poisoning requires controls at the server-connection and description-review layers, not at the runtime data layer.
+The distinction matters for defenders: classic runtime prompt injection countermeasures — input sanitization, output filtering, sensitive-data masking — still have value against the *impact* of poisoned tool metadata (a poisoned description that succeeds in triggering a bad tool call can still be caught by output filtering or tool-call approval). But those controls are not *sufficient*: they don't prevent the malicious instruction from being loaded, and a sufficiently well-crafted description can evade them. Tool poisoning therefore requires defense-in-depth: controls at the server-connection and description-review layers work on the root cause, while runtime controls reduce blast radius when they fail.
 
 ## Practical Checklist for Teams Integrating MCP Tools
 
@@ -233,7 +231,7 @@ The bottom line: an MCP tool's description is not documentation. It is an instru
 
 ## Sources
 
-- MCP Project, [Model Context Protocol Specification](https://spec.modelcontextprotocol.io/) — official MCP protocol documentation including the security model, `tools/list` protocol, change notifications, and server trust guidance
-- Invariant Labs, ["MCP Security Notification: Tool Poisoning Attacks"](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks) (April 2025) — proof-of-concept demonstrations of tool description poisoning, including cross-tool data exfiltration patterns
-- Greshake et al., ["Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection"](https://arxiv.org/abs/2302.12173) (2023) — foundational research on indirect prompt injection through retrieved content; tool descriptions are a direct instantiation of this attack class
-- OWASP, [Top 10 for Large Language Model Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) (2025 edition) — Excessive Agency (LLM06) is directly relevant to tool poisoning defenses
+- [Model Context Protocol Specification](https://spec.modelcontextprotocol.io/) — official MCP protocol documentation covering `tools/list`, change notifications, and the server trust model
+- [MCP Security Notification: Tool Poisoning Attacks](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks) — Invariant Labs (April 2025), proof-of-concept demonstrations of tool description poisoning and cross-tool data exfiltration
+- [Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection](https://arxiv.org/abs/2302.12173) — Greshake et al. (2023), foundational research on indirect prompt injection; tool descriptions are a direct instantiation of this attack class
+- [OWASP Top 10 for Large Language Model Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — 2025 edition; Excessive Agency (LLM06) is directly relevant to tool poisoning defenses
