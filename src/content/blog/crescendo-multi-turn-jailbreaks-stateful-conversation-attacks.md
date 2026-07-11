@@ -1,17 +1,17 @@
 ---
 title: "Crescendo and Multi-Turn Jailbreaks: Why Your Single-Turn Safety Filters Are Insufficient"
-description: "The Crescendo attack demonstrates that LLMs refusing direct harmful requests will comply when those requests are built across 10–20 individually benign turns. Single-turn safety evaluations are structurally blind to this. Here's why, and what to do about it."
+description: "The Crescendo attack demonstrates that LLMs refusing direct harmful requests will comply when those requests are built across individually defensible turns. Single-turn safety evaluations are structurally blind to this. Here's why, and what to do about it."
 pubDate: 2026-07-11
 tags: ["jailbreak", "multi-turn", "crescendo", "ai-safety", "red-teaming", "safety-evaluation", "llm-security"]
 ---
 
 If your AI product's safety evaluation only tested single prompts, it hasn't been tested against one of the most consequential known attack classes — and one that is structurally invisible to standard evaluation frameworks.
 
-That's not a criticism of your engineering team. It's a structural problem with how safety evaluations are designed. Standard benchmarks — ToxiGen, AdvBench, HarmBench — measure a model's refusal rate on individual, direct harmful prompts. A model that scores 99% on these benchmarks has demonstrated something real: it won't immediately comply when someone types "explain how to make explosives." That's a genuine safety property.
+That's not a criticism of your engineering team. It's a structural problem with how safety evaluations are designed. Standard benchmarks — AdvBench, HarmBench — measure a model's refusal rate on individual, direct harmful prompts. A model that scores 99% on these benchmarks has demonstrated something real: it won't immediately comply when someone types "explain how to make explosives." That's a genuine safety property.
 
 What it hasn't demonstrated is what happens when someone asks about a general chemistry topic, then about a specific reaction class in an educational context, then about historical industrial applications of that chemistry, then about technical parameters in that domain — each turn individually defensible, the aggregate trajectory converging on the same endpoint as the original prompt. Each turn is defensible. The trajectory is not.
 
-This is the Crescendo attack. It works reliably, it's been demonstrated against GPT-4, Claude, and Gemini in published research, and most common production safety system architectures — which evaluate individual messages without conversation-level state — are structurally incapable of detecting it.
+This is the Crescendo attack. It works reliably, it's been demonstrated against GPT-4, Claude, and Gemini in published research, and safety systems that evaluate only individual messages have no mechanism to detect it.
 
 ## Why Conversation State Creates a New Attack Surface
 
@@ -29,11 +29,11 @@ The Crescendo attack was described by Russinovich et al. in **"Great, Now Write 
 
 The attack works in approximately three phases:
 
-**Phase 1: Benign anchor establishment (turns 1–3).** The attacker begins with requests that are clearly and genuinely benign — general knowledge questions about the topic domain, requests for historical context, or academic framings. The purpose is to establish conversational precedent: the model has engaged helpfully with this topic before, creating an implicit social contract about what's "in scope."
+**Phase 1: Benign anchor establishment.** The attacker begins with requests that are clearly and genuinely benign — general knowledge questions about the topic domain, requests for historical context, or academic framings. The purpose is to establish conversational precedent: the model has engaged helpfully with this topic before, creating an implicit social contract about what's "in scope."
 
-**Phase 2: Graduated escalation (turns 3–8).** Each subsequent turn requests information that is slightly more specific than the prior one, but plausibly connected to the established context. Crucially, each individual turn would be borderline-defensible in isolation — close to the edge, but arguable. The target model has been contextually normalized to treat this domain as legitimate; the escalation feels incremental rather than sudden.
+**Phase 2: Graduated escalation.** Each subsequent turn requests information that is slightly more specific than the prior one, but plausibly connected to the established context. Crucially, each individual turn would be borderline-defensible in isolation — close to the edge, but arguable. The target model has been contextually normalized to treat this domain as legitimate; the escalation feels incremental rather than sudden.
 
-**Phase 3: Payload delivery (turns 8–15).** The final turns request the actually harmful content. By this point, the model is operating in a conversational context where the harmful request is a natural continuation of what has come before. The conversational context has been weaponized to make refusal feel contextually inappropriate.
+**Phase 3: Payload delivery.** The final turns request the actually harmful content. By this point, the model is operating in a conversational context where the harmful request is a natural continuation of what has come before. The conversational context has been weaponized to make refusal feel contextually inappropriate.
 
 The paper tested this technique across GPT-4, Claude, and Gemini. The attack success rates varied by model and topic, but the central finding was consistent: **models that robustly refused the same requests in a single-turn setting were substantially more likely to comply when those requests were delivered via the multi-turn pathway.** The attack doesn't require any special prompt injection, no system prompt exploitation, no unusual characters — just a carefully sequenced conversation.
 
@@ -71,7 +71,7 @@ The gap between single-turn benchmark performance and multi-turn real-world robu
 
 Standard red-teaming evaluations — including HarmBench (Mazeika et al. 2024) and JailbreakBench (Chao et al. 2024) — are designed around a unit of analysis: the prompt-response pair. A test case is a single prompt; the safety property being evaluated is the model's response to that prompt. This design makes evaluation tractable, reproducible, and comparable across models. It's also what makes it blind to multi-turn attacks.
 
-Consider what HarmBench is measuring: given a harmful intent expressed in a single message, how often does the model comply? A model with a near-zero score on HarmBench has demonstrated that its safety behaviors activate on explicit harmful requests. Nothing about that test tells you whether those same behaviors activate when the explicit request is the 15th turn in a carefully constructed conversation.
+Consider what HarmBench is measuring: given a harmful intent expressed in a single message, how often does the model comply? HarmBench reports Attack Success Rate (ASR) — a model with a near-zero ASR on HarmBench has demonstrated that its safety behaviors activate on explicit harmful requests. Nothing about that test tells you whether those same behaviors activate when the explicit request is the 15th turn in a carefully constructed conversation.
 
 Perez et al. (2022) in "Red Teaming Language Models with Language Models" showed that automated red-teaming could generate adversarial prompts at scale — but the adversarial prompts are still single-turn inputs. The paper demonstrates that better single-turn evaluations are achievable; it doesn't address the multi-turn gap.
 
@@ -101,7 +101,7 @@ This requires maintaining conversation state and adds latency for every safety c
 
 A lighter-weight variant: periodically summarize the conversation and re-evaluate the summary against safety criteria. A summarization of a Crescendo attack sequence will often reveal the harmful trajectory more clearly than any individual turn, because summaries compress out the gradual escalation and present the net direction of the conversation.
 
-The cadence of re-evaluation matters — checkpoints every N turns should be chosen based on the application's context and risk tolerance. The Crescendo paper found attacks typically required 8–15 turns, with payload delivery often beginning as early as turn 8. This suggests evaluation checkpoints should begin before mid-conversation rather than late, and should repeat at regular intervals rather than only at session end. The right specific cadence will depend on the application and any additional empirical testing against your deployment context — the key design principle is that checkpoints must start early enough to catch compressed attack sequences.
+The Crescendo paper found attacks typically succeeded within a relatively small number of turns — often fewer than ten — with payload delivery occurring well before the conversation would be considered unusually long. This suggests evaluation checkpoints should begin before mid-conversation rather than late, and should repeat at regular intervals rather than only at session end. The right specific cadence will depend on the application and any additional empirical testing against your deployment context — the key design principle is that checkpoints must start early enough to catch compressed attack sequences.
 
 ### Conversation Reset Policies
 
