@@ -3,6 +3,7 @@ title: "Multi-Agent Orchestration Security: Trust, Delegation, and Inter-Agent A
 description: "When Agent A delegates a task to Agent B, the security properties of the entire system reduce to the weakest trust model in the chain. This post maps the attack taxonomy unique to orchestrator-worker architectures — privilege escalation, agent impersonation, confused deputy, tool-chain hijacking — and pairs each with concrete defenses grounded in published research."
 pubDate: 2026-07-10
 tags: ["agent-security", "multi-agent", "orchestration", "trust-model", "privilege-escalation", "autogen", "langchain", "architecture", "llm"]
+relatedPosts: ["multi-agent-trust-escalation"]
 ---
 
 Single-agent security is a largely solved framing problem. You have one model, one system prompt, one set of tools, and a defined perimeter. You apply least-privilege to the tool set, you sanitize inputs and outputs, you monitor for prompt injection, and you write a threat model that fits on one page.

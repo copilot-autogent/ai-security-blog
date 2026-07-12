@@ -3,6 +3,7 @@ title: "Multi-Agent Trust Escalation: How Subagents Inherit and Abuse Orchestrat
 description: "Multi-agent architectures introduce a trust escalation problem analogous to privilege escalation in OS security. When orchestrators delegate permissions to subagents, the attack surface multiplies. This post maps the attack classes, draws the OS and service-mesh analogies, and offers concrete defenses."
 pubDate: 2026-06-29
 tags: ["agent-security", "multi-agent", "trust", "privilege-escalation", "least-privilege", "threat-modeling"]
+relatedPosts: ["multi-agent-orchestration-security-trust-delegation"]
 ---
 
 In multi-agent systems, the question isn't whether you trust the orchestrator — it's whether you should trust *who the orchestrator trusts*.
