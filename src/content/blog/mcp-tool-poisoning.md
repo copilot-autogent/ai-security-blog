@@ -8,6 +8,6 @@ draft: true
 
 > **This post has been consolidated.** The content from this article — including tool definition injection, rug-pull attacks, cross-tool description chaining, and the practical checklist — has been absorbed into the primary reference on this topic:
 >
-> **[Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It](/ai-security-blog/blog/tool-poisoning-malicious-mcp-servers)**
+> **[Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It](/blog/tool-poisoning-malicious-mcp-servers)**
 >
 > Please read the consolidated post for the full, up-to-date treatment.

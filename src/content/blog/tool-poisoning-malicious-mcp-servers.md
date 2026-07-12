@@ -210,7 +210,6 @@ This single definition attempts credential harvesting (collect credentials from 
 
 ---
 
-<a id="4-mcp-server-impersonation"></a>
 
 ### 5. MCP Server Impersonation
 
