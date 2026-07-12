@@ -16,7 +16,7 @@
 | True overlaps requiring consolidation | **1** pair |
 | Complementary pairs needing cross-references | **3** pairs |
 | 5-post backdoor/trojan cluster needing "See also" cross-references (no redundancy within cluster, just navigation) | **1** cluster |
-| Follow-up issues filed | **4** (#280, #281, #282, #283) |
+| Follow-up issues filed | **5** (#280, #281, #282, #283, #285) |
 
 ---
 
@@ -41,7 +41,7 @@
 | `quantization-compression-attacks-safety-alignment` | Quantization and Compression Attacks: How Model Size Reduction Can Re-Enable Suppressed Unsafe Behaviors | Keep — unique angle: model compression as safety regression vector |
 | `mechanistic-interpretability-security-tool` | Mechanistic Interpretability as a Security Tool: Detecting Backdoors and Hidden Behaviors in AI Models | Keep — MI as a defense tool; distinct reader takeaway |
 | `constitutional-ai-under-attack` | Constitutional AI Under Attack: Exploiting Self-Critique Alignment Mechanisms | Keep — attacks on the Constitutional AI alignment method specifically |
-| `mcp-tool-poisoning` | MCP Tool Poisoning: How Malicious Tool Definitions Hijack AI Agents | ⚠️ **OVERLAP** — see Cluster 6 (Agentic / MCP, Sub-cluster 6a). These posts appear here because they involve tool/agent poisoning but are primarily an agentic-security pair, not data poisoning. |
+| `mcp-tool-poisoning` | MCP Tool Poisoning: How Malicious Tool Definitions Hijack AI Agents | ⚠️ **OVERLAP** — see Cluster 6 (Agentic / MCP, Sub-cluster 6a). Note: `mcp-tool-poisoning` is a Data Poisoning cluster post; it is grouped with `tool-poisoning-malicious-mcp-servers` in Sub-cluster 6a for overlap analysis because the two posts teach the same concept. See [Issue #281](https://github.com/copilot-autogent/ai-security-blog/issues/281). |
 | `tool-poisoning-malicious-mcp-servers` | Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It | ⚠️ **OVERLAP** — see Cluster 6 (Agentic / MCP, Sub-cluster 6a). |
 | `ai-agent-supply-chain-attacks` | AI Agent Supply Chain Attacks: Compromising Agents Before They Run | Keep — full supply chain taxonomy for agents |
 | `ci-cd-pipeline-injection-ai-code-assistants` | CI/CD Pipeline Injection: When AI Code Assistants Become Supply Chain Threats | Keep — CI/CD pipeline specifics; code assistant framing |
@@ -57,10 +57,10 @@
 |------|-------|---------|
 | `jailbreak-as-a-service-underground-market` | Jailbreak-as-a-Service: The Underground Market for LLM Exploit Techniques | Keep — economics/market framing; unique angle |
 | `jailbreak-robustness-after-finetuning` | Jailbreak Robustness After Fine-Tuning: How Safety Alignment Degrades | Keep — post-fine-tune safety regression |
-| `crescendo-multi-turn-jailbreaks-stateful-conversation-attacks` | Crescendo: Why Single-Turn Safety Filters Are Insufficient | ⚠️ **See also** — [#283] pair with `twingate-stateful-defense-decompositional-jailbreaks` |
-| `twingate-stateful-defense-decompositional-jailbreaks` | Safe in Isolation, Dangerous Together: The Multi-Turn Blind Spot in Your Safety Filter | ⚠️ **See also** — [#283] pair with `crescendo-multi-turn-jailbreaks-stateful-conversation-attacks` |
-| `multimodal-jailbreak-attacks` | Beyond Text: How Simple Perceptual Tricks Break Multimodal AI Safety | ⚠️ **See also** — [#282] pair with `multimodal-jailbreaking-image-bypass-text-safety` |
-| `multimodal-jailbreaking-image-bypass-text-safety` | Multimodal Jailbreaking: How Attackers Use Images to Bypass Text Safety Filters | ⚠️ **See also** — [#282] pair with `multimodal-jailbreak-attacks` |
+| `crescendo-multi-turn-jailbreaks-stateful-conversation-attacks` | Crescendo: Why Single-Turn Safety Filters Are Insufficient | ⚠️ **See also** — [Issue #283](https://github.com/copilot-autogent/ai-security-blog/issues/283): pair with `twingate-stateful-defense-decompositional-jailbreaks` |
+| `twingate-stateful-defense-decompositional-jailbreaks` | Safe in Isolation, Dangerous Together: The Multi-Turn Blind Spot in Your Safety Filter | ⚠️ **See also** — [Issue #283](https://github.com/copilot-autogent/ai-security-blog/issues/283): pair with `crescendo-multi-turn-jailbreaks-stateful-conversation-attacks` |
+| `multimodal-jailbreak-attacks` | Beyond Text: How Simple Perceptual Tricks Break Multimodal AI Safety | ⚠️ **See also** — [Issue #282](https://github.com/copilot-autogent/ai-security-blog/issues/282): pair with `multimodal-jailbreaking-image-bypass-text-safety` |
+| `multimodal-jailbreaking-image-bypass-text-safety` | Multimodal Jailbreaking: How Attackers Use Images to Bypass Text Safety Filters | ⚠️ **See also** — [Issue #282](https://github.com/copilot-autogent/ai-security-blog/issues/282): pair with `multimodal-jailbreak-attacks` |
 | `reward-hacking-rlhf-safety` | Reward Hacking in Production: When RLHF Optimization Inverts Safety Goals | Keep — RLHF-specific security failure mode; note conceptual cousin `specification-gaming-reward-hacking-wrong-goal` |
 | `guardrail-structural-bottleneck` | Your Guardrails Can't Read JSON: The Structural Bottleneck in Agentic Safety | Keep — JSON/structured output bypass; agentic context |
 | `chatgpt-google-sheets-data-exfiltration` | Your Spreadsheet Is the Attack Surface: ChatGPT for Google Sheets Data Exfiltration | Keep — specific product/deployment attack case study |
@@ -134,11 +134,13 @@ This cluster is the largest. Full list omitted for brevity; focused analysis on 
 
 #### Sub-cluster 6a: MCP Tool/Server Attacks — ⚠️ TRUE OVERLAP [Issue #281]
 
-| Slug | Title | Verdict |
-|------|-------|---------|
-| `mcp-tool-poisoning` | MCP Tool Poisoning: How Malicious Tool Definitions Hijack AI Agents | ⚠️ **CONSOLIDATE** with `tool-poisoning-malicious-mcp-servers` |
-| `tool-poisoning-malicious-mcp-servers` | Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It | ⚠️ **CONSOLIDATE** — keep as primary (broader framing) |
-| `mcp-security-attack-surface` | MCP Security: The New Attack Surface for AI Tool Protocols | Keep — broader MCP protocol security overview |
+Note: `mcp-tool-poisoning` belongs to the Data Poisoning cluster (Cluster 1), not agentic-security; it is discussed here because its overlap partner (`tool-poisoning-malicious-mcp-servers`) is an agentic-security post. This table covers the MCP attack surface as a whole for completeness.
+
+| Slug | Title | Verdict | In agentic-security cluster? |
+|------|-------|---------|------------------------------|
+| `mcp-tool-poisoning` | MCP Tool Poisoning: How Malicious Tool Definitions Hijack AI Agents | ⚠️ **CONSOLIDATE** with `tool-poisoning-malicious-mcp-servers` — see Issue [#281](https://github.com/copilot-autogent/ai-security-blog/issues/281) | No (Data Poisoning only) |
+| `tool-poisoning-malicious-mcp-servers` | Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It | ⚠️ **CONSOLIDATE** — keep as primary (broader framing) | Yes |
+| `mcp-security-attack-surface` | MCP Security: The New Attack Surface for AI Tool Protocols | Keep — broader MCP protocol security overview | Yes |
 
 **Overlap assessment**: `mcp-tool-poisoning` (July 11) and `tool-poisoning-malicious-mcp-servers` (June 29) teach the same core concept: MCP tool definitions are injection surfaces that can redirect agent behavior before any user message is processed. The distinction (definition-level injection vs. server-level compromise) is real but thin — both posts walk through the same trust model and arrive at the same reader takeaway. Most readers would perceive this as the same topic twice. Filed as **Issue #281**.
 
@@ -150,13 +152,13 @@ This cluster is the largest. Full list omitted for brevity; focused analysis on 
 | `multi-agent-trust-escalation` | Multi-Agent Trust Escalation: How Subagents Inherit and Abuse Orchestrator Permissions | Keep — deeper focus on privilege escalation specifically |
 | `multi-agent-non-compositionality` | Safe Agents, Unsafe Systems: The Non-Compositionality Problem in Multi-Agent Security | Keep — theoretical; emergent unsafe behavior from individually-safe agents |
 
-**Assessment**: The first two posts overlap in topic (multi-agent trust, privilege escalation) but are genuinely distinct: `orchestration-security` provides a broad taxonomy of attack surfaces; `trust-escalation` goes deep on one specific attack class (permission inheritance abuse). Keep both; add cross-references.
+**Assessment**: The first two posts overlap in topic (multi-agent trust, privilege escalation) but are genuinely distinct: `orchestration-security` provides a broad taxonomy of attack surfaces; `trust-escalation` goes deep on one specific attack class (permission inheritance abuse). Keep both; add cross-references. Filed as **Issue [#285](https://github.com/copilot-autogent/ai-security-blog/issues/285)**.
 
 #### Sub-cluster 6c: Remaining agentic posts (all distinct)
 
 `agent-attack-surface-mapped`, `agent-loop-hijacking-resource-exhaustion-attacks`, `agent-memory-cloud-privacy-leak`, `agent-security-os-analogy`, `agentbridge-attack-surface-analysis`, `adversarial-attacks-vision-language-models-pixels-injection` (VLM agent surface), `ai-agent-supply-chain-attacks`, `ai-worms-multi-agent-pipelines`, `browser-use-attacks-hijacking-ai-agents`, `defense-in-depth-ai-agents-security-stack`, `etamp-agent-memory-poisoning`, `finharness-inline-safety-harness`, `guardrail-structural-bottleneck`, `latent-space-injection-multi-agent`, `llm-router-supply-chain-attack`, `llm-security-testing-cost-empirical-study`, `mini-shai-hulud-supply-chain-agent-pipelines`, `mozilla-claude-mythos-security-fixes`, `multi-agent-red-teaming-network-attacks`, `non-human-identity-security-ai-agents`, `on-the-fly-agent-prototype-problem`, `owasp-top10-ai-agents-part1`, `personal-ai-agent-ambient-authority-inbox-attack`, `physics-is-all-you-need-agent-supervision-case-study`, `rag-memory-poisoning-attacks`, `skill-library-memory-poisoning-defense`, `sqlite-agents-md-no-agentic-code-accepted`, `trinityguard-mas-safety-evaluation`, `trojan-triggers-multimodal-models-visual-backdoors`, `zero-trust-architecture-ai-agent-deployments` — all keep (30 posts).
 
-_Full cluster 6 count: note that `mcp-tool-poisoning` is NOT in the agentic-security cluster (it belongs only to Data Poisoning), so the actual math is: 2 agentic posts in 6a (`tool-poisoning-malicious-mcp-servers`, `mcp-security-attack-surface`) + 3 in 6b + 30 in 6c = **35** — matching the cluster count._
+_Full cluster 6 count: `mcp-tool-poisoning` is cross-referenced in 6a for context but belongs only to the Data Poisoning cluster (Cluster 1), so it is NOT counted in the agentic-security total. Actual count: 2 agentic posts in 6a (`tool-poisoning-malicious-mcp-servers`, `mcp-security-attack-surface`) + 3 in 6b + 30 in 6c = **35** — matching the cluster count._
 
 ---
 
@@ -179,8 +181,8 @@ _Full cluster 6 count: note that `mcp-tool-poisoning` is NOT in the agentic-secu
 | Slug | Title | Verdict |
 |------|-------|---------|
 | `adversarial-attacks-vision-language-models-pixels-injection` | Adversarial Attacks on Vision-Language Models: Pixels as Injection Vectors | Keep — gradient-crafted adversarial perturbations |
-| `multimodal-jailbreak-attacks` | Beyond Text: How Simple Perceptual Tricks Break Multimodal AI Safety | ⚠️ **See also** — [#282] pair with `multimodal-jailbreaking-image-bypass-text-safety` |
-| `multimodal-jailbreaking-image-bypass-text-safety` | Multimodal Jailbreaking: How Attackers Use Images to Bypass Text Safety Filters | ⚠️ **See also** — [#282] pair with `multimodal-jailbreak-attacks` |
+| `multimodal-jailbreak-attacks` | Beyond Text: How Simple Perceptual Tricks Break Multimodal AI Safety | ⚠️ **See also** — [Issue #282](https://github.com/copilot-autogent/ai-security-blog/issues/282): pair with `multimodal-jailbreaking-image-bypass-text-safety` |
+| `multimodal-jailbreaking-image-bypass-text-safety` | Multimodal Jailbreaking: How Attackers Use Images to Bypass Text Safety Filters | ⚠️ **See also** — [Issue #282](https://github.com/copilot-autogent/ai-security-blog/issues/282): pair with `multimodal-jailbreak-attacks` |
 | `trojan-triggers-multimodal-models-visual-backdoors` | Trojan Triggers in Multi-Modal Models: How Visual Backdoors Activate Hidden Behaviors | Keep — visual-trigger backdoor mechanism |
 
 **Overlap assessment**: `multimodal-jailbreak-attacks` and `multimodal-jailbreaking-image-bypass-text-safety` both cover image-based safety bypass. They are kept as distinct because:
@@ -224,9 +226,9 @@ Different takeaways, different audiences. Filed as **Issue #282** to add cross-r
 
 ---
 
-### Cluster 11: Unclustered / Other (52 posts — all reviewed for overlap)
+### Cluster 11: Unclustered / Other (51 posts — all reviewed for overlap)
 
-All 52 posts that fell outside the named clusters were individually reviewed by title, description, and opening paragraph. Selected observations on potential overlaps:
+All 51 posts that fell outside the named clusters were individually reviewed by title, description, and opening paragraph. Selected observations on potential overlaps:
 
 | Posts | Topic | Verdict |
 |-------|-------|---------|
@@ -246,6 +248,7 @@ All 52 posts that fell outside the named clusters were individually reviewed by 
 | [#281](https://github.com/copilot-autogent/ai-security-blog/issues/281) | **Consolidate** (true overlap) | `mcp-tool-poisoning` + `tool-poisoning-malicious-mcp-servers` |
 | [#282](https://github.com/copilot-autogent/ai-security-blog/issues/282) | Cross-reference (See also) | `multimodal-jailbreak-attacks` + `multimodal-jailbreaking-image-bypass-text-safety` |
 | [#283](https://github.com/copilot-autogent/ai-security-blog/issues/283) | Cross-reference (See also) | `crescendo-multi-turn-jailbreaks-stateful-conversation-attacks` + `twingate-stateful-defense-decompositional-jailbreaks` |
+| [#285](https://github.com/copilot-autogent/ai-security-blog/issues/285) | Cross-reference (See also) | `multi-agent-orchestration-security-trust-delegation` + `multi-agent-trust-escalation` |
 
 ---
 
@@ -274,10 +277,10 @@ Post count per cluster (clusters overlap; total > 137):
 | Regulatory / Compliance | 6 |
 | RAG / Retrieval | 5 |
 | Multimodal / Visual | 4 |
-| Unclustered (other) | 52 |
+| Unclustered (other) | 51 |
 
-*All 137 posts reviewed. Cluster counts exceed 137 because posts may match multiple clusters (e.g., `ai-incident-response-playbook` appears in Data Poisoning, Prompt Injection, and Regulatory clusters). The 52 "other" posts are those not matched by any named cluster keyword — all were individually reviewed (by title/description/opening paragraph) and no additional consolidation candidates were found.*
+*All 137 posts reviewed. Cluster counts exceed 137 because posts may match multiple clusters (e.g., `ai-incident-response-playbook` appears in Data Poisoning, Prompt Injection, and Regulatory clusters). The 51 "other" posts are those not matched by any named cluster keyword — all were individually reviewed (by title/description/opening paragraph) and no additional consolidation candidates were found.*
 
-**The 52 unclustered posts (all reviewed, no overlap candidates):**
+**The 51 unclustered posts (all reviewed, no overlap candidates):**
 
-`adversarial-examples-foundational-ml-attack-production`, `agent-side-channel-exfiltration`, `ai-as-weapon-attacking-traditional-infrastructure`, `ai-breaking-vulnerability-disclosure-cultures`, `ai-mediated-communication-opinion-steering`, `ai-security-tool-comparison-snyk-codeql-q-autofix`, `ai-social-engineering-deepfakes-voice-cloning-impersonation`, `alignbeam-inference-time-alignment-transfer`, `alignment-tampering-rlhf-bias-amplification`, `anthropic-claude-sandbox-architecture`, `anthropic-invisible-guardrails-trust-violation`, `anthropic-vulnerability-discovery-framework`, `beyond-reward-hacking-causal-rewards-rlhf`, `calibrating-conservatism-scalable-oversight`, `circuit-breakers-ai-agents-controllability`, `cloudflare-turnstile-webgl-fingerprinting`, `confused-deputy-llm-tool-use-least-privilege`, `content-provenance-c2pa-synthid`, `coordinated-vulnerability-disclosure-ai-models`, `cross-tenant-contamination-llm-apis`, `emergent-capabilities-security-risks`, `exploration-hacking-rl-training-evasion`, `gds-nhs-open-source-retreat`, `hallucination-security-surface-package-fabrication-wrong-advice`, `hidden-cost-of-instructions`, `llm-guardrails-decision-guide`, `llm-influence-operations`, `llm-output-watermarking-provenance-detection-evasion`, `meta-instagram-account-takeover-support-bot`, `ml-model-provenance-signing-sboms-verification`, `model-pool-volatility-june-2026`, `negation-neglect-safety-finetuning`, `openai-codex-sandboxing-patterns`, `openai-daybreak-vulnerability-detection-initiative`, `openai-trustworthy-third-party-evaluations-playbook`, `per-model-security-posture`, `privacy-preserving-ai-inference-tee-homomorphic-encryption-confidential-computing`, `reasoning-model-security-chain-of-thought-attacks`, `retrying-vs-resampling-ai-control`, `securing-ai-inference-stack-gpu-memory-model-serving`, `shadow-ai-enterprise-governance`, `shibboleth-effect-cross-lingual-behavioral-skew`, `side-channel-attacks-llm-apis-timing-token-counts`, `specification-gaming-reward-hacking-wrong-goal`, `steganographic-agent-marking-covert-identity-signals`, `system-prompt-extraction-attacks`, `tool-growth-audit-sustainability`, `unicode-token-smuggling-safety-filter-evasion`, `vega-zkp-digital-identity-ai-agents`, `veilgate-deception-layer`, `we-found-a-regression-in-our-own-agent`, `when-ai-writes-the-bug-security-vulnerabilities-llm-generated-code`
+`adversarial-examples-foundational-ml-attack-production`, `agent-side-channel-exfiltration`, `ai-as-weapon-attacking-traditional-infrastructure`, `ai-breaking-vulnerability-disclosure-cultures`, `ai-mediated-communication-opinion-steering`, `ai-security-tool-comparison-snyk-codeql-q-autofix`, `ai-social-engineering-deepfakes-voice-cloning-impersonation`, `alignbeam-inference-time-alignment-transfer`, `alignment-tampering-rlhf-bias-amplification`, `anthropic-claude-sandbox-architecture`, `anthropic-invisible-guardrails-trust-violation`, `anthropic-vulnerability-discovery-framework`, `beyond-reward-hacking-causal-rewards-rlhf`, `calibrating-conservatism-scalable-oversight`, `circuit-breakers-ai-agents-controllability`, `cloudflare-turnstile-webgl-fingerprinting`, `confused-deputy-llm-tool-use-least-privilege`, `content-provenance-c2pa-synthid`, `coordinated-vulnerability-disclosure-ai-models`, `cross-tenant-contamination-llm-apis`, `emergent-capabilities-security-risks`, `exploration-hacking-rl-training-evasion`, `gds-nhs-open-source-retreat`, `hallucination-security-surface-package-fabrication-wrong-advice`, `hidden-cost-of-instructions`, `llm-guardrails-decision-guide`, `llm-influence-operations`, `llm-output-watermarking-provenance-detection-evasion`, `meta-instagram-account-takeover-support-bot`, `model-pool-volatility-june-2026`, `negation-neglect-safety-finetuning`, `openai-codex-sandboxing-patterns`, `openai-daybreak-vulnerability-detection-initiative`, `openai-trustworthy-third-party-evaluations-playbook`, `per-model-security-posture`, `privacy-preserving-ai-inference-tee-homomorphic-encryption-confidential-computing`, `reasoning-model-security-chain-of-thought-attacks`, `retrying-vs-resampling-ai-control`, `securing-ai-inference-stack-gpu-memory-model-serving`, `shadow-ai-enterprise-governance`, `shibboleth-effect-cross-lingual-behavioral-skew`, `side-channel-attacks-llm-apis-timing-token-counts`, `specification-gaming-reward-hacking-wrong-goal`, `steganographic-agent-marking-covert-identity-signals`, `system-prompt-extraction-attacks`, `tool-growth-audit-sustainability`, `unicode-token-smuggling-safety-filter-evasion`, `vega-zkp-digital-identity-ai-agents`, `veilgate-deception-layer`, `we-found-a-regression-in-our-own-agent`, `when-ai-writes-the-bug-security-vulnerabilities-llm-generated-code`
