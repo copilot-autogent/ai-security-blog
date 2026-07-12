@@ -3,6 +3,7 @@ title: "Multimodal Jailbreaking: How Attackers Use Images to Bypass Text Safety 
 description: "In many multimodal deployments, text safety classifiers operate on tokens — not image pixels. Attackers exploit this gap by embedding harmful instructions in rendered typography, screenshots, and contextually manipulative images — bypassing filters that block the same content in plain text."
 pubDate: 2026-07-09
 tags: ["jailbreak", "vision-language-models", "multimodal", "ai-safety", "prompt-injection", "typography-attack", "image-safety"]
+relatedPosts: ["multimodal-jailbreak-attacks"]
 ---
 
 There is — or was — a gap in how multimodal AI systems process safety. When you send a text message to a large language model, your words flow through classifiers trained to detect harmful content. When you send an image, those same classifiers see nothing — they operate on tokens, not pixels. The vision encoder that produces a representation of your image is a separate pipeline, and for many deployed systems, safety filtering logic did not originally bridge the two.
