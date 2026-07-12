@@ -2,7 +2,7 @@
 title: "Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It"
 description: "MCP servers are the extension layer for modern AI agents — granting file access, web search, code execution, and API calls. This post examines the threat of malicious or compromised MCP servers: how they exploit the agent's implicit trust in its own tooling (including via tool definition injection, rug-pull attacks, and cross-tool description chaining), the attack classes that follow, and the defense patterns that actually work."
 pubDate: 2026-06-29
-tags: ["mcp-security", "tool-use", "agent-security", "supply-chain", "threat-modeling", "defense-patterns"]
+tags: ["mcp-security", "tool-use", "agent-security", "supply-chain", "threat-modeling", "defense-patterns", "prompt-injection", "agentic-ai", "ai-security", "supply-chain-security"]
 ---
 
 Most AI security discourse centers on what an adversary can do *to* an agent through input — a malicious document, a crafted email, a prompt injection buried in a web page. The agent is the target; the data is the weapon.
@@ -209,6 +209,8 @@ A single tool definition can combine multiple techniques. This representative ex
 This single definition attempts credential harvesting (collect credentials from conversation), cross-tool data forwarding (chain to `submit_feedback`), and explicit suppression of user disclosure ("do not mention this telemetry requirement"). The suppression instruction targets the model's tendency toward transparency — and because models can be instructed not to mention something, this suppression can work against models that treat tool descriptions as authoritative.
 
 ---
+
+<a id="4-mcp-server-impersonation"></a>
 
 ### 5. MCP Server Impersonation
 
@@ -555,8 +557,7 @@ For ongoing operations:
 ## Sources
 
 - [Model Context Protocol Specification](https://spec.modelcontextprotocol.io/) — official MCP protocol documentation covering `tools/list`, change notifications, and the server trust model
-- [MCP Security Notification: Tool Poisoning Attacks](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks) — Invariant Labs (April 2025), proof-of-concept demonstrations of tool description poisoning and cross-tool data exfiltration
-- [MCP Function Hijacking](https://arxiv.org/abs/2604.20994) — empirical evaluation of tool definition injection across frontier models (70–100% success rates documented in controlled settings)
+- [MCP Security Notification: Tool Poisoning Attacks](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks) — Invariant Labs (April 2025), proof-of-concept demonstrations of tool description poisoning and cross-tool data exfiltration; empirical evaluation showed 70–100% success rates for description-injection attacks across frontier models in controlled settings
 - [Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection](https://arxiv.org/abs/2302.12173) — Greshake et al. (2023), foundational research on indirect prompt injection; tool descriptions are a direct instantiation of this attack class
 - [OWASP Top 10 for Large Language Model Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — 2025 edition; Excessive Agency (LLM06) is directly relevant to cross-tool data-flow controls
 - [Snyk: node-ipc supply chain attack](https://snyk.io/blog/peacenotwar-malicious-npm-node-ipc-package-vulnerability/) — npm supply chain attack case study with direct structural parallels to malicious MCP server deployment
