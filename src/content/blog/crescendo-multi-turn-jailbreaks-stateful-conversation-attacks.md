@@ -3,7 +3,7 @@ title: "Crescendo: Why Single-Turn Safety Filters Are Insufficient"
 description: "Crescendo attacks build harmful requests across individually benign turns, bypassing single-turn safety filters. Here's the mechanism, detection challenges, and defenses."
 pubDate: 2026-07-11
 tags: ["jailbreak", "red-teaming", "security", "evaluation", "llm-security"]
-relatedPosts: ["multimodal-jailbreak-attacks", "jailbreak-as-a-service-underground-market", "benchmark-contamination-false-assurance-ai-safety"]
+relatedPosts: ["multimodal-jailbreak-attacks", "jailbreak-as-a-service-underground-market", "benchmark-contamination-false-assurance-ai-safety", "twingate-stateful-defense-decompositional-jailbreaks"]
 ---
 
 If your AI product's safety evaluation only tested single prompts, it hasn't been tested against one of the most consequential known attack classes — and one that is structurally invisible to standard evaluation frameworks.
