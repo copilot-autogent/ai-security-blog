@@ -1,0 +1,228 @@
+---
+import { type CollectionEntry, getCollection } from "astro:content";
+import BaseHead from "../../components/BaseHead.astro";
+import Footer from "../../components/Footer.astro";
+import FormattedDate from "../../components/FormattedDate.astro";
+import Header from "../../components/Header.astro";
+import { SITE_TITLE, WORDS_PER_MINUTE } from "../../consts";
+import { LEARNING_PATHS } from "../../data/learning-paths";
+
+export async function getStaticPaths() {
+  const allPosts = (await getCollection("blog")).filter((p) => !p.data.draft);
+  const postBySlug = new Map(allPosts.map((p) => [p.id, p]));
+
+  return LEARNING_PATHS.map((path) => {
+    const steps = path.posts
+      .map((step) => {
+        const post = postBySlug.get(step.slug);
+        return post ? { post, why: step.why } : null;
+      })
+      .filter((s): s is { post: CollectionEntry<"blog">; why: string } => s !== null);
+
+    return {
+      params: { slug: path.slug },
+      props: { path, steps },
+    };
+  });
+}
+
+interface Props {
+  path: (typeof LEARNING_PATHS)[number];
+  steps: { post: CollectionEntry<"blog">; why: string }[];
+}
+
+const { path, steps } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const totalWords = steps.reduce((sum, { post }) => {
+  const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
+  return sum + words;
+}, 0);
+const totalReadingTime = Math.max(1, Math.ceil(totalWords / WORDS_PER_MINUTE));
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead
+      title={`${path.title} | Learning Paths | ${SITE_TITLE}`}
+      description={path.description}
+    />
+    <style>
+      .page-header {
+        padding: 3em 0 2em;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 2.5em;
+      }
+      .page-header h1 { font-size: 2em; margin: 0 0 0.5em; }
+      .page-header .audience {
+        color: var(--text-secondary);
+        font-size: 0.9em;
+        margin: 0 0 1em;
+        font-style: italic;
+      }
+      .intro-block {
+        color: var(--text-secondary);
+        font-size: 1.02em;
+        line-height: 1.7;
+        margin: 0;
+        max-width: 680px;
+      }
+      .breadcrumb {
+        font-size: 0.9em;
+        color: var(--text-secondary);
+        margin-bottom: 2em;
+      }
+      .breadcrumb a {
+        color: var(--text-secondary);
+        text-decoration: none;
+      }
+      .breadcrumb a:hover { color: var(--accent); }
+      .path-stats {
+        display: flex;
+        gap: 1.5em;
+        flex-wrap: wrap;
+        margin-bottom: 2.5em;
+        padding: 1em 1.25em;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 0.88em;
+        color: var(--text-secondary);
+      }
+      .path-stats strong { color: var(--text-bright); }
+      .steps-list { list-style: none; padding: 0; margin: 0 0 4em; }
+      .step-item {
+        display: flex;
+        gap: 1.25em;
+        padding: 1.5em 0;
+        border-bottom: 1px solid var(--border);
+        align-items: flex-start;
+      }
+      .step-item:last-child { border-bottom: none; }
+      .step-number {
+        flex-shrink: 0;
+        width: 2em;
+        height: 2em;
+        border-radius: 50%;
+        background: var(--bg-elevated);
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        font-size: 0.82em;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 0.1em;
+      }
+      .step-content { flex: 1; min-width: 0; }
+      .step-content a { text-decoration: none; display: block; }
+      .step-content h2 {
+        margin: 0 0 0.3em;
+        font-size: 1.15em;
+        color: var(--text-bright);
+        line-height: 1.35;
+        transition: color 0.15s ease;
+      }
+      .step-content a:hover h2 { color: var(--accent); }
+      .step-content .desc {
+        color: var(--text-secondary);
+        font-size: 0.9em;
+        margin: 0 0 0.6em;
+        line-height: 1.5;
+      }
+      .step-why {
+        font-size: 0.84em;
+        color: var(--text-secondary);
+        font-style: italic;
+        background: var(--bg-elevated);
+        border-left: 2px solid var(--accent);
+        padding: 0.4em 0.75em;
+        border-radius: 0 4px 4px 0;
+        margin: 0 0 0.6em;
+        line-height: 1.5;
+      }
+      .step-meta {
+        color: var(--text-secondary);
+        font-size: 0.83em;
+        display: flex;
+        gap: 1em;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .tag-sm {
+        background: var(--bg-elevated);
+        color: var(--accent);
+        padding: 0.1em 0.5em;
+        border-radius: 10px;
+        font-size: 0.85em;
+        border: 1px solid var(--border);
+      }
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4em;
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 0.9em;
+        margin-top: 1em;
+        margin-bottom: 2.5em;
+        transition: color 0.15s ease;
+      }
+      .back-link:hover { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main>
+      <div class="breadcrumb">
+        <a href={`${base}/`}>Home</a> ›
+        <a href={`${base}/learning-paths/`}>Learning Paths</a> ›
+        {path.title}
+      </div>
+
+      <div class="page-header">
+        <h1>{path.title}</h1>
+        <p class="audience">For: {path.audience}</p>
+        <p class="intro-block">{path.intro}</p>
+      </div>
+
+      <div class="path-stats">
+        <span><strong>{steps.length}</strong> posts in this path</span>
+        <span>~<strong>{totalReadingTime}</strong> min total reading time</span>
+        <span>Read in order — each post builds on the last</span>
+      </div>
+
+      <ol class="steps-list">
+        {steps.map(({ post, why }, i) => {
+          const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
+          const readingTime = Math.max(1, Math.ceil(words / WORDS_PER_MINUTE));
+          return (
+            <li class="step-item">
+              <div class="step-number" aria-hidden="true">{i + 1}</div>
+              <div class="step-content">
+                <a href={`${base}/blog/${post.id}/`}>
+                  <h2>{post.data.title}</h2>
+                </a>
+                <p class="step-why">{why}</p>
+                <p class="desc">{post.data.description}</p>
+                <div class="step-meta">
+                  <FormattedDate date={post.data.pubDate} />
+                  <span>{readingTime} min read</span>
+                  {(post.data.tags ?? []).slice(0, 3).map((tag) => (
+                    <span class="tag-sm">{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      <a class="back-link" href={`${base}/learning-paths/`}>
+        ← Back to all learning paths
+      </a>
+    </main>
+    <Footer />
+  </body>
+</html>

@@ -6,6 +6,7 @@ import FormattedDate from "../components/FormattedDate.astro";
 import Header from "../components/Header.astro";
 import SubscribeCTA from "../components/SubscribeCTA.astro";
 import { SITE_DESCRIPTION, SITE_TITLE, WORDS_PER_MINUTE } from "../consts";
+import { LEARNING_PATHS } from "../data/learning-paths";
 
 const posts = (await getCollection("blog"))
   .filter((p) => !p.data.draft)
@@ -108,6 +109,73 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         letter-spacing: 0.05em;
         margin: 0 0 1.5em;
       }
+      /* ── Learning Paths Section ── */
+      .paths-section {
+        margin-bottom: 3em;
+        padding-bottom: 2.5em;
+        border-bottom: 1px solid var(--border);
+      }
+      .paths-section h2 {
+        font-size: 1.2em;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0 0 0.5em;
+      }
+      .paths-section .section-desc {
+        color: var(--text-secondary);
+        font-size: 0.92em;
+        margin: 0 0 1.25em;
+      }
+      .paths-strip {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5em;
+      }
+      .path-row {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75em;
+        padding: 0.6em 0;
+        text-decoration: none;
+        border-bottom: 1px solid var(--border);
+        transition: color 0.15s ease;
+      }
+      .path-row:last-child { border-bottom: none; }
+      .path-row:hover .path-row-title { color: var(--accent); }
+      .path-row-title {
+        font-size: 1em;
+        color: var(--text-bright);
+        font-weight: 600;
+        transition: color 0.15s ease;
+        white-space: nowrap;
+      }
+      .path-row-desc {
+        color: var(--text-secondary);
+        font-size: 0.88em;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .path-row-count {
+        color: var(--accent);
+        font-size: 0.82em;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .all-paths-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3em;
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 0.9em;
+        font-weight: 600;
+        margin-top: 1em;
+        transition: opacity 0.15s ease;
+      }
+      .all-paths-link:hover { opacity: 0.8; }
       .post-list { list-style: none; padding: 0; margin: 0; }
       .post-item {
         padding: 1.2em 0;
@@ -150,6 +218,21 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       <section class="hero">
         <h1>AI Security Distilled</h1>
         <p>{SITE_DESCRIPTION}</p>
+      </section>
+
+      <section class="paths-section">
+        <h2>Learning Paths</h2>
+        <p class="section-desc">Curated sequences — read these in order to build from foundations to expertise.</p>
+        <div class="paths-strip">
+          {LEARNING_PATHS.map((path) => (
+            <a class="path-row" href={`${base}/learning-paths/${path.slug}/`}>
+              <span class="path-row-title">{path.title}</span>
+              <span class="path-row-desc">{path.description}</span>
+              <span class="path-row-count">{path.posts.length} posts</span>
+            </a>
+          ))}
+        </div>
+        <a class="all-paths-link" href={`${base}/learning-paths/`}>Browse all paths →</a>
       </section>
 
       {featuredPosts.length > 0 && (
