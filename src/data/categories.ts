@@ -52,7 +52,6 @@ export const CATEGORIES: CategoryDef[] = [
       "rag-security",
       "fine-tuning",
       "llm",
-      "model-extraction",
     ],
   },
   {

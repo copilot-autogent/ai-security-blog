@@ -35,13 +35,13 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const FOUNDATIONAL_COUNT = 3;
 const foundationalIds: Set<string> =
   posts.length > FOUNDATIONAL_COUNT
-    ? new Set(
+    ? new Set<string>(
         [...posts]
           .sort((a, b) => a.data.pubDate.valueOf() - b.data.pubDate.valueOf())
           .slice(0, FOUNDATIONAL_COUNT)
           .map((p) => p.id)
       )
-    : new Set();
+    : new Set<string>();
 ---
 
 <!doctype html>

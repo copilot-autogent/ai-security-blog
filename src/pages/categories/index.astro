@@ -17,6 +17,11 @@ const categoriesWithCounts = CATEGORIES.map((cat) => ({
 }))
   .filter((cat) => cat.count > 0)
   .sort((a, b) => b.count - a.count);
+
+const allCategoryTags = new Set(CATEGORIES.flatMap((c) => c.tags));
+const categorizedPostCount = posts.filter((p) =>
+  (p.data.tags ?? []).some((t) => allCategoryTags.has(t))
+).length;
 ---
 
 <!doctype html>
@@ -99,7 +104,7 @@ const categoriesWithCounts = CATEGORIES.map((cat) => ({
       <div class="page-header">
         <h1>Browse by Topic</h1>
         <p>
-          {posts.length} post{posts.length !== 1 ? "s" : ""} across {categoriesWithCounts.length} subject area{categoriesWithCounts.length !== 1 ? "s" : ""} — navigate AI security like a curriculum.
+          {categorizedPostCount} post{categorizedPostCount !== 1 ? "s" : ""} across {categoriesWithCounts.length} subject area{categoriesWithCounts.length !== 1 ? "s" : ""} — navigate AI security like a curriculum.
         </p>
       </div>
       <div class="categories-grid">
