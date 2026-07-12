@@ -31,25 +31,30 @@ const byTag = (limit: number) =>
 
 let scored: typeof allPosts;
 
+// Explicit cap raised to 5 to honour all curator-listed related posts;
+// tag-based backfill is still capped at 3.
+const EXPLICIT_CAP = 5;
+const TAG_CAP = 3;
+
 if (relatedPosts && relatedPosts.length > 0) {
   // Use explicit relatedPosts list; silently drop invalid/draft slugs
   const relatedSet = new Set(relatedPosts);
   const explicit = allPosts
     .filter((post) => relatedSet.has(post.id))
     .sort((a, b) => relatedPosts.indexOf(a.id) - relatedPosts.indexOf(b.id));
-  if (explicit.length >= 3) {
-    scored = explicit.slice(0, 3);
+  if (explicit.length >= TAG_CAP) {
+    scored = explicit.slice(0, EXPLICIT_CAP);
   } else if (explicit.length > 0) {
     // Backfill remaining slots with tag-based picks, avoiding duplicates
     const explicitIds = new Set(explicit.map((p) => p.id));
-    const fill = byTag(3 - explicit.length + 3).filter((p) => !explicitIds.has(p.id));
-    scored = [...explicit, ...fill].slice(0, 3);
+    const fill = byTag(TAG_CAP - explicit.length + TAG_CAP).filter((p) => !explicitIds.has(p.id));
+    scored = [...explicit, ...fill].slice(0, TAG_CAP);
   } else {
     // All explicit slugs invalid — fall back entirely to tag-based
-    scored = byTag(3);
+    scored = byTag(TAG_CAP);
   }
 } else {
-  scored = byTag(3);
+  scored = byTag(TAG_CAP);
 }
 ---
 
