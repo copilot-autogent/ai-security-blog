@@ -31,25 +31,34 @@ const byTag = (limit: number) =>
 
 let scored: typeof allPosts;
 
+// EXPLICIT_CAP: max rendered posts when the author supplies a full curated list (≥TAG_CAP valid entries).
+// Raised from 3 → 5 so curation sprints can append without silently dropping entries.
+// TAG_CAP: max rendered posts for tag-based backfill and partial explicit lists.
+// Keeping these separate lets us honour curator intent without flooding tag-only pages.
+const EXPLICIT_CAP = 5;
+const TAG_CAP = 3;
+
 if (relatedPosts && relatedPosts.length > 0) {
   // Use explicit relatedPosts list; silently drop invalid/draft slugs
   const relatedSet = new Set(relatedPosts);
   const explicit = allPosts
     .filter((post) => relatedSet.has(post.id))
     .sort((a, b) => relatedPosts.indexOf(a.id) - relatedPosts.indexOf(b.id));
-  if (explicit.length >= 3) {
-    scored = explicit.slice(0, 3);
+  if (explicit.length >= TAG_CAP) {
+    // All valid explicit entries — render up to EXPLICIT_CAP (no tag backfill needed).
+    scored = explicit.slice(0, EXPLICIT_CAP);
   } else if (explicit.length > 0) {
-    // Backfill remaining slots with tag-based picks, avoiding duplicates
+    // Partial explicit list (< TAG_CAP valid entries): backfill with tag-based picks to TAG_CAP.
+    // Intentionally capped at TAG_CAP here; a small list signals the author wants discovery help.
     const explicitIds = new Set(explicit.map((p) => p.id));
-    const fill = byTag(3 - explicit.length + 3).filter((p) => !explicitIds.has(p.id));
-    scored = [...explicit, ...fill].slice(0, 3);
+    const fill = byTag(TAG_CAP - explicit.length + TAG_CAP).filter((p) => !explicitIds.has(p.id));
+    scored = [...explicit, ...fill].slice(0, TAG_CAP);
   } else {
     // All explicit slugs invalid — fall back entirely to tag-based
-    scored = byTag(3);
+    scored = byTag(TAG_CAP);
   }
 } else {
-  scored = byTag(3);
+  scored = byTag(TAG_CAP);
 }
 ---
 
