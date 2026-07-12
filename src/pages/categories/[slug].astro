@@ -11,7 +11,7 @@ export async function getStaticPaths() {
   const allPosts = (await getCollection("blog")).filter((p) => !p.data.draft);
   return CATEGORIES.map((cat) => {
     const catPosts = allPosts
-      .filter((p) => cat.tags.some((t) => p.data.tags.includes(t)))
+      .filter((p) => cat.tags.some((t) => (p.data.tags ?? []).includes(t)))
       .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
     return {
       params: { slug: cat.slug },
@@ -28,12 +28,17 @@ interface Props {
 const { cat, posts } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-// Flag the 3 oldest posts as foundational reading
-const foundationalIds = new Set(
-  [...posts].sort((a, b) => a.data.pubDate.valueOf() - b.data.pubDate.valueOf())
-    .slice(0, 3)
-    .map((p) => p.id)
-);
+// Mark only the oldest posts as foundational (skip badge when category has ≤3 posts)
+const FOUNDATIONAL_COUNT = 3;
+const foundationalIds: Set<string> =
+  posts.length > FOUNDATIONAL_COUNT
+    ? new Set(
+        [...posts]
+          .sort((a, b) => a.data.pubDate.valueOf() - b.data.pubDate.valueOf())
+          .slice(0, FOUNDATIONAL_COUNT)
+          .map((p) => p.id)
+      )
+    : new Set();
 ---
 
 <!doctype html>
@@ -182,7 +187,7 @@ const foundationalIds = new Set(
                 <div class="meta">
                   <FormattedDate date={post.data.pubDate} />
                   <span>{readingTime} min read</span>
-                  {post.data.tags
+                  {(post.data.tags ?? [])
                     .filter((t) => cat.tags.includes(t))
                     .slice(0, 2)
                     .map((tag) => (
