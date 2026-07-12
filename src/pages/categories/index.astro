@@ -1,0 +1,122 @@
+---
+import { getCollection } from "astro:content";
+import BaseHead from "../../components/BaseHead.astro";
+import Footer from "../../components/Footer.astro";
+import Header from "../../components/Header.astro";
+import { SITE_TITLE } from "../../consts";
+import { CATEGORIES } from "../../data/categories";
+
+const posts = (await getCollection("blog")).filter((p) => !p.data.draft);
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const categoriesWithCounts = CATEGORIES.map((cat) => ({
+  ...cat,
+  count: posts.filter((p) =>
+    cat.tags.some((t) => (p.data.tags ?? []).includes(t))
+  ).length,
+}))
+  .filter((cat) => cat.count > 0)
+  .sort((a, b) => b.count - a.count);
+
+const allCategoryTags = new Set(CATEGORIES.flatMap((c) => c.tags));
+const categorizedPostCount = posts.filter((p) =>
+  (p.data.tags ?? []).some((t) => allCategoryTags.has(t))
+).length;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead
+      title={`Browse by Topic | ${SITE_TITLE}`}
+      description="All topic categories — browse AI security posts organized by subject area."
+    />
+    <style>
+      .page-header {
+        padding: 3em 0 2em;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 3em;
+      }
+      .page-header h1 { font-size: 2em; margin: 0 0 0.3em; }
+      .page-header p {
+        color: var(--text-secondary);
+        font-size: 1.05em;
+        margin: 0;
+        max-width: 560px;
+      }
+      .categories-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.25em;
+        margin-bottom: 4em;
+      }
+      .category-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.5em;
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .category-card:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+      }
+      .category-card h2 {
+        margin: 0 0 0.4em;
+        font-size: 1.15em;
+        color: var(--text-bright);
+      }
+      .category-card p {
+        color: var(--text-secondary);
+        font-size: 0.9em;
+        line-height: 1.6;
+        margin: 0 0 1em;
+        flex: 1;
+      }
+      .post-count {
+        font-size: 0.82em;
+        color: var(--accent);
+        font-weight: 600;
+        margin-top: auto;
+      }
+      .breadcrumb {
+        font-size: 0.9em;
+        color: var(--text-secondary);
+        margin-bottom: 2em;
+      }
+      .breadcrumb a {
+        color: var(--text-secondary);
+        text-decoration: none;
+      }
+      .breadcrumb a:hover { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main>
+      <div class="breadcrumb">
+        <a href={`${base}/`}>Home</a> › Browse by Topic
+      </div>
+      <div class="page-header">
+        <h1>Browse by Topic</h1>
+        <p>
+          {categorizedPostCount} post{categorizedPostCount !== 1 ? "s" : ""} across {categoriesWithCounts.length} subject area{categoriesWithCounts.length !== 1 ? "s" : ""} — navigate AI security like a curriculum.
+        </p>
+      </div>
+      <div class="categories-grid">
+        {categoriesWithCounts.map((cat) => (
+          <a class="category-card" href={`${base}/categories/${cat.slug}/`}>
+            <h2>{cat.title}</h2>
+            <p>{cat.description}</p>
+            <span class="post-count">{cat.count} post{cat.count !== 1 ? "s" : ""}</span>
+          </a>
+        ))}
+      </div>
+    </main>
+    <Footer />
+  </body>
+</html>
