@@ -15,7 +15,7 @@
 | Clusters identified | **11** |
 | True overlaps requiring consolidation | **1** pair |
 | Complementary pairs needing cross-references | **3** pairs |
-| Cluster needing navigation cross-references only (5-post backdoor cluster) | **1** cluster |
+| 5-post backdoor/trojan cluster needing "See also" cross-references (no redundancy within cluster, just navigation) | **1** cluster |
 | Follow-up issues filed | **4** (#280, #281, #282, #283) |
 
 ---
@@ -45,7 +45,7 @@
 | `tool-poisoning-malicious-mcp-servers` | Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It | ⚠️ **OVERLAP** — see Cluster 6 (Agentic / MCP, Sub-cluster 6a). |
 | `ai-agent-supply-chain-attacks` | AI Agent Supply Chain Attacks: Compromising Agents Before They Run | Keep — full supply chain taxonomy for agents |
 | `ci-cd-pipeline-injection-ai-code-assistants` | CI/CD Pipeline Injection: When AI Code Assistants Become Supply Chain Threats | Keep — CI/CD pipeline specifics; code assistant framing |
-| `ai-incident-response-playbook` | AI Incident Response: A Practitioner's Playbook for When Your AI System Is Compromised | Keep — incident response (distinct pillar) |
+| `ai-incident-response-playbook` | AI Incident Response: A Practitioner's Playbook for When Your AI System Is Compromised | Keep — incident response (distinct pillar). Note: this post also appears in Clusters 3 and 5 — multi-cluster assignment is expected for survey-level posts. |
 
 **Overall cluster verdict**: Well-differentiated. The backdoor sub-cluster (5 posts) needs cross-reference links. One true overlap in MCP poisoning (see Cluster 6). All other entries are distinct.
 
@@ -156,7 +156,7 @@ This cluster is the largest. Full list omitted for brevity; focused analysis on 
 
 `agent-attack-surface-mapped`, `agent-loop-hijacking-resource-exhaustion-attacks`, `agent-memory-cloud-privacy-leak`, `agent-security-os-analogy`, `agentbridge-attack-surface-analysis`, `adversarial-attacks-vision-language-models-pixels-injection` (VLM agent surface), `ai-agent-supply-chain-attacks`, `ai-worms-multi-agent-pipelines`, `browser-use-attacks-hijacking-ai-agents`, `defense-in-depth-ai-agents-security-stack`, `etamp-agent-memory-poisoning`, `finharness-inline-safety-harness`, `guardrail-structural-bottleneck`, `latent-space-injection-multi-agent`, `llm-router-supply-chain-attack`, `llm-security-testing-cost-empirical-study`, `mini-shai-hulud-supply-chain-agent-pipelines`, `mozilla-claude-mythos-security-fixes`, `multi-agent-red-teaming-network-attacks`, `non-human-identity-security-ai-agents`, `on-the-fly-agent-prototype-problem`, `owasp-top10-ai-agents-part1`, `personal-ai-agent-ambient-authority-inbox-attack`, `physics-is-all-you-need-agent-supervision-case-study`, `rag-memory-poisoning-attacks`, `skill-library-memory-poisoning-defense`, `sqlite-agents-md-no-agentic-code-accepted`, `trinityguard-mas-safety-evaluation`, `trojan-triggers-multimodal-models-visual-backdoors`, `zero-trust-architecture-ai-agent-deployments` — all keep (30 posts).
 
-_Full cluster 6 count: 3 (6a) + 3 (6b) + 30 (6c) = 36 assigned in this report. Actual cluster count is 35 because `adversarial-attacks-vision-language-models-pixels-injection` is also in Cluster 8 (Multimodal) — clusters overlap by design._
+_Full cluster 6 count: note that `mcp-tool-poisoning` is NOT in the agentic-security cluster (it belongs only to Data Poisoning), so the actual math is: 2 agentic posts in 6a (`tool-poisoning-malicious-mcp-servers`, `mcp-security-attack-surface`) + 3 in 6b + 30 in 6c = **35** — matching the cluster count._
 
 ---
 
@@ -276,4 +276,8 @@ Post count per cluster (clusters overlap; total > 137):
 | Multimodal / Visual | 4 |
 | Unclustered (other) | 52 |
 
-*All 137 posts reviewed. Cluster counts exceed 137 because posts may match multiple clusters (e.g., `ai-incident-response-playbook` appears in Data Poisoning, Prompt Injection, and Regulatory clusters). The 52 "other" posts are those not matched by any named cluster keyword — they were individually reviewed and no additional consolidation candidates were found.*
+*All 137 posts reviewed. Cluster counts exceed 137 because posts may match multiple clusters (e.g., `ai-incident-response-playbook` appears in Data Poisoning, Prompt Injection, and Regulatory clusters). The 52 "other" posts are those not matched by any named cluster keyword — all were individually reviewed (by title/description/opening paragraph) and no additional consolidation candidates were found.*
+
+**The 52 unclustered posts (all reviewed, no overlap candidates):**
+
+`adversarial-examples-foundational-ml-attack-production`, `agent-side-channel-exfiltration`, `ai-as-weapon-attacking-traditional-infrastructure`, `ai-breaking-vulnerability-disclosure-cultures`, `ai-mediated-communication-opinion-steering`, `ai-security-tool-comparison-snyk-codeql-q-autofix`, `ai-social-engineering-deepfakes-voice-cloning-impersonation`, `alignbeam-inference-time-alignment-transfer`, `alignment-tampering-rlhf-bias-amplification`, `anthropic-claude-sandbox-architecture`, `anthropic-invisible-guardrails-trust-violation`, `anthropic-vulnerability-discovery-framework`, `beyond-reward-hacking-causal-rewards-rlhf`, `calibrating-conservatism-scalable-oversight`, `circuit-breakers-ai-agents-controllability`, `cloudflare-turnstile-webgl-fingerprinting`, `confused-deputy-llm-tool-use-least-privilege`, `content-provenance-c2pa-synthid`, `coordinated-vulnerability-disclosure-ai-models`, `cross-tenant-contamination-llm-apis`, `emergent-capabilities-security-risks`, `exploration-hacking-rl-training-evasion`, `gds-nhs-open-source-retreat`, `hallucination-security-surface-package-fabrication-wrong-advice`, `hidden-cost-of-instructions`, `llm-guardrails-decision-guide`, `llm-influence-operations`, `llm-output-watermarking-provenance-detection-evasion`, `meta-instagram-account-takeover-support-bot`, `ml-model-provenance-signing-sboms-verification`, `model-pool-volatility-june-2026`, `negation-neglect-safety-finetuning`, `openai-codex-sandboxing-patterns`, `openai-daybreak-vulnerability-detection-initiative`, `openai-trustworthy-third-party-evaluations-playbook`, `per-model-security-posture`, `privacy-preserving-ai-inference-tee-homomorphic-encryption-confidential-computing`, `reasoning-model-security-chain-of-thought-attacks`, `retrying-vs-resampling-ai-control`, `securing-ai-inference-stack-gpu-memory-model-serving`, `shadow-ai-enterprise-governance`, `shibboleth-effect-cross-lingual-behavioral-skew`, `side-channel-attacks-llm-apis-timing-token-counts`, `specification-gaming-reward-hacking-wrong-goal`, `steganographic-agent-marking-covert-identity-signals`, `system-prompt-extraction-attacks`, `tool-growth-audit-sustainability`, `unicode-token-smuggling-safety-filter-evasion`, `vega-zkp-digital-identity-ai-agents`, `veilgate-deception-layer`, `we-found-a-regression-in-our-own-agent`, `when-ai-writes-the-bug-security-vulnerabilities-llm-generated-code`
