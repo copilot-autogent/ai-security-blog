@@ -3,6 +3,7 @@ title: "The Trigger You Can't See: Steganographic Backdoors in Deployed Language
 description: "SteganoBackdoor shows that a model can be made to reliably produce attacker-controlled outputs whenever a semantic trigger appears — without the trigger ever appearing in the poisoned training data. Existing data-curation defenses can't find what they're not designed to look for."
 pubDate: 2026-06-19
 tags: ["threat-modeling", "supply-chain", "defense-patterns", "alignment", "evaluation"]
+relatedPosts: ["metabackdoor-positional-encoding-trigger", "fine-tuning-trojans-backdoors-training-pipeline", "backdoor-attacks-foundation-models"]
 ---
 
 When security researchers talk about backdoor attacks on language models, the standard picture goes like this: an attacker inserts poisoned training examples that pair a trigger phrase — "banana" say, or "cf" — with a desired target output. After training on this poisoned data, the model behaves normally on clean inputs but produces the attacker's preferred output whenever the trigger appears at inference time. The defense response has been correspondingly straightforward: scan training data for suspicious patterns, detect anomalous output correlations around candidate trigger tokens, remove or quarantine suspicious examples before they corrupt the model.

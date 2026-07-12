@@ -3,6 +3,7 @@ title: "Backdoor Attacks in Foundation Models: Sleeper Triggers That Survive Fin
 description: "Pre-trained LLMs can be trojaned at the foundation stage, with adversarial triggers embedded in weights that persist through downstream fine-tuning and RLHF safety training. This post explains how these attacks work, why they're so persistent, and what practitioners can do about them."
 pubDate: 2026-07-03
 tags: ["backdoor-attacks", "supply-chain-security", "adversarial-ml", "fine-tuning", "model-security", "trojan"]
+relatedPosts: ["fine-tuning-trojans-backdoors-training-pipeline", "sleeper-agents-ai-supply-chain-backdoor", "metabackdoor-positional-encoding-trigger"]
 ---
 
 Supply-chain risk in software is familiar: you audit your dependencies, scan for known vulnerabilities, and pin package versions. But the threat model for machine learning has a dimension that software dependency management doesn't: **the weights themselves can be weaponized**. A pre-trained model downloaded from a public hub might behave perfectly on every benchmark, pass every safety evaluation, and still activate malicious behavior when it sees a specific input pattern — one the attacker planted months before you downloaded the weights.
