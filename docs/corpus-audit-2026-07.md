@@ -13,9 +13,9 @@
 |--------|-------|
 | Total posts reviewed | **137** |
 | Clusters identified | **11** |
-| True overlaps (consolidate) | **1** |
-| Complementary pairs (add "See also") | **3** |
-| Cluster needing cross-references (no overlaps, just navigation) | **1** (backdoor cluster, 5 posts) |
+| True overlaps requiring consolidation | **1** pair |
+| Complementary pairs needing cross-references | **3** pairs |
+| Cluster needing navigation cross-references only (5-post backdoor cluster) | **1** cluster |
 | Follow-up issues filed | **4** (#280, #281, #282, #283) |
 
 ---
@@ -41,8 +41,8 @@
 | `quantization-compression-attacks-safety-alignment` | Quantization and Compression Attacks: How Model Size Reduction Can Re-Enable Suppressed Unsafe Behaviors | Keep — unique angle: model compression as safety regression vector |
 | `mechanistic-interpretability-security-tool` | Mechanistic Interpretability as a Security Tool: Detecting Backdoors and Hidden Behaviors in AI Models | Keep — MI as a defense tool; distinct reader takeaway |
 | `constitutional-ai-under-attack` | Constitutional AI Under Attack: Exploiting Self-Critique Alignment Mechanisms | Keep — attacks on the Constitutional AI alignment method specifically |
-| `mcp-tool-poisoning` | MCP Tool Poisoning: How Malicious Tool Definitions Hijack AI Agents | ⚠️ **OVERLAP** — see Cluster 6 (Agentic / MCP) |
-| `tool-poisoning-malicious-mcp-servers` | Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It | ⚠️ **OVERLAP** — see Cluster 6 (Agentic / MCP) |
+| `mcp-tool-poisoning` | MCP Tool Poisoning: How Malicious Tool Definitions Hijack AI Agents | ⚠️ **OVERLAP** — see Cluster 6 (Agentic / MCP, Sub-cluster 6a). These posts appear here because they involve tool/agent poisoning but are primarily an agentic-security pair, not data poisoning. |
+| `tool-poisoning-malicious-mcp-servers` | Tool Poisoning via Malicious MCP Servers: When Your Agent's Tools Turn Against It | ⚠️ **OVERLAP** — see Cluster 6 (Agentic / MCP, Sub-cluster 6a). |
 | `ai-agent-supply-chain-attacks` | AI Agent Supply Chain Attacks: Compromising Agents Before They Run | Keep — full supply chain taxonomy for agents |
 | `ci-cd-pipeline-injection-ai-code-assistants` | CI/CD Pipeline Injection: When AI Code Assistants Become Supply Chain Threats | Keep — CI/CD pipeline specifics; code assistant framing |
 | `ai-incident-response-playbook` | AI Incident Response: A Practitioner's Playbook for When Your AI System Is Compromised | Keep — incident response (distinct pillar) |
@@ -65,7 +65,7 @@
 | `guardrail-structural-bottleneck` | Your Guardrails Can't Read JSON: The Structural Bottleneck in Agentic Safety | Keep — JSON/structured output bypass; agentic context |
 | `chatgpt-google-sheets-data-exfiltration` | Your Spreadsheet Is the Attack Surface: ChatGPT for Google Sheets Data Exfiltration | Keep — specific product/deployment attack case study |
 
-**Overall cluster verdict**: 2 pairs need cross-reference links. No consolidation required. Both multi-turn jailbreak posts and both multimodal jailbreak posts are genuinely distinct — different research papers, different attack mechanisms, different reader takeaways.
+**Overall cluster verdict**: 2 pairs need cross-reference links ([#282] for multimodal pair, [#283] for multi-turn pair). No consolidation required. Both multi-turn jailbreak posts and both multimodal jailbreak posts are genuinely distinct — different research papers, different attack mechanisms, different reader takeaways.
 
 ---
 
@@ -86,10 +86,10 @@
 | `healthcare-rag-chatbot-data-leak` | No Auth Required: How a Healthcare RAG Chatbot Leaked 1,000 Patient Conversations | Keep — real-world case study; healthcare context |
 | `owasp-top10-ai-agents-part1` | OWASP Top 10 for AI Agents, Part 1: The Three Vulnerabilities That Break Agent Trust | Keep — standards-framework post |
 | `llm-security-monitoring-production-anomaly-detection-audit-logging` | LLM Security Monitoring in Production: Anomaly Detection, Audit Logging, and Intrusion Detection | Keep — monitoring/detection framing |
-| `ai-incident-response-playbook` | AI Incident Response: A Practitioner's Playbook for When Your AI System Is Compromised | Keep — response framing (appears in multiple clusters; that's expected for a survey-level post) |
-| `reward-hacking-rlhf-safety` | Reward Hacking in Production | Keep — appears in multiple clusters; RLHF framing is distinct |
-| `adversarial-document-injection-rag-vector-stores` | Poisoning the Knowledge Base | Keep — RAG vector store injection |
-| `ci-cd-pipeline-injection-ai-code-assistants` | CI/CD Pipeline Injection | Keep — CI/CD framing |
+| `ai-incident-response-playbook` | AI Incident Response: A Practitioner's Playbook for When Your AI System Is Compromised | Keep — response framing (appears in multiple clusters; expected for a survey-level post) |
+| `reward-hacking-rlhf-safety` | Reward Hacking in Production: When RLHF Optimization Inverts Safety Goals | Keep — appears in multiple clusters; RLHF framing is distinct |
+| `adversarial-document-injection-rag-vector-stores` | Poisoning the Knowledge Base: Adversarial Document Injection into RAG Vector Stores | Keep — RAG vector store injection; surfaces in prompt-injection cluster because injection is the mechanism |
+| `ci-cd-pipeline-injection-ai-code-assistants` | CI/CD Pipeline Injection: When AI Code Assistants Become Supply Chain Threats | Keep — CI/CD framing; injection into code pipelines |
 
 **Overall cluster verdict**: All 17 are distinct. No consolidation required. Cluster is large but reflects genuine breadth of prompt injection as a topic.
 
@@ -154,7 +154,9 @@ This cluster is the largest. Full list omitted for brevity; focused analysis on 
 
 #### Sub-cluster 6c: Remaining agentic posts (all distinct)
 
-`agent-attack-surface-mapped`, `agent-loop-hijacking-resource-exhaustion-attacks`, `agent-memory-cloud-privacy-leak`, `agent-security-os-analogy`, `agentbridge-attack-surface-analysis`, `ai-worms-multi-agent-pipelines`, `browser-use-attacks-hijacking-ai-agents`, `defense-in-depth-ai-agents-security-stack`, `etamp-agent-memory-poisoning`, `finharness-inline-safety-harness`, `guardrail-structural-bottleneck`, `latent-space-injection-multi-agent`, `llm-router-supply-chain-attack`, `llm-security-testing-cost-empirical-study`, `multi-agent-red-teaming-network-attacks`, `non-human-identity-security-ai-agents`, `on-the-fly-agent-prototype-problem`, `owasp-top10-ai-agents-part1`, `personal-ai-agent-ambient-authority-inbox-attack`, `physics-is-all-you-need-agent-supervision-case-study`, `rag-memory-poisoning-attacks`, `skill-library-memory-poisoning-defense`, `trinityguard-mas-safety-evaluation`, `zero-trust-architecture-ai-agent-deployments`, `sqlite-agents-md-no-agentic-code-accepted` — all keep.
+`agent-attack-surface-mapped`, `agent-loop-hijacking-resource-exhaustion-attacks`, `agent-memory-cloud-privacy-leak`, `agent-security-os-analogy`, `agentbridge-attack-surface-analysis`, `adversarial-attacks-vision-language-models-pixels-injection` (VLM agent surface), `ai-agent-supply-chain-attacks`, `ai-worms-multi-agent-pipelines`, `browser-use-attacks-hijacking-ai-agents`, `defense-in-depth-ai-agents-security-stack`, `etamp-agent-memory-poisoning`, `finharness-inline-safety-harness`, `guardrail-structural-bottleneck`, `latent-space-injection-multi-agent`, `llm-router-supply-chain-attack`, `llm-security-testing-cost-empirical-study`, `mini-shai-hulud-supply-chain-agent-pipelines`, `mozilla-claude-mythos-security-fixes`, `multi-agent-red-teaming-network-attacks`, `non-human-identity-security-ai-agents`, `on-the-fly-agent-prototype-problem`, `owasp-top10-ai-agents-part1`, `personal-ai-agent-ambient-authority-inbox-attack`, `physics-is-all-you-need-agent-supervision-case-study`, `rag-memory-poisoning-attacks`, `skill-library-memory-poisoning-defense`, `sqlite-agents-md-no-agentic-code-accepted`, `trinityguard-mas-safety-evaluation`, `trojan-triggers-multimodal-models-visual-backdoors`, `zero-trust-architecture-ai-agent-deployments` — all keep (30 posts).
+
+_Full cluster 6 count: 3 (6a) + 3 (6b) + 30 (6c) = 36 assigned in this report. Actual cluster count is 35 because `adversarial-attacks-vision-language-models-pixels-injection` is also in Cluster 8 (Multimodal) — clusters overlap by design._
 
 ---
 
@@ -222,9 +224,9 @@ Different takeaways, different audiences. Filed as **Issue #282** to add cross-r
 
 ---
 
-### Cluster 11: Unclustered / Other (52 posts — sampled for overlap review)
+### Cluster 11: Unclustered / Other (52 posts — all reviewed for overlap)
 
-All 52 were reviewed. Selected observations:
+All 52 posts that fell outside the named clusters were individually reviewed by title, description, and opening paragraph. Selected observations on potential overlaps:
 
 | Posts | Topic | Verdict |
 |-------|-------|---------|
@@ -249,9 +251,10 @@ All 52 were reviewed. Selected observations:
 
 ## Notes on Methodology
 
-- **Scan method**: All 137 posts scanned via `title`, `description` frontmatter extraction + cluster keyword matching. For all candidate overlap pairs, opening paragraphs (first 20 lines of body) were read directly to assess genuine distinction.
-- **Cluster assignment**: Posts were assigned to clusters by regex matching on title + description. Posts may appear in multiple clusters (expected for broad-topic posts like `ai-incident-response-playbook`).
-- **"True overlap" threshold**: Posts were flagged for consolidation only when they share the same core concept, the same reader takeaway, and the distinction between them does not justify separate reads. Posts that cover the same *topic area* but with different attack vectors, research papers, or deployment contexts were classified as "keep + See also."
+- **Scan method**: All 137 posts scanned via `title` and `description` frontmatter extraction + cluster keyword regex matching. For all candidate overlap pairs, the post opening (~15–20 lines of body) was read directly to assess genuine distinction. The scan gives high confidence on the identified overlaps; it cannot guarantee zero undiscovered overlaps in posts with highly similar descriptions that don't surface through the keywords used.
+- **Cluster assignment**: Posts were assigned to clusters by regex matching on title + description. Posts may appear in multiple clusters (expected for broad-topic posts like `ai-incident-response-playbook`). Total post-cluster assignments exceed 137 because multi-cluster membership is intentional.
+- **"True overlap" threshold**: Posts were flagged for consolidation only when they share the same core concept AND the same reader takeaway AND the distinction between them does not justify separate reads. Posts that cover the same *topic area* but with different attack vectors, research papers, or deployment contexts were classified as "keep + See also."
+- **Unclustered posts**: 52 posts did not match any named cluster's keyword patterns. All 52 were reviewed individually using the same title/description/opening-paragraph method; no additional consolidation candidates were found beyond those listed above.
 
 ---
 
@@ -273,4 +276,4 @@ Post count per cluster (clusters overlap; total > 137):
 | Multimodal / Visual | 4 |
 | Unclustered (other) | 52 |
 
-*All 137 posts reviewed. 52 "other" posts were reviewed individually; no consolidation candidates identified among them beyond those noted above.*
+*All 137 posts reviewed. Cluster counts exceed 137 because posts may match multiple clusters (e.g., `ai-incident-response-playbook` appears in Data Poisoning, Prompt Injection, and Regulatory clusters). The 52 "other" posts are those not matched by any named cluster keyword — they were individually reviewed and no additional consolidation candidates were found.*
