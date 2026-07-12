@@ -175,12 +175,8 @@ export const LEARNING_PATHS: LearningPath[] = [
         why: "Attacking the model supply chain via malicious weights on public hubs — the equivalent of a malicious npm package for AI models.",
       },
       {
-        slug: "mcp-tool-poisoning",
-        why: "MCP (Model Context Protocol) servers as an attack vector: injecting malicious tool definitions that hijack agent tool-use decisions.",
-      },
-      {
         slug: "tool-poisoning-malicious-mcp-servers",
-        why: "Deeper dive into malicious MCP server construction — the mechanics of how a poisoned tool definition is crafted and delivered.",
+        why: "MCP (Model Context Protocol) servers as an attack vector: the mechanics of how a poisoned tool definition is crafted and delivered to hijack an agent's tool-use decisions.",
       },
       {
         slug: "ai-as-weapon-attacking-traditional-infrastructure",
