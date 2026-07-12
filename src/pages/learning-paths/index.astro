@@ -147,7 +147,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           <a class="path-card" href={`${base}/learning-paths/${path.slug}/`}>
             <h2>{path.title}</h2>
             <p class="desc">{path.description}</p>
-            <p class="audience-label">For: {path.audience.split(",")[0].split(".")[0]}</p>
+            <p class="audience-label">For: {path.audience}</p>
             <div class="path-meta">
               <span class="post-count">{path.posts.length} posts</span>
               <span class="path-badge">Curated sequence</span>
