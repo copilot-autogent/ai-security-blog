@@ -15,9 +15,14 @@ export async function getStaticPaths() {
     const steps = path.posts
       .map((step) => {
         const post = postBySlug.get(step.slug);
-        return post ? { post, why: step.why } : null;
-      })
-      .filter((s): s is { post: CollectionEntry<"blog">; why: string } => s !== null);
+        if (!post) {
+          throw new Error(
+            `Learning path "${path.slug}" references unknown slug: "${step.slug}". ` +
+            `Verify the slug exists in src/content/blog/.`
+          );
+        }
+        return { post, why: step.why };
+      });
 
     return {
       params: { slug: path.slug },
