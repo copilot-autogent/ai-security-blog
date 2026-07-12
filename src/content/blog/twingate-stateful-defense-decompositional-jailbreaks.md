@@ -3,6 +3,7 @@ title: "Safe in Isolation, Dangerous Together: The Multi-Turn Blind Spot in Your
 description: "Decompositional jailbreaks split a harmful request across innocuous-looking turns. TwinGate is the first defense designed for the hardest variant: fully anonymous, interleaved traffic with no user identity metadata."
 pubDate: 2026-05-11
 tags: ["prompt-injection", "defense-patterns", "threat-modeling", "agent-security", "multi-agent"]
+relatedPosts: ["crescendo-multi-turn-jailbreaks-stateful-conversation-attacks"]
 ---
 
 The prevailing paradigm for safety filtering evaluates each message in isolation. That assumption is now a known attack surface.
