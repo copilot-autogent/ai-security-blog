@@ -89,7 +89,7 @@
 | `ai-incident-response-playbook` | AI Incident Response: A Practitioner's Playbook for When Your AI System Is Compromised | Keep — response framing (appears in multiple clusters; expected for a survey-level post) |
 | `reward-hacking-rlhf-safety` | Reward Hacking in Production: When RLHF Optimization Inverts Safety Goals | Keep — appears in multiple clusters; RLHF framing is distinct |
 | `adversarial-document-injection-rag-vector-stores` | Poisoning the Knowledge Base: Adversarial Document Injection into RAG Vector Stores | Keep — RAG vector store injection; surfaces in prompt-injection cluster because injection is the mechanism |
-| `ci-cd-pipeline-injection-ai-code-assistants` | CI/CD Pipeline Injection: When AI Code Assistants Become Supply Chain Threats | Keep — CI/CD framing; injection into code pipelines |
+| `ci-cd-pipeline-injection-ai-code-assistants` | CI/CD Pipeline Injection: When AI Code Assistants Become Supply Chain Threats | Keep — CI/CD pipeline stage; code assistant supply chain framing |
 
 **Overall cluster verdict**: All 17 are distinct. No consolidation required. Cluster is large but reflects genuine breadth of prompt injection as a topic.
 
@@ -257,7 +257,7 @@ All 51 posts that fell outside the named clusters were individually reviewed by 
 - **Scan method**: All 137 posts scanned via `title` and `description` frontmatter extraction + cluster keyword regex matching. For all candidate overlap pairs, the post opening (~15–20 lines of body) was read directly to assess genuine distinction. The scan gives high confidence on the identified overlaps; it cannot guarantee zero undiscovered overlaps in posts with highly similar descriptions that don't surface through the keywords used.
 - **Cluster assignment**: Posts were assigned to clusters by regex matching on title + description. Posts may appear in multiple clusters (expected for broad-topic posts like `ai-incident-response-playbook`). Total post-cluster assignments exceed 137 because multi-cluster membership is intentional.
 - **"True overlap" threshold**: Posts were flagged for consolidation only when they share the same core concept AND the same reader takeaway AND the distinction between them does not justify separate reads. Posts that cover the same *topic area* but with different attack vectors, research papers, or deployment contexts were classified as "keep + See also."
-- **Unclustered posts**: 52 posts did not match any named cluster's keyword patterns. All 52 were reviewed individually using the same title/description/opening-paragraph method; no additional consolidation candidates were found beyond those listed above.
+- **Unclustered posts**: 51 posts did not match any named cluster's keyword patterns. All 51 were reviewed individually using the same title/description/opening-paragraph method; no additional consolidation candidates were found beyond those listed above.
 
 ---
 
