@@ -5,28 +5,44 @@ import FormattedDate from "./FormattedDate.astro";
 interface Props {
   currentId: string;
   currentTags: string[];
+  relatedPosts?: string[];
 }
 
-const { currentId, currentTags } = Astro.props;
+const { currentId, currentTags, relatedPosts } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const allPosts = await getCollection("blog", ({ id, data }) => {
   return !data.draft && id !== currentId;
 });
 
-// Score each post by number of shared tags, then sort by score desc, date desc
-const scored = allPosts
-  .map((post) => {
-    const sharedTags = post.data.tags.filter((t) => currentTags.includes(t));
-    return { post, score: sharedTags.length };
-  })
-  .filter(({ score }) => score > 0)
-  .sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return b.post.data.pubDate.valueOf() - a.post.data.pubDate.valueOf();
-  })
-  .slice(0, 3)
-  .map(({ post }) => post);
+let scored: typeof allPosts;
+
+if (relatedPosts && relatedPosts.length > 0) {
+  // Use explicit relatedPosts list when provided
+  const relatedSet = new Set(relatedPosts);
+  scored = allPosts
+    .filter((post) => relatedSet.has(post.id))
+    .sort((a, b) => {
+      const idxA = relatedPosts.indexOf(a.id);
+      const idxB = relatedPosts.indexOf(b.id);
+      return idxA - idxB;
+    })
+    .slice(0, 3);
+} else {
+  // Fall back to tag-based scoring
+  scored = allPosts
+    .map((post) => {
+      const sharedTags = post.data.tags.filter((t) => currentTags.includes(t));
+      return { post, score: sharedTags.length };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.post.data.pubDate.valueOf() - a.post.data.pubDate.valueOf();
+    })
+    .slice(0, 3)
+    .map(({ post }) => post);
+}
 ---
 
 {scored.length > 0 && (
