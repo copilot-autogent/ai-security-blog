@@ -3,6 +3,7 @@ title: "The Time Bomb in Your Fine-Tuned Model: MetaBackdoor Exploits Position, 
 description: "A new backdoor attack requires no suspicious text—it activates when conversation length crosses a threshold, leaking system prompts and making unauthorized tool calls."
 pubDate: 2026-05-27
 tags: ["agent-security", "threat-modeling", "defense-patterns", "tool-use"]
+relatedPosts: ["backdoor-trigger-mechanisms-steganographic-encoding", "backdoor-attacks-foundation-models", "sleeper-agents-ai-supply-chain-backdoor"]
 ---
 
 Every backdoor defense you have is looking at the wrong thing.

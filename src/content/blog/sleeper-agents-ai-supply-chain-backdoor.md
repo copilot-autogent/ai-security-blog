@@ -3,6 +3,7 @@ title: "Sleeper Agents in Production: The AI Supply Chain Backdoor Threat"
 description: "Anthropic proved sleeper agents exist and resist standard safety fine-tuning. Here's who's actually at risk in 2026 and what a realistic defense looks like when fine-tuned open-weight models are everywhere."
 pubDate: 2026-06-26
 tags: ["threat-modeling", "supply-chain", "alignment", "defense-patterns", "evaluation"]
+relatedPosts: ["backdoor-attacks-foundation-models", "fine-tuning-trojans-backdoors-training-pipeline", "metabackdoor-positional-encoding-trigger"]
 ---
 
 In January 2024, Anthropic published a paper that should have triggered a reckoning in enterprise AI security. It didn't — not at the scale the finding warranted.

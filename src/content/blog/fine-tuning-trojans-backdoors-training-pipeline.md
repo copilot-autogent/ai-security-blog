@@ -3,6 +3,7 @@ title: "Fine-Tuning Trojans: Injecting Backdoors Through the Model Training Pipe
 description: "How malicious training data, tampered datasets, and compromised fine-tuning APIs plant backdoored behavior in legitimate base models — and what defenders can do."
 pubDate: 2026-06-28
 tags: ["supply-chain", "backdoor", "fine-tuning", "model-security", "dataset-poisoning", "adversarial-ml"]
+relatedPosts: ["backdoor-attacks-foundation-models", "sleeper-agents-ai-supply-chain-backdoor", "backdoor-trigger-mechanisms-steganographic-encoding"]
 ---
 
 Fine-tuning is how enterprises make general-purpose language models useful for specific tasks. It's also one of the most underprotected steps in the entire AI deployment pipeline.
