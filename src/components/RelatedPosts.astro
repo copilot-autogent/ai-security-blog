@@ -18,9 +18,9 @@ const allPosts = await getCollection("blog", ({ id, data }) => {
 let scored: typeof allPosts;
 
 if (relatedPosts && relatedPosts.length > 0) {
-  // Use explicit relatedPosts list when provided
+  // Use explicit relatedPosts list when provided; silently drop invalid/draft slugs
   const relatedSet = new Set(relatedPosts);
-  scored = allPosts
+  const explicit = allPosts
     .filter((post) => relatedSet.has(post.id))
     .sort((a, b) => {
       const idxA = relatedPosts.indexOf(a.id);
@@ -28,6 +28,23 @@ if (relatedPosts && relatedPosts.length > 0) {
       return idxA - idxB;
     })
     .slice(0, 3);
+  // Fall back to tag-based scoring if all referenced slugs are missing/draft
+  if (explicit.length > 0) {
+    scored = explicit;
+  } else {
+    scored = allPosts
+      .map((post) => {
+        const sharedTags = post.data.tags.filter((t) => currentTags.includes(t));
+        return { post, score: sharedTags.length };
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.post.data.pubDate.valueOf() - a.post.data.pubDate.valueOf();
+      })
+      .slice(0, 3)
+      .map(({ post }) => post);
+  }
 } else {
   // Fall back to tag-based scoring
   scored = allPosts
