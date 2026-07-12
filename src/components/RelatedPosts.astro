@@ -15,39 +15,8 @@ const allPosts = await getCollection("blog", ({ id, data }) => {
   return !data.draft && id !== currentId;
 });
 
-let scored: typeof allPosts;
-
-if (relatedPosts && relatedPosts.length > 0) {
-  // Use explicit relatedPosts list when provided; silently drop invalid/draft slugs
-  const relatedSet = new Set(relatedPosts);
-  const explicit = allPosts
-    .filter((post) => relatedSet.has(post.id))
-    .sort((a, b) => {
-      const idxA = relatedPosts.indexOf(a.id);
-      const idxB = relatedPosts.indexOf(b.id);
-      return idxA - idxB;
-    })
-    .slice(0, 3);
-  // Fall back to tag-based scoring if all referenced slugs are missing/draft
-  if (explicit.length > 0) {
-    scored = explicit;
-  } else {
-    scored = allPosts
-      .map((post) => {
-        const sharedTags = post.data.tags.filter((t) => currentTags.includes(t));
-        return { post, score: sharedTags.length };
-      })
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return b.post.data.pubDate.valueOf() - a.post.data.pubDate.valueOf();
-      })
-      .slice(0, 3)
-      .map(({ post }) => post);
-  }
-} else {
-  // Fall back to tag-based scoring
-  scored = allPosts
+const byTag = (limit: number) =>
+  allPosts
     .map((post) => {
       const sharedTags = post.data.tags.filter((t) => currentTags.includes(t));
       return { post, score: sharedTags.length };
@@ -57,8 +26,30 @@ if (relatedPosts && relatedPosts.length > 0) {
       if (b.score !== a.score) return b.score - a.score;
       return b.post.data.pubDate.valueOf() - a.post.data.pubDate.valueOf();
     })
-    .slice(0, 3)
+    .slice(0, limit)
     .map(({ post }) => post);
+
+let scored: typeof allPosts;
+
+if (relatedPosts && relatedPosts.length > 0) {
+  // Use explicit relatedPosts list; silently drop invalid/draft slugs
+  const relatedSet = new Set(relatedPosts);
+  const explicit = allPosts
+    .filter((post) => relatedSet.has(post.id))
+    .sort((a, b) => relatedPosts.indexOf(a.id) - relatedPosts.indexOf(b.id));
+  if (explicit.length >= 3) {
+    scored = explicit.slice(0, 3);
+  } else if (explicit.length > 0) {
+    // Backfill remaining slots with tag-based picks, avoiding duplicates
+    const explicitIds = new Set(explicit.map((p) => p.id));
+    const fill = byTag(3 - explicit.length + 3).filter((p) => !explicitIds.has(p.id));
+    scored = [...explicit, ...fill].slice(0, 3);
+  } else {
+    // All explicit slugs invalid — fall back entirely to tag-based
+    scored = byTag(3);
+  }
+} else {
+  scored = byTag(3);
 }
 ---
 
