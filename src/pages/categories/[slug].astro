@@ -9,14 +9,17 @@ import { CATEGORIES } from "../../data/categories";
 
 export async function getStaticPaths() {
   const allPosts = (await getCollection("blog")).filter((p) => !p.data.draft);
-  return CATEGORIES.map((cat) => {
+  return CATEGORIES.flatMap((cat) => {
     const catPosts = allPosts
       .filter((p) => cat.tags.some((t) => (p.data.tags ?? []).includes(t)))
       .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
-    return {
-      params: { slug: cat.slug },
-      props: { cat, posts: catPosts },
-    };
+    if (catPosts.length === 0) return [];
+    return [
+      {
+        params: { slug: cat.slug },
+        props: { cat, posts: catPosts },
+      },
+    ];
   });
 }
 
