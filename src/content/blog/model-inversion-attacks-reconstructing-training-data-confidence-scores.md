@@ -10,7 +10,7 @@ A facial recognition API returns confidence scores: 0.97 for "Alice", 0.02 for "
 
 The answer, under the right conditions, is yes.
 
-Model inversion is the attack class in which an adversary uses a model's output probabilities to reconstruct *representative examples* of training data — without gradient access, without the model's weights, and without any knowledge of the training dataset itself. The inputs required are exactly what a production prediction API exposes: submit a query, observe the confidence scores, repeat.
+Model inversion is the attack class in which an adversary uses a model's output probabilities to reconstruct *representative examples* of training data. Depending on the attacker's access level, this may require only the confidence scores from a prediction API (black-box), or gradient access to the model's weights (white-box). The weakest access model — submit a query, observe the confidence scores, repeat — is what makes the attack practically relevant against production APIs.
 
 This post covers the attack mechanics, the taxonomy of approaches, what is actually recovered (and what isn't), the conditions that determine vulnerability, the available defenses, and how model inversion fits into the broader ML privacy attack landscape alongside membership inference, gradient inversion, and training data extraction.
 
@@ -100,7 +100,7 @@ The CVPR 2020 results demonstrated substantially improved image quality compared
 
 The GAN-based approach does not require the GAN to be trained on the *target* model's training data. It requires only a GAN trained on data from the same domain (e.g., any large face dataset for a face recognition model). This is an important practical point: attackers can train or download public domain-specific GANs and apply them as the reconstruction prior.
 
-**Subsequent work** extended the GAN-based approach further. **PPA (Plug & Play Attacks)** (Struppek et al., CVPR 2022) improved the attack by using a pre-trained diffusion-based prior instead of a GAN, achieving higher reconstruction fidelity and removing the dependency on training a custom GAN per domain. Other extensions explored exploiting class activation maps and multi-modal features for richer reconstruction.
+**Subsequent work** extended the GAN-based approach further. Multiple groups explored improved optimization strategies including better latent-space priors and exploitation of intermediate feature representations for richer reconstruction. The core GMI framing — optimize in a GAN's latent space rather than raw pixel space — remains the dominant approach in the post-2020 model inversion literature.
 
 ---
 
@@ -191,7 +191,7 @@ No single defense fully eliminates model inversion risk across all attack varian
 | High-sensitivity biometric or medical model | DP training + rate limiting + access control + audit logging |
 | Internal model, no external API | Treat as lower-risk; focus on access control to model weights |
 
-GAN-based model inversion (GMI) and its successors are substantially more robust to confidence rounding and rate limiting than classical pixel-space inversion — because the GAN prior regularizes the optimization and requires fewer high-precision queries per reconstruction step. Against an adversary with domain-specific GAN capability, returning confidence scores at any precision carries meaningful risk. **Top-1 label only or DP training are the only defenses that hold against GMI-class attacks.**
+GAN-based model inversion (GMI) and its successors are substantially more robust to confidence rounding and rate limiting than classical pixel-space inversion — because the GAN prior regularizes the optimization and requires fewer high-precision queries per reconstruction step. Against an adversary with domain-specific GAN capability, returning confidence scores at any precision carries meaningful risk. **Top-1 label only and DP training are the most reliable defenses against GMI-class attacks**; confidence rounding and rate limiting provide a weaker barrier and should be treated as layered controls rather than primary mitigations in high-risk deployments.
 
 ---
 
