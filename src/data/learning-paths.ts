@@ -124,6 +124,10 @@ export const LEARNING_PATHS: LearningPath[] = [
         why: "Subtler than extraction: determining whether a specific record was in the training set, with implications for sensitive datasets.",
       },
       {
+        slug: "model-inversion-attacks-reconstructing-training-data-confidence-scores",
+        why: "Completes the reconstruction attack quadrant: how confidence score optimization can recover class-representative training examples from a black-box inference API.",
+      },
+      {
         slug: "federated-learning-poisoning-the-aggregation-attack-surface",
         why: "Federated learning's privacy promise is undermined by aggregation-layer attacks — this post maps the poisoning and inference surface.",
       },

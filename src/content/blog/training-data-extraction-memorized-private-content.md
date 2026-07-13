@@ -3,6 +3,7 @@ title: "Training Data Extraction: How Attackers Query LLMs to Surface Memorized 
 description: "LLMs verbatim-memorize chunks of their training data, and a simple prefix-completion attack can surface phone numbers, email addresses, code, and cryptographic identifiers that appeared in the training corpus — no model internals required. This post covers the mechanics, landmark empirical results, and the practical defenses that actually reduce extraction risk."
 pubDate: 2026-07-09
 tags: ["privacy", "training-data-extraction", "memorization", "llm-security", "carlini", "differential-privacy", "data-governance"]
+relatedPosts: ["model-inversion-attacks-reconstructing-training-data-confidence-scores", "membership-inference-attacks", "gradient-inversion-attacks-reconstructing-private-training-data"]
 ---
 
 Your LLM was trained on the internet. The internet contained your data. Here's how attackers get it back.
