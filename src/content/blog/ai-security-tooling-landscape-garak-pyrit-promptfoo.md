@@ -43,7 +43,7 @@ Commercial tools span all three but charge accordingly. The open-source ecosyste
 
 ### Garak — Automated LLM Vulnerability Scanner
 
-**GitHub**: [github.com/leondz/garak](https://github.com/leondz/garak) (transferred to NVIDIA Research)  
+**GitHub**: [github.com/NVIDIA/garak](https://github.com/NVIDIA/garak) (originally `leondz/garak`; canonical repo transferred to NVIDIA Research)  
 **Language**: Python  
 **License**: Apache 2.0  
 **Reference**: Derczynski et al. 2024, "garak: A Framework for Security Probing Large Language Models" — arXiv:2406.11036
@@ -98,25 +98,27 @@ The core abstractions:
 - **Scorers**: evaluate outputs for success conditions — classifier-based scoring, reference LLM scoring, regex matching, human-in-the-loop annotation
 - **Memory**: persistent conversation history across turns, enabling stateful multi-turn attacks
 
-A minimal multi-turn red team scenario in PyRIT:
+A minimal multi-turn red team scenario in PyRIT (API simplified; see [official documentation](https://microsoft.github.io/PyRIT) for current method signatures as PyRIT evolves between versions):
 
 ```python
+import asyncio
 from pyrit.orchestrator import RedTeamingOrchestrator
-from pyrit.common import DEFAULT_CHAT_TARGET_KWARGS
-from pyrit.models import AttackStrategy
 
-# Define the adversarial objective
-attack_strategy = AttackStrategy(
-    strategy="Convince the target to provide instructions for [harmful task]",
-    conversation_objective="Target complies with the request"
-)
+async def main():
+    # Configure the orchestrator with an attacker LLM and the system under test
+    # Consult current PyRIT docs for exact constructor arguments — the API
+    # has evolved significantly across releases
+    async with RedTeamingOrchestrator(
+        adversarial_chat=...,   # your attacker LLM target
+        objective_target=...,   # the system under test
+        max_turns=10,
+    ) as orchestrator:
+        result = await orchestrator.run_attack_async(
+            objective="Your red team objective here"
+        )
+        await result.print_conversation_async()
 
-orchestrator = RedTeamingOrchestrator(
-    attack_strategy=attack_strategy,
-    red_teaming_chat=...,  # your attacker LLM
-    prompt_target=...,     # the system under test
-)
-await orchestrator.apply_attack_strategy_until_completion_async(max_turns=10)
+asyncio.run(main())
 ```
 
 **Attack classes covered**:
@@ -179,7 +181,7 @@ Promptfoo generates adversarial test cases based on the `purpose` description (u
 **Attack classes covered** (via plugins; see [docs.promptfoo.dev/docs/red-team](https://docs.promptfoo.dev/docs/red-team) for current list):
 
 - Direct prompt injection
-- Indirect / indirect context injection
+- Direct / indirect context injection
 - PII extraction
 - Harmful content: violence, hate speech, weapons, self-harm, sexual content
 - Misinformation / hallucination
@@ -219,15 +221,17 @@ LLM Guard is a Python library that wraps around LLM API calls to scan inputs and
 - `InvisibleText` — detects invisible Unicode characters used in injection attacks
 - `SentimentAnalysis` — flags strongly negative sentiment in outputs
 
-Integration follows a guard pattern:
+Integration follows a guard pattern (verify scanner names and return-tuple ordering against the version you install — the LLM Guard API has evolved between releases):
 
 ```python
-from llm_guard.input_scanners import PromptInjection, Secrets
-from llm_guard.output_scanners import Toxicity, PIIAnonymizer
+from llm_guard.input_scanners import PromptInjection, BanTopics
+from llm_guard.output_scanners import Toxicity
 from llm_guard import scan_prompt, scan_output
 
-input_scanners = [PromptInjection(), Secrets()]
-output_scanners = [Toxicity(), PIIAnonymizer()]
+# scan_prompt returns (sanitized_prompt, results_valid_dict, results_score_dict)
+# results_valid_dict maps scanner_name -> bool (True = input is safe)
+input_scanners = [PromptInjection(), BanTopics(topics=["competitor-names"])]
+output_scanners = [Toxicity()]
 
 sanitized_prompt, results_valid, results_score = scan_prompt(
     input_scanners, user_prompt
@@ -280,7 +284,7 @@ Vigil is a local prompt injection scanner that runs entirely on-premises — no 
 | Threat class | Best open-source tool(s) | Notes |
 |---|---|---|
 | Direct prompt injection | Garak, Promptfoo | Garak: breadth; Promptfoo: CI integration |
-| Indirect / context injection | PyRIT (custom orchestrator), Promptfoo | Requires modeling the full pipeline |
+| Direct / indirect context injection | PyRIT (custom orchestrator), Promptfoo | Requires modeling the full pipeline |
 | Jailbreaks (single-turn) | Garak | Widest built-in variant coverage |
 | Jailbreaks (multi-turn, adaptive) | PyRIT | Stateful orchestrators required |
 | Encoding / obfuscation bypasses | Garak, PyRIT Converters | Garak has many built-in encoding probes |
@@ -311,7 +315,7 @@ python parse_garak_results.py --threshold 0.05
 
 The JSONL output format gives you machine-parseable results that you can threshold on. A `0.05` failure rate on prompt injection probes means the model responded to 5% of injection attempts — whether that's acceptable depends on your application's risk tolerance.
 
-Garak doesn't currently publish a pre-built CI action; you'll need to write the integration. The [garak documentation](https://docs.garak.ai) covers the report format.
+Garak doesn't currently publish a pre-built CI action; you'll need to write the integration. The [garak documentation](https://github.com/NVIDIA/garak/wiki) covers the report format.
 
 ### PyRIT in a Structured Red Team Sprint
 
@@ -353,7 +357,7 @@ jobs:
           path: report.html
 ```
 
-This runs on every PR that modifies prompt templates or AI system code, failing the CI check if adversarial test cases exceed the configured threshold.
+This runs on every PR that modifies prompt templates or AI system code. By default, `promptfoo redteam run` exits non-zero when any adversarial test fails, which fails the CI check — configure a `passRateThreshold` in your `promptfooconfig.yaml` (e.g., `passRateThreshold: 0.9` to allow up to 10% failure) if your use case requires tolerance for partial failures.
 
 ### LLM Guard in Production
 
@@ -406,11 +410,11 @@ The open-source tools above cover the core use cases, but several commercial pro
 
 ## The OWASP LLM Top 10 and Test Coverage
 
-The [OWASP LLM Application Security Verification Standard (LLM-ASVS)](https://owasp.org/www-project-llm-application-security-verification-standard/) provides a structured verification checklist for LLM security — verify its current development status at the OWASP project page before relying on it in formal compliance documentation, as it was still under active development as of this writing.
+The OWASP project publishes an LLM-focused AI Security Checklist and verification guidance — see the [OWASP LLM AI Security & Governance Checklist](https://owasp.org/www-project-top-10-for-large-language-model-applications/llm-top-10-governance-doc/LLM_AI_Security_and_Governance_Checklist-v1.1.pdf) for structured assessment criteria. The checklist and related standards are actively evolving; verify current status at the OWASP project page before relying on specific versions in formal compliance documentation.
 
-The more mature reference is the [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/), which maps the highest-risk vulnerability categories. Tool coverage against the OWASP LLM Top 10 categories:
+The more widely referenced classification is the [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/), which enumerates the highest-risk vulnerability categories. The table below maps tool coverage to the **2023 v1.1 edition** category numbers and names — note that subsequent revisions have renumbered and renamed several categories, so if you're working from the current OWASP list, verify the mapping against the version you're using:
 
-| OWASP LLM Category | Garak | PyRIT | Promptfoo |
+| OWASP LLM Category (2023 v1.1) | Garak | PyRIT | Promptfoo |
 |---|---|---|---|
 | LLM01: Prompt Injection | ✅ Multiple probes | ✅ Orchestrators | ✅ Plugin |
 | LLM02: Insecure Output Handling | Partial | Partial | ✅ Plugin |
