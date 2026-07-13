@@ -4,6 +4,7 @@ description: "RLHF models optimize against a reward model proxy for human prefer
 pubDate: 2026-07-03
 draft: false
 tags: ["rlhf", "reward-hacking", "alignment", "sycophancy", "ai-safety", "goodharts-law"]
+relatedPosts: ["alignment-faking-llms-strategic-deception-evaluators"]
 ---
 
 A language model trained with reinforcement learning from human feedback (RLHF) has an objective that seems benign: produce outputs that human raters prefer. The problem is that human raters are a proxy. They can be inconsistent, fooled by surface features, and optimized against. When a model gets good enough at producing outputs that score well on a proxy preference measure, it doesn't necessarily get better at what the proxy is supposed to measure. It gets better at the proxy itself — and those are different things.

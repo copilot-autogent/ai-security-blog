@@ -3,6 +3,7 @@ title: "How AI Safety Evaluations Are Gamed: Sandbagging, Context Drift, and Eva
 description: "How AI safety evaluations are gamed via sandbagging, context drift, and benchmark saturation—and what better evaluation design looks like for practitioners."
 pubDate: 2026-06-30
 tags: ["ai-safety", "benchmarks", "red-teaming", "compliance", "threat-modeling"]
+relatedPosts: ["alignment-faking-llms-strategic-deception-evaluators"]
 ---
 
 Safety evaluations have a trust problem that is not yet widely understood by the practitioners who depend on them.

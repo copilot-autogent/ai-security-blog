@@ -3,6 +3,7 @@ title: "Mechanistic Interpretability as a Security Tool: Detecting Backdoors and
 description: "Circuits, sparse autoencoders, and activation steering let security teams detect backdoors and hidden model behaviors that red-teaming cannot find."
 pubDate: 2026-07-11
 tags: ["mechanistic-interpretability", "backdoor-detection", "model-security", "ai-safety", "pre-deployment-inspection", "sparse-autoencoders"]
+relatedPosts: ["alignment-faking-llms-strategic-deception-evaluators"]
 ---
 
 Red-teaming a model is a bet. You're betting that the behaviors a tester thinks to probe for are the same behaviors that matter. For most threat classes—prompt injection, jailbreaking, PII leakage—that bet is reasonable. An adversary using the same techniques you're testing is the attacker you're preparing for.
