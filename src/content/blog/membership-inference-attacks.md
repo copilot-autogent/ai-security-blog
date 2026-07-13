@@ -3,6 +3,7 @@ title: "Membership Inference Attacks: Detecting What Was in an AI Model's Traini
 description: "Membership inference attacks let adversaries determine—with significant accuracy—whether a specific data record was used to train a model. This post covers the attack mechanisms, why models leak this information, real-world threat scenarios, and how differential privacy and machine unlearning address (and fail to fully close) the gap."
 pubDate: 2026-07-05
 tags: ["privacy", "membership-inference", "differential-privacy", "machine-unlearning", "attack-defense", "gdpr", "overfitting"]
+relatedPosts: ["model-inversion-attacks-reconstructing-training-data-confidence-scores", "gradient-inversion-attacks-reconstructing-private-training-data", "training-data-extraction-memorized-private-content"]
 ---
 
 When a hospital trains a diagnostic AI on patient records, and when a company fine-tunes a language model on proprietary emails, a natural question emerges: **can an adversary determine whether a specific person's data was included in training?** Membership inference attacks answer this question—affirmatively, and with unsettling precision.

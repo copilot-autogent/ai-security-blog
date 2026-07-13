@@ -3,6 +3,7 @@ title: "Gradient Inversion Attacks: Reconstructing Private Training Data from Mo
 description: "Gradients are not safe summaries of training data. In federated learning and fine-tuning pipelines where model updates are shared, a malicious aggregator can run gradient inversion to recover original training samples with alarming fidelity — and the defenses have hard limits."
 pubDate: 2026-07-04
 tags: ["federated-learning", "privacy", "gradient-inversion", "differential-privacy", "training-data", "attack-defense"]
+relatedPosts: ["model-inversion-attacks-reconstructing-training-data-confidence-scores", "membership-inference-attacks", "training-data-extraction-memorized-private-content"]
 ---
 
 Federated learning is usually pitched as a privacy story: instead of centralizing training data, you train locally and share only the gradients. The data never leaves the device. The provider never sees the inputs.
