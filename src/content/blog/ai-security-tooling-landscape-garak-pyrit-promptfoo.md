@@ -172,6 +172,7 @@ redteam:
 Run it:
 
 ```bash
+# Use a pinned version in CI for reproducibility; @latest is fine for local exploration
 npx promptfoo@latest redteam run
 npx promptfoo@latest redteam report  # opens a browser UI
 ```
@@ -306,16 +307,17 @@ Add Garak to your model evaluation pipeline as a pre-deployment gate that blocks
 python -m garak \
   --model_type openai \
   --model_name gpt-4o-mini \
-  --probes injection,jailbreak,toxicity \
+  --probes probes.injection,probes.jailbreak,probes.toxicity.ToxicCompletion \
   --report_prefix ./garak-report
 
-# Parse the JSONL report to extract failure rates
-python parse_garak_results.py --threshold 0.05
+# Parse the JSONL report to extract failure rates and threshold
+# (you need to write this script — garak outputs machine-readable JSONL)
+python your_garak_threshold_check.py --report ./garak-report.jsonl --max-fail-rate 0.05
 ```
 
-The JSONL output format gives you machine-parseable results that you can threshold on. A `0.05` failure rate on prompt injection probes means the model responded to 5% of injection attempts — whether that's acceptable depends on your application's risk tolerance.
+The JSONL output format gives you machine-parseable results. A `0.05` failure rate on prompt injection probes means the model responded to 5% of injection attempts — whether that's acceptable depends on your application's risk tolerance. The threshold check script is user-supplied; garak itself doesn't include a pass/fail gate.
 
-Garak doesn't currently publish a pre-built CI action; you'll need to write the integration. The [garak documentation](https://github.com/NVIDIA/garak/wiki) covers the report format.
+Garak probe identifiers use module paths (e.g., `probes.injection`, `probes.jailbreak`) or the literal `all` for the full suite — bare short-names like `injection` are not valid. See the [garak probe catalog](https://reference.garak.ai/en/latest/garak.probes.html) for the current identifier list.
 
 ### PyRIT in a Structured Red Team Sprint
 
@@ -363,7 +365,7 @@ jobs:
         run: exit 1
 ```
 
-This runs on every PR that modifies prompt templates or AI system code. By default, `promptfoo redteam run` exits non-zero when any adversarial test fails, which fails the CI check — configure a `passRateThreshold` in your `promptfooconfig.yaml` (e.g., `passRateThreshold: 0.9` to allow up to 10% failure) if your use case requires tolerance for partial failures.
+This runs on every PR that modifies prompt templates or AI system code. By default, `promptfoo redteam run` exits non-zero when any adversarial test fails, which fails the CI check — see the [promptfoo CLI reference](https://docs.promptfoo.dev/docs/usage/command-line) for current options to configure failure thresholds, as the exact flag names have evolved between versions.
 
 ### LLM Guard in Production
 
@@ -398,7 +400,7 @@ def safe_llm_call(user_prompt: str) -> str:
 
     response = your_llm_client.complete(sanitized)
 
-    sanitized_response, valid, scores = scan_output(OUTPUT_SCANNERS, user_prompt, response)
+    sanitized_response, valid, scores = scan_output(OUTPUT_SCANNERS, sanitized, response)
     if not all(valid.values()):
         raise ContentBlockedError(f"Output blocked by scanner: {scores}")
 
