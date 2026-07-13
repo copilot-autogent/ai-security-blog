@@ -3,6 +3,7 @@ title: "MITRE ATLAS: Mapping the AI/ML Threat Landscape with an Authoritative Ad
 description: "MITRE ATLAS is the ATT&CK-equivalent for adversarial machine learning — a living knowledge base of tactics, techniques, and real-world case studies specific to AI systems. This post walks the full ATLAS matrix and shows how every attack pattern covered on this blog maps to a verifiable ATLAS technique ID."
 pubDate: 2026-07-06
 tags: ["mitre-atlas", "threat-modeling", "adversarial-ml", "attack-taxonomy", "security-framework", "ai-security", "ttp"]
+relatedPosts: ["ai-critical-infrastructure-ics-ot-attack-surfaces"]
 featured: true
 ---
 
