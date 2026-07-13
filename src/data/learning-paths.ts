@@ -73,6 +73,10 @@ export const LEARNING_PATHS: LearningPath[] = [
         why: "Agents need credentials to act. NHI (non-human identity) mismanagement is how agents get their keys stolen — start here before trust delegation.",
       },
       {
+        slug: "ai-secrets-management-api-keys-system-prompts-model-credentials",
+        why: "From NHI theory to operational practice: how to store, scope, rotate, and monitor API keys, system prompts, and ephemeral agent tokens across the full deployment lifecycle.",
+      },
+      {
         slug: "multi-agent-orchestration-security-trust-delegation",
         why: "When agents call agents, trust chains form. This post explains how delegation goes wrong and what safe orchestration looks like.",
       },
