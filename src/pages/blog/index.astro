@@ -314,7 +314,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     const clearBtn  = document.getElementById("clear-btn") as HTMLButtonElement | null;
     const searchEl  = document.getElementById("search-input") as HTMLInputElement | null;
 
-    if (!postList || !searchEl) return;
+    if (!postList || !searchEl || !filterPanel) return;
 
     _controller?.abort();
     _controller = new AbortController();
@@ -322,10 +322,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     const allItems = Array.from(postList.querySelectorAll<HTMLLIElement>(".post-item"));
     const checkboxes = Array.from(
-      document.querySelectorAll<HTMLInputElement>(".cat-checkbox")
+      filterPanel.querySelectorAll<HTMLInputElement>(".cat-checkbox")
     );
     const sortBtns = Array.from(
-      document.querySelectorAll<HTMLButtonElement>(".sort-btn")
+      filterPanel.querySelectorAll<HTMLButtonElement>(".sort-btn")
     );
 
     // Build-time tag→categorySlug map, injected via data attribute.
@@ -460,11 +460,12 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       // Backward-compat: old ?tag= param → look up owning category via build-time map
       // (deterministic, no DOM scan, no post-order dependency).
       const legacyTag = url.searchParams.get("tag") ?? "";
-      if (legacyTag && selectedCats.size === 0) {
-        const catSlug = tagToCat[legacyTag] ?? "";
-        if (catSlug && knownCatSlugs.has(catSlug)) selectedCats.add(catSlug);
-        // ?tag= is cleaned by updateURL() which is called after every state change;
-        // pre-clean here so it doesn't linger before the first applyFilters().
+      if (legacyTag) {
+        if (selectedCats.size === 0) {
+          const catSlug = tagToCat[legacyTag] ?? "";
+          if (catSlug && knownCatSlugs.has(catSlug)) selectedCats.add(catSlug);
+        }
+        // Pre-clean legacy param immediately; updateURL() also removes it on every change.
         url.searchParams.delete("tag");
         history.replaceState(null, "", url.toString());
       }
