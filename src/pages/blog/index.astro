@@ -186,6 +186,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         transition: background 0.15s ease, color 0.15s ease;
       }
       .tag-sm:hover { background: var(--accent); color: var(--bg); }
+      .tag-sm.active-tag { background: var(--accent); color: var(--bg); border-color: var(--accent); }
       .no-results {
         padding: 2em 0;
         color: var(--text-secondary);
@@ -339,19 +340,19 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       return cats.some((c) => selectedCats.has(c));
     }
 
+    function safeDate(el: HTMLLIElement): number {
+      const t = new Date(el.dataset.date ?? "").valueOf();
+      return Number.isFinite(t) ? t : 0;
+    }
+
     function sortedItems(): HTMLLIElement[] {
       const copy = [...allItems];
       if (sortOrder === "oldest") {
-        copy.sort((a, b) =>
-          new Date(a.dataset.date!).valueOf() - new Date(b.dataset.date!).valueOf()
-        );
+        copy.sort((a, b) => safeDate(a) - safeDate(b));
       } else if (sortOrder === "alpha") {
         copy.sort((a, b) => (a.dataset.title ?? "").localeCompare(b.dataset.title ?? ""));
       } else {
-        // newest-first: default order matches server-rendered order, no re-sort needed
-        copy.sort((a, b) =>
-          new Date(b.dataset.date!).valueOf() - new Date(a.dataset.date!).valueOf()
-        );
+        copy.sort((a, b) => safeDate(b) - safeDate(a));
       }
       return copy;
     }
@@ -369,12 +370,24 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         if (show) visibleCount++;
       });
 
-      const hasFilters = searchQuery !== "" || selectedCats.size > 0 || sortOrder !== "newest";
+      // Highlight tag badges whose category is currently selected.
+      postList!.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
+        if (selectedCats.size === 0) { link.classList.remove("active-tag"); return; }
+        const tag = link.dataset.tag ?? "";
+        // Find if this tag belongs to any selected category by checking the post's categories.
+        const parentItem = link.closest<HTMLLIElement>(".post-item");
+        const cats = parentItem ? parseCategories(parentItem) : [];
+        link.classList.toggle("active-tag", cats.some((c) => selectedCats.has(c)));
+      });
+
+      // "active data filter" = search or category; sort alone is not a filter
+      const hasDataFilter = searchQuery !== "" || selectedCats.size > 0;
+      const hasAnything   = hasDataFilter || sortOrder !== "newest";
 
       if (noResults) noResults.style.display = visibleCount === 0 ? "block" : "none";
 
       if (statusEl) {
-        if (visibleCount === TOTAL && !hasFilters) {
+        if (!hasDataFilter) {
           statusEl.textContent = `${TOTAL} posts`;
         } else {
           statusEl.textContent = `Showing ${visibleCount} of ${TOTAL} posts`;
@@ -382,7 +395,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       }
 
       if (clearBtn) {
-        clearBtn.classList.toggle("visible", hasFilters);
+        clearBtn.classList.toggle("visible", hasAnything);
       }
 
       updateURL();
@@ -412,8 +425,31 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     function loadFromURL() {
       const url = new URL(window.location.href);
       searchQuery = url.searchParams.get("q") ?? "";
+
+      // Load category param; filter out unknown slugs to prevent dirty URLs.
+      const knownCatSlugs = new Set(checkboxes.map((cb) => cb.dataset.cat ?? ""));
       const catParam = url.searchParams.get("category") ?? "";
-      selectedCats = catParam ? new Set(catParam.split(",").filter(Boolean)) : new Set();
+      selectedCats = catParam
+        ? new Set(catParam.split(",").filter((s) => s && knownCatSlugs.has(s)))
+        : new Set();
+
+      // Backward-compat: old ?tag= param → find owning category and activate it.
+      const legacyTag = url.searchParams.get("tag") ?? "";
+      if (legacyTag && selectedCats.size === 0) {
+        // Scan posts to find any category that includes posts with this tag.
+        for (const item of allItems) {
+          let tags: string[] = [];
+          try { tags = JSON.parse(item.dataset.tags ?? "[]"); } catch { tags = []; }
+          if (tags.includes(legacyTag)) {
+            const cats = parseCategories(item);
+            if (cats.length > 0) { selectedCats.add(cats[0]); break; }
+          }
+        }
+        // Clean up the legacy param from the URL.
+        url.searchParams.delete("tag");
+        history.replaceState(null, "", url.toString());
+      }
+
       sortOrder = url.searchParams.get("sort") ?? "newest";
       if (!["newest", "oldest", "alpha"].includes(sortOrder)) sortOrder = "newest";
     }
@@ -440,6 +476,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     // ── Event listeners ──────────────────────────────────────────────
     let searchTimer: ReturnType<typeof setTimeout> | null = null;
+    // Cancel pending debounce when controller aborts (prevents stale-closure callbacks).
+    signal.addEventListener("abort", () => { if (searchTimer) clearTimeout(searchTimer); });
     searchEl.addEventListener("input", () => {
       if (searchTimer) clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
@@ -464,6 +502,32 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           b.setAttribute("aria-pressed", String(b.dataset.sort === sortOrder))
         );
         applyFilters();
+      }, { signal });
+    });
+
+    // Tag-badge clicks: plain click filters in-place (activates owning category);
+    // modifier keys (Ctrl/Cmd/Shift) open the tag archive page as normal.
+    // Middle-clicks fire `auxclick` not `click`, so they naturally pass through.
+    postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
+      link.addEventListener("click", (e) => {
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+        e.preventDefault();
+        const tag = link.dataset.tag ?? "";
+        if (!tag) return;
+        // Find a post that has this tag and activate its first category.
+        for (const item of allItems) {
+          let tags: string[] = [];
+          try { tags = JSON.parse(item.dataset.tags ?? "[]"); } catch { tags = []; }
+          if (tags.includes(tag)) {
+            const cats = parseCategories(item);
+            if (cats.length > 0) {
+              selectedCats = new Set([cats[0]]);
+              syncControls();
+              applyFilters();
+              return;
+            }
+          }
+        }
       }, { signal });
     });
 
