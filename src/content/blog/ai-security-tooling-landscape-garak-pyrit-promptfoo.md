@@ -347,14 +347,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npx promptfoo@latest redteam run
+      # Pin the version for reproducibility — @latest can change behaviour between runs
+      - run: npx promptfoo@0.100.0 redteam run || echo "REDTEAM_FAILED=1" >> $GITHUB_ENV
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      - run: npx promptfoo@latest redteam report --output report.html
+      - run: npx promptfoo@0.100.0 redteam report --output report.html
+        if: always()  # always generate the report, even on failure
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ai-security-report
           path: report.html
+      - name: Fail if red-team tests failed
+        if: env.REDTEAM_FAILED == '1'
+        run: exit 1
 ```
 
 This runs on every PR that modifies prompt templates or AI system code. By default, `promptfoo redteam run` exits non-zero when any adversarial test fails, which fails the CI check — configure a `passRateThreshold` in your `promptfooconfig.yaml` (e.g., `passRateThreshold: 0.9` to allow up to 10% failure) if your use case requires tolerance for partial failures.
@@ -369,6 +375,10 @@ from llm_guard.input_scanners import PromptInjection, BanTopics
 from llm_guard.output_scanners import Toxicity
 from llm_guard import scan_prompt, scan_output
 
+class ContentBlockedError(Exception):
+    """Raised when LLM Guard blocks an input or output."""
+    pass
+
 # Configure once at startup
 INPUT_SCANNERS = [
     PromptInjection(threshold=0.7),     # tune threshold based on your FP tolerance
@@ -381,13 +391,16 @@ OUTPUT_SCANNERS = [
 def safe_llm_call(user_prompt: str) -> str:
     sanitized, valid, scores = scan_prompt(INPUT_SCANNERS, user_prompt)
     if not all(valid.values()):
-        return "I can't help with that request."  # or raise an exception
+        # Raise a distinct exception rather than returning a success-shaped string;
+        # callers must handle ContentBlockedError explicitly to avoid treating a
+        # safety rejection as a legitimate model response.
+        raise ContentBlockedError(f"Input blocked by scanner: {scores}")
 
     response = your_llm_client.complete(sanitized)
 
     sanitized_response, valid, scores = scan_output(OUTPUT_SCANNERS, user_prompt, response)
     if not all(valid.values()):
-        return "I encountered an issue generating a safe response."
+        raise ContentBlockedError(f"Output blocked by scanner: {scores}")
 
     return sanitized_response
 ```
