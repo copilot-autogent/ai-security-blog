@@ -41,7 +41,7 @@ A system prompt for a commercial AI product commonly contains:
 - Data about the application's architecture (database schemas referenced by name, API endpoint patterns, internal service names)
 - Information that would assist prompt injection attacks — the exact instruction boundaries that an attacker can try to override
 
-System prompt extraction is an active attack technique ([see the post on system prompt extraction attacks](/blog/system-prompt-extraction-attacks)). Even without a successful extraction attack, client-side exposure is endemic: system prompts delivered as part of client-rendered JavaScript bundles are trivially readable by anyone who opens their browser's developer tools. This is the single most common system prompt exposure pattern, and it requires no attack sophistication at all.
+System prompt extraction is an active attack technique (the slug `system-prompt-extraction-attacks` covers the mechanics in detail). Even without a successful extraction attack, client-side exposure is endemic: system prompts delivered as part of client-rendered JavaScript bundles are trivially readable by anyone who opens their browser's developer tools. This is the single most common system prompt exposure pattern, and it requires no attack sophistication at all.
 
 ### Storage patterns
 
@@ -65,7 +65,7 @@ Model provider API keys are the credentials most teams think about first, and ye
 
 ### Anti-patterns to eliminate
 
-**Committed to version control.** Git history is permanent and widely accessible. An API key committed to a public repository — even if immediately deleted — has been indexed by GitHub's secret scanning, collected by automated credential harvesting tools, and is effectively compromised. Private repositories offer marginal protection: former employees, CI/CD systems, and repository mirrors all create exposure paths. Never commit API keys. Use pre-commit hooks ([GitHub's secret scanning push protection](https://docs.github.com/en/code-security/secret-scanning/push-protection) catches many patterns before they land in history).
+**Committed to version control.** Git history is permanent and widely accessible. An API key committed to a public repository — even if immediately deleted — has been indexed by credential harvesting tools and is effectively compromised. Private repositories offer marginal protection: former employees, CI/CD systems, and repository mirrors all create exposure paths. Never commit API keys. Use pre-commit hooks and [GitHub's secret scanning push protection](https://docs.github.com/en/code-security/secret-scanning/push-protection), which catches many patterns before a push succeeds — note that a blocked push can still leave the secret in local git history, requiring a history rewrite and key rotation regardless.
 
 **Hardcoded in container images.** Keys baked into Docker images at build time are embedded in every layer of the image and persist in any registry that stores the image. Teams that rotate keys but don't rebuild images are rotating in name only. Build pipelines should receive credentials as environment variables injected at runtime, never as `ARG` or `ENV` declarations with literal values.
 
@@ -95,7 +95,7 @@ Rotation should be automated where possible and should not require application d
 4. **Verify** that all production traffic is flowing on the new key (monitor error rates; the old key should stop appearing in access logs).
 5. **Revoke old key** after a short overlap period (long enough to catch any instances that failed to update, short enough that the old key doesn't become a long-lived backup credential).
 
-Automated rotation pipelines using AWS Secrets Manager rotation lambdas, HashiCorp Vault's dynamic secrets engine, or Azure Key Vault's automatic rotation policies can handle steps 1, 2, and 5 with minimal manual intervention. The critical piece is step 3 — applications must be written to fetch credentials from the secrets manager at runtime (not cache them indefinitely), so that a rotation event is picked up without a redeployment.
+Automated rotation pipelines can streamline steps 1, 2, and 5. AWS Secrets Manager rotation lambdas, HashiCorp Vault's dynamic secrets engine, and Azure Key Vault's automatic rotation policies each provide a framework for this — but note that these platforms do not natively provision or revoke third-party model-provider API keys without provider-specific custom rotation logic (a Lambda that calls the provider's key management API, for example). The automation scaffolding is provided; the provider integration must be built. The critical piece regardless of tooling is step 3 — applications must fetch credentials from the secrets manager at runtime rather than caching them indefinitely, so that a rotation event is picked up without a redeployment.
 
 ---
 
@@ -139,7 +139,7 @@ The CI/CD pipeline is one of the highest-risk credential exposure points in AI d
 
 Container images and build artifacts should never contain secrets. The build process should compile, test, and package the application without access to production credentials. Credentials are injected at deploy time — when the container starts, not when it is built — using the platform's native secrets injection mechanism (Kubernetes secrets mounted as environment variables, ECS task role credentials via the metadata service, Cloud Run secrets injection, etc.).
 
-Test the build pipeline: if you can pull the image from your registry and run it without providing any runtime secrets, and the application starts without errors, the secrets are embedded. That is a build pipeline defect, not a runtime configuration.
+Test the build pipeline: if you can pull the image from your registry and run it without providing any runtime secrets, and the application immediately performs credential-dependent operations successfully (e.g., successfully calls the model API or connects to the database at startup), then secrets are likely embedded in the image. Note that well-designed applications may defer credential use until first request, so a clean startup without secrets is necessary but not sufficient — also inspect the image layers and environment for embedded credential patterns.
 
 ### Not logging what you shouldn't
 
@@ -177,7 +177,7 @@ Effective credential security requires the ability to detect when something goes
 
 When you suspect key compromise, the response sequence matters:
 
-1. **Revoke immediately, investigate concurrently.** Don't wait to confirm compromise before revoking. A key that turns out to be uncompromised costs a few minutes of downtime to replace. A key that was compromised and left active while you investigated costs significantly more. Issue a new key and revoke the old one as the first response action.
+1. **Stage replacement, then revoke.** The safer default is to provision and deploy a new key *before* revoking the suspected-compromised one — this avoids an outage in single-key deployments and buys time to confirm the revocation won't break production traffic. If there is clear evidence of active, ongoing abuse by an attacker, immediate revocation takes priority over continuity. In either case, do not leave the suspected key active for extended investigation; the window between suspicion and revocation should be measured in minutes, not hours.
 
 2. **Audit usage history.** Pull the access logs for the compromised key covering the period of suspected compromise. Look for: requests originating from unexpected IP addresses, requests to endpoints your application doesn't use (fine-tuning, model management), unusually high token counts (data exfiltration via large inference requests), and timing patterns that don't match normal application traffic.
 
