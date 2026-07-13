@@ -18,6 +18,19 @@ function getPostCategories(tags: string[]): string[] {
   ).map((cat) => cat.slug);
 }
 
+/**
+ * Build a tag→categorySlug map so the client script can look up which
+ * category a tag belongs to without importing CATEGORIES at runtime.
+ */
+const tagToCategorySlug: Record<string, string> = {};
+for (const cat of CATEGORIES) {
+  for (const tag of cat.tags) {
+    tagToCategorySlug[tag] = cat.slug;
+  }
+}
+// Serialize for injection into the client script block.
+const TAG_TO_CAT_JSON = JSON.stringify(tagToCategorySlug);
+
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
 
@@ -201,7 +214,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       <h1>All Posts</h1>
 
       <!-- Filter panel -->
-      <div class="filter-panel" id="filter-panel">
+      <!-- Embed tag→category map so client script can resolve tags without importing CATEGORIES. -->
+      <div class="filter-panel" id="filter-panel" data-tag-to-cat={TAG_TO_CAT_JSON}>
 
         <!-- Search -->
         <div class="search-row">
@@ -293,6 +307,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   let _controller: AbortController | null = null;
 
   function initFilters() {
+    const filterPanel = document.getElementById("filter-panel");
     const postList  = document.getElementById("post-list");
     const statusEl  = document.getElementById("filter-status");
     const noResults = document.getElementById("no-results") as HTMLParagraphElement | null;
@@ -313,6 +328,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       document.querySelectorAll<HTMLButtonElement>(".sort-btn")
     );
 
+    // Build-time tag→categorySlug map, injected via data attribute.
+    let tagToCat: Record<string, string> = {};
+    try { tagToCat = JSON.parse(filterPanel?.dataset.tagToCat ?? "{}"); } catch { tagToCat = {}; }
+
     const TOTAL = allItems.length;
 
     // ── State ────────────────────────────────────────────────────────
@@ -322,8 +341,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     // ── Helpers ──────────────────────────────────────────────────────
     function parseCategories(el: HTMLLIElement): string[] {
-      try { return JSON.parse(el.dataset.categories ?? "[]"); }
-      catch { return []; }
+      try {
+        const v = JSON.parse(el.dataset.categories ?? "[]");
+        return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+      } catch { return []; }
     }
 
     function matchesSearch(el: HTMLLIElement): boolean {
@@ -370,14 +391,15 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         if (show) visibleCount++;
       });
 
-      // Highlight tag badges whose category is currently selected.
+      // Highlight tag badges whose OWN tag maps directly to a selected category
+      // (not the post's categories, to avoid highlighting unrelated tags on the same post).
       postList!.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
-        if (selectedCats.size === 0) { link.classList.remove("active-tag"); return; }
         const tag = link.dataset.tag ?? "";
-        // Find if this tag belongs to any selected category by checking the post's categories.
-        const parentItem = link.closest<HTMLLIElement>(".post-item");
-        const cats = parentItem ? parseCategories(parentItem) : [];
-        link.classList.toggle("active-tag", cats.some((c) => selectedCats.has(c)));
+        const catForThisTag = tagToCat[tag] ?? "";
+        link.classList.toggle(
+          "active-tag",
+          selectedCats.size > 0 && catForThisTag !== "" && selectedCats.has(catForThisTag)
+        );
       });
 
       // "active data filter" = search or category; sort alone is not a filter
@@ -419,6 +441,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       } else {
         url.searchParams.delete("sort");
       }
+      // Always remove the legacy tag param so it never re-appears on state changes.
+      url.searchParams.delete("tag");
       history.replaceState(null, "", url.toString());
     }
 
@@ -433,19 +457,14 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         ? new Set(catParam.split(",").filter((s) => s && knownCatSlugs.has(s)))
         : new Set();
 
-      // Backward-compat: old ?tag= param → find owning category and activate it.
+      // Backward-compat: old ?tag= param → look up owning category via build-time map
+      // (deterministic, no DOM scan, no post-order dependency).
       const legacyTag = url.searchParams.get("tag") ?? "";
       if (legacyTag && selectedCats.size === 0) {
-        // Scan posts to find any category that includes posts with this tag.
-        for (const item of allItems) {
-          let tags: string[] = [];
-          try { tags = JSON.parse(item.dataset.tags ?? "[]"); } catch { tags = []; }
-          if (tags.includes(legacyTag)) {
-            const cats = parseCategories(item);
-            if (cats.length > 0) { selectedCats.add(cats[0]); break; }
-          }
-        }
-        // Clean up the legacy param from the URL.
+        const catSlug = tagToCat[legacyTag] ?? "";
+        if (catSlug && knownCatSlugs.has(catSlug)) selectedCats.add(catSlug);
+        // ?tag= is cleaned by updateURL() which is called after every state change;
+        // pre-clean here so it doesn't linger before the first applyFilters().
         url.searchParams.delete("tag");
         history.replaceState(null, "", url.toString());
       }
@@ -505,29 +524,22 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       }, { signal });
     });
 
-    // Tag-badge clicks: plain click filters in-place (activates owning category);
-    // modifier keys (Ctrl/Cmd/Shift) open the tag archive page as normal.
+    // Tag-badge clicks: plain click filters in-place (activates owning category via
+    // tagToCat map); modifier keys (Ctrl/Cmd/Shift) open the tag archive page as normal.
     // Middle-clicks fire `auxclick` not `click`, so they naturally pass through.
+    // For tags not covered by CATEGORIES, fall through to the tag archive link normally.
     postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
       link.addEventListener("click", (e) => {
         if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-        e.preventDefault();
         const tag = link.dataset.tag ?? "";
         if (!tag) return;
-        // Find a post that has this tag and activate its first category.
-        for (const item of allItems) {
-          let tags: string[] = [];
-          try { tags = JSON.parse(item.dataset.tags ?? "[]"); } catch { tags = []; }
-          if (tags.includes(tag)) {
-            const cats = parseCategories(item);
-            if (cats.length > 0) {
-              selectedCats = new Set([cats[0]]);
-              syncControls();
-              applyFilters();
-              return;
-            }
-          }
-        }
+        // Look up the category directly from the build-time map (O(1), deterministic).
+        const catSlug = tagToCat[tag] ?? "";
+        if (!catSlug) return; // tag not in any category → let the link navigate normally
+        e.preventDefault();
+        selectedCats = new Set([catSlug]);
+        syncControls();
+        applyFilters();
       }, { signal });
     });
 
