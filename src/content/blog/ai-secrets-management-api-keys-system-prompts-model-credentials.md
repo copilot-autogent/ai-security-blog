@@ -3,7 +3,7 @@ title: "AI Secrets Management: Protecting API Keys, System Prompts, and Model Cr
 description: "API keys for model providers have a blast radius unlike traditional credentials. System prompts encode proprietary business logic that teams rarely treat as secrets. This is a practical guide to treating AI credentials as the first-class secrets they are — with concrete patterns for storage, rotation, agent scoping, and incident response."
 pubDate: 2026-07-13
 tags: ["defense-patterns", "credential-management", "secrets-management", "least-privilege", "agent-security", "monitoring", "incident-response", "api-security", "system-prompt", "cicd"]
-relatedPosts: ["non-human-identity-security-ai-agents", "confused-deputy-llm-tool-use-least-privilege", "llm-security-monitoring-production-anomaly-detection-audit-logging", "ai-incident-response-playbook", "zero-trust-architecture-ai-agent-deployments"]
+relatedPosts: ["non-human-identity-security-ai-agents", "confused-deputy-llm-tool-use-least-privilege", "llm-security-monitoring-production-anomaly-detection-audit-logging", "ai-incident-response-playbook", "zero-trust-architecture-ai-agent-deployments", "ai-agent-supply-chain-attacks"]
 ---
 
 Every production AI deployment carries secrets. At minimum: an API key for the model provider. Usually more — system prompts that encode proprietary business logic, model endpoint URLs, vector database credentials, fine-tuned model weights, and the OAuth delegation tokens that let your agents act on behalf of users.
@@ -41,7 +41,7 @@ A system prompt for a commercial AI product commonly contains:
 - Data about the application's architecture (database schemas referenced by name, API endpoint patterns, internal service names)
 - Information that would assist prompt injection attacks — the exact instruction boundaries that an attacker can try to override
 
-System prompt extraction is an active attack technique (the slug `system-prompt-extraction-attacks` covers the mechanics in detail). Even without a successful extraction attack, client-side exposure is endemic: system prompts delivered as part of client-rendered JavaScript bundles are trivially readable by anyone who opens their browser's developer tools. This is the single most common system prompt exposure pattern, and it requires no attack sophistication at all.
+System prompt extraction is an active attack technique — adversarial prompting can coax a model into repeating its instructions, and client-side exposure makes it even simpler. Even without a successful extraction attack, client-side exposure is endemic: system prompts delivered as part of client-rendered JavaScript bundles are trivially readable by anyone who opens their browser's developer tools. This is the single most common system prompt exposure pattern, and it requires no attack sophistication at all.
 
 ### Storage patterns
 
@@ -235,7 +235,7 @@ Use this checklist during design reviews for new AI deployments and as an audit 
 
 ### CI/CD Pipeline
 
-- [ ] Build artifacts contain no secrets (tested: run the image without injecting credentials, verify it does not start)
+- [ ] Build artifacts contain no secrets (inspect image layers and ENV declarations; verify credentials are not baked into the image at build time — note that clean startup alone is not reliable, since well-designed apps may defer credential use until first request)
 - [ ] Credentials are injected at runtime via platform-native mechanisms (not in Dockerfile ENV or build args)
 - [ ] Log scrubbing is applied to production logs (credential patterns and model payload content filtered)
 - [ ] Model artifacts (weights) have checksum verification at deploy time
@@ -265,7 +265,7 @@ Not all AI deployments have the same risk profile, and the controls above should
 
 ## References
 
-- [OWASP Top 10 for Large Language Model Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — LLM02 (Sensitive Information Disclosure) and LLM08 (Vector and Embedding Weaknesses) are most relevant to the credential and system prompt topics here. Verify the current version at the linked URL.
+- [OWASP Top 10 for Large Language Model Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — LLM02 (Sensitive Information Disclosure) and LLM06 (Excessive Agency) are most relevant to the credential and system prompt topics here; LLM02 covers unintended data exposure through model outputs and system prompt leakage, while LLM06 addresses agent over-permissioning. Verify the current item numbering at the linked URL, as the list is updated periodically.
 - [NIST SP 800-57 Part 1: Recommendation for Key Management](https://csrc.nist.gov/publications/detail/sp/800-57-part-1/rev-5/final) — The foundational key management standard. API key management principles map onto the key establishment, storage, and revocation guidance.
 - [GitHub Secret Scanning documentation](https://docs.github.com/en/code-security/secret-scanning/about-secret-scanning) — Covers push protection and the patterns scanned across supported provider formats.
 - [AWS Secrets Manager Best Practices](https://docs.aws.amazon.com/secretsmanager/latest/userguide/best-practices.html), [HashiCorp Vault documentation](https://developer.hashicorp.com/vault/docs), [Azure Key Vault documentation](https://learn.microsoft.com/en-us/azure/key-vault/general/best-practices) — Reference implementations for secrets management infrastructure. Patterns described in this post apply vendor-neutrally; these are the major platform implementations.
