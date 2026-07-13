@@ -5,14 +5,18 @@ import Footer from "../../components/Footer.astro";
 import FormattedDate from "../../components/FormattedDate.astro";
 import Header from "../../components/Header.astro";
 import { SITE_DESCRIPTION, SITE_TITLE } from "../../consts";
+import { CATEGORIES } from "../../data/categories";
 
 const posts = (await getCollection("blog"))
   .filter((p) => !p.data.draft)
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 
-const allTags = Array.from(
-  new Set(posts.flatMap((p) => p.data.tags ?? []))
-).sort();
+/** Derive which categories each post belongs to (any tag overlap). */
+function getPostCategories(tags: string[]): string[] {
+  return CATEGORIES.filter((cat) =>
+    cat.tags.some((t) => tags.includes(t))
+  ).map((cat) => cat.slug);
+}
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 ---
@@ -22,50 +26,127 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   <head>
     <BaseHead title={`All Posts | ${SITE_TITLE}`} description={SITE_DESCRIPTION} />
     <style>
-      .filter-bar {
+      /* ── Filter panel ─────────────────────────────────────────────── */
+      .filter-panel {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.2em 1.4em;
         margin: 1.5em 0 0;
-      }
-      .filter-bar-label {
-        font-size: 0.85em;
-        color: var(--text-secondary);
-        margin-bottom: 0.5em;
-      }
-      .filter-pills {
         display: flex;
-        flex-wrap: wrap;
-        gap: 0.4em;
+        flex-direction: column;
+        gap: 1.1em;
+      }
+
+      /* Search */
+      .search-row {
+        display: flex;
+        gap: 0.6em;
         align-items: center;
       }
-      .filter-pill {
-        background: var(--bg-elevated);
-        color: var(--text-secondary);
-        padding: 0.25em 0.7em;
-        border-radius: 12px;
-        font-size: 0.8em;
+      .search-input {
+        flex: 1;
+        background: var(--bg);
         border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.45em 0.8em;
+        color: var(--text-bright);
+        font-size: 0.95em;
+        outline: none;
+        transition: border-color 0.15s ease;
+      }
+      .search-input:focus { border-color: var(--accent); }
+      .search-input::placeholder { color: var(--text-secondary); }
+
+      /* Category checkboxes */
+      .cat-section-label {
+        font-size: 0.82em;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.5em;
+      }
+      .cat-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5em 1.2em;
+      }
+      .cat-label {
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
+        font-size: 0.9em;
+        color: var(--text-secondary);
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.15s ease;
+      }
+      .cat-label:hover { color: var(--text-bright); }
+      .cat-label input[type="checkbox"] {
+        accent-color: var(--accent);
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+      }
+
+      /* Sort row */
+      .sort-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        flex-wrap: wrap;
+      }
+      .sort-label {
+        font-size: 0.85em;
+        color: var(--text-secondary);
+        margin-right: 0.2em;
+      }
+      .sort-btn {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.25em 0.7em;
+        font-size: 0.85em;
+        color: var(--text-secondary);
         cursor: pointer;
         transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-        user-select: none;
       }
-      .filter-pill:hover {
-        color: var(--accent);
-        border-color: var(--accent);
-      }
-      .filter-pill[aria-pressed="true"] {
+      .sort-btn:hover { border-color: var(--accent); color: var(--text-bright); }
+      .sort-btn[aria-pressed="true"] {
         background: var(--accent);
         color: var(--bg);
         border-color: var(--accent);
       }
-      .filter-pill-all {
-        color: var(--text-bright);
-        font-weight: 500;
+
+      /* Status + clear */
+      .filter-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5em;
       }
       .filter-status {
         font-size: 0.85em;
         color: var(--text-secondary);
-        margin: 0.75em 0 0;
         min-height: 1.2em;
       }
+      .clear-btn {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.25em 0.7em;
+        font-size: 0.85em;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease;
+        display: none;
+      }
+      .clear-btn:hover { border-color: var(--accent); color: var(--accent); }
+      .clear-btn.visible { display: inline-block; }
+
+      /* Post list */
       .post-list { list-style: none; padding: 0; margin: 1.5em 0 0; }
       .post-item {
         padding: 1.2em 0;
@@ -105,11 +186,11 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         transition: background 0.15s ease, color 0.15s ease;
       }
       .tag-sm:hover { background: var(--accent); color: var(--bg); }
-      .tag-sm.active-tag { background: var(--accent); color: var(--bg); }
       .no-results {
         padding: 2em 0;
         color: var(--text-secondary);
         display: none;
+        text-align: center;
       }
     </style>
   </head>
@@ -118,24 +199,70 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     <main>
       <h1>All Posts</h1>
 
-      <div class="filter-bar" id="filter-bar">
-        <p class="filter-bar-label">Filter by tag:</p>
-        <div class="filter-pills">
-          <button class="filter-pill filter-pill-all" aria-pressed="true" data-tag="">All</button>
-          {allTags.map((tag) => (
-            <button class="filter-pill" aria-pressed="false" data-tag={tag}>{tag}</button>
-          ))}
+      <!-- Filter panel -->
+      <div class="filter-panel" id="filter-panel">
+
+        <!-- Search -->
+        <div class="search-row">
+          <input
+            type="search"
+            id="search-input"
+            class="search-input"
+            placeholder="Search posts…"
+            aria-label="Search posts by title or description"
+            autocomplete="off"
+          />
         </div>
-        <p class="filter-status" id="filter-status" aria-live="polite"></p>
-      </div>
+
+        <!-- Category checkboxes -->
+        <div>
+          <p class="cat-section-label">Filter by category</p>
+          <div class="cat-grid" id="cat-grid">
+            {CATEGORIES.map((cat) => (
+              <label class="cat-label">
+                <input
+                  type="checkbox"
+                  class="cat-checkbox"
+                  data-cat={cat.slug}
+                  aria-label={cat.title}
+                />
+                {cat.title}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <!-- Sort -->
+        <div class="sort-row">
+          <span class="sort-label">Sort:</span>
+          <button class="sort-btn" data-sort="newest" aria-pressed="true">Newest first</button>
+          <button class="sort-btn" data-sort="oldest" aria-pressed="false">Oldest first</button>
+          <button class="sort-btn" data-sort="alpha"  aria-pressed="false">A → Z</button>
+        </div>
+
+        <!-- Status + clear -->
+        <div class="filter-footer">
+          <p class="filter-status" id="filter-status" aria-live="polite"></p>
+          <button class="clear-btn" id="clear-btn" type="button">Clear filters</button>
+        </div>
+
+      </div><!-- /filter-panel -->
 
       <ul class="post-list" id="post-list">
         {posts.map((post) => {
           const words = (post.body ?? "").trim().split(/\s+/).filter(Boolean).length;
           const readingTime = Math.max(1, Math.ceil(words / 200));
           const tags = post.data.tags ?? [];
+          const categories = getPostCategories(tags);
           return (
-            <li class="post-item" data-tags={JSON.stringify(tags)}>
+            <li
+              class="post-item"
+              data-tags={JSON.stringify(tags)}
+              data-categories={JSON.stringify(categories)}
+              data-title={post.data.title}
+              data-date={post.data.pubDate.toISOString()}
+              data-desc={post.data.description ?? ""}
+            >
               <a class="post-link" href={`${base}/blog/${post.id}/`}>
                 <h3>{post.data.title}</h3>
                 <p class="desc">{post.data.description}</p>
@@ -155,132 +282,199 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           );
         })}
       </ul>
-      <p class="no-results" id="no-results">No posts found for this tag.</p>
+      <p class="no-results" id="no-results">No posts match your filters.</p>
     </main>
     <Footer />
   </body>
 </html>
 
 <script>
-  // AbortController used to clean up listeners on re-init (e.g. View Transitions).
-  let _filterController: AbortController | null = null;
+  let _controller: AbortController | null = null;
 
-  function initTagFilter() {
-    const filterBar = document.getElementById("filter-bar");
-    const postList = document.getElementById("post-list");
-    const statusEl = document.getElementById("filter-status");
-    const noResults = document.getElementById("no-results");
-    if (!filterBar || !postList) return;
+  function initFilters() {
+    const postList  = document.getElementById("post-list");
+    const statusEl  = document.getElementById("filter-status");
+    const noResults = document.getElementById("no-results") as HTMLParagraphElement | null;
+    const clearBtn  = document.getElementById("clear-btn") as HTMLButtonElement | null;
+    const searchEl  = document.getElementById("search-input") as HTMLInputElement | null;
 
-    // Abort any prior listeners before re-attaching (prevents double-init stacking).
-    _filterController?.abort();
-    _filterController = new AbortController();
-    const { signal } = _filterController;
+    if (!postList || !searchEl) return;
 
-    const pills = filterBar.querySelectorAll<HTMLButtonElement>(".filter-pill");
-    const posts = postList.querySelectorAll<HTMLLIElement>(".post-item");
+    _controller?.abort();
+    _controller = new AbortController();
+    const { signal } = _controller;
 
-    // Collect known tags to validate URL param
-    const knownTags = new Set(
-      Array.from(pills)
-        .map((p) => p.dataset.tag ?? "")
-        .filter(Boolean)
+    const allItems = Array.from(postList.querySelectorAll<HTMLLIElement>(".post-item"));
+    const checkboxes = Array.from(
+      document.querySelectorAll<HTMLInputElement>(".cat-checkbox")
+    );
+    const sortBtns = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".sort-btn")
     );
 
-    function applyFilter(activeTag: string) {
-      pills.forEach((pill) => {
-        const isActive = pill.dataset.tag === activeTag;
-        pill.setAttribute("aria-pressed", String(isActive));
-      });
+    const TOTAL = allItems.length;
 
-      postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
-        link.classList.toggle(
-          "active-tag",
-          activeTag !== "" && link.dataset.tag === activeTag
+    // ── State ────────────────────────────────────────────────────────
+    let searchQuery  = "";
+    let selectedCats = new Set<string>();
+    let sortOrder    = "newest";
+
+    // ── Helpers ──────────────────────────────────────────────────────
+    function parseCategories(el: HTMLLIElement): string[] {
+      try { return JSON.parse(el.dataset.categories ?? "[]"); }
+      catch { return []; }
+    }
+
+    function matchesSearch(el: HTMLLIElement): boolean {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      const title = (el.dataset.title ?? "").toLowerCase();
+      const desc  = (el.dataset.desc  ?? "").toLowerCase();
+      return title.includes(q) || desc.includes(q);
+    }
+
+    function matchesCats(el: HTMLLIElement): boolean {
+      if (selectedCats.size === 0) return true;
+      const cats = parseCategories(el);
+      return cats.some((c) => selectedCats.has(c));
+    }
+
+    function sortedItems(): HTMLLIElement[] {
+      const copy = [...allItems];
+      if (sortOrder === "oldest") {
+        copy.sort((a, b) =>
+          new Date(a.dataset.date!).valueOf() - new Date(b.dataset.date!).valueOf()
         );
-      });
+      } else if (sortOrder === "alpha") {
+        copy.sort((a, b) => (a.dataset.title ?? "").localeCompare(b.dataset.title ?? ""));
+      } else {
+        // newest-first: default order matches server-rendered order, no re-sort needed
+        copy.sort((a, b) =>
+          new Date(b.dataset.date!).valueOf() - new Date(a.dataset.date!).valueOf()
+        );
+      }
+      return copy;
+    }
+
+    // ── Apply ────────────────────────────────────────────────────────
+    function applyFilters() {
+      const ordered = sortedItems();
+      // Reorder DOM to match sort
+      ordered.forEach((item) => postList!.appendChild(item));
 
       let visibleCount = 0;
-      posts.forEach((post) => {
-        let tags: string[] = [];
-        try {
-          tags = JSON.parse(post.dataset.tags ?? "[]");
-        } catch {
-          tags = [];
-        }
-        const show = activeTag === "" || tags.includes(activeTag);
-        post.classList.toggle("hidden", !show);
+      ordered.forEach((item) => {
+        const show = matchesSearch(item) && matchesCats(item);
+        item.classList.toggle("hidden", !show);
         if (show) visibleCount++;
       });
 
-      if (noResults) {
-        noResults.style.display = visibleCount === 0 ? "block" : "none";
-      }
+      const hasFilters = searchQuery !== "" || selectedCats.size > 0 || sortOrder !== "newest";
+
+      if (noResults) noResults.style.display = visibleCount === 0 ? "block" : "none";
 
       if (statusEl) {
-        statusEl.textContent = "";
-        if (activeTag !== "") {
-          statusEl.textContent = `Showing ${visibleCount} post${visibleCount !== 1 ? "s" : ""} tagged "${activeTag}" — `;
-          const clearBtn = document.createElement("button");
-          clearBtn.textContent = "Clear filter";
-          clearBtn.style.cssText =
-            "background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;text-decoration:underline;";
-          clearBtn.addEventListener("click", () => setTag(""));
-          statusEl.appendChild(clearBtn);
+        if (visibleCount === TOTAL && !hasFilters) {
+          statusEl.textContent = `${TOTAL} posts`;
+        } else {
+          statusEl.textContent = `Showing ${visibleCount} of ${TOTAL} posts`;
         }
       }
+
+      if (clearBtn) {
+        clearBtn.classList.toggle("visible", hasFilters);
+      }
+
+      updateURL();
     }
 
-    let currentTag = "";
-
-    function setTag(tag: string) {
-      // Skip if already active to avoid duplicate history entries
-      if (tag === currentTag) return;
-      currentTag = tag;
-      applyFilter(tag);
+    // ── URL persistence ──────────────────────────────────────────────
+    function updateURL() {
       const url = new URL(window.location.href);
-      if (tag) {
-        url.searchParams.set("tag", tag);
+      if (searchQuery) {
+        url.searchParams.set("q", searchQuery);
       } else {
-        url.searchParams.delete("tag");
+        url.searchParams.delete("q");
       }
-      // replaceState: tag switching doesn't bloat browser history;
-      // the back button returns to the previous page, not a prior filter state.
+      if (selectedCats.size > 0) {
+        url.searchParams.set("category", Array.from(selectedCats).sort().join(","));
+      } else {
+        url.searchParams.delete("category");
+      }
+      if (sortOrder !== "newest") {
+        url.searchParams.set("sort", sortOrder);
+      } else {
+        url.searchParams.delete("sort");
+      }
       history.replaceState(null, "", url.toString());
     }
 
-    // Filter bar pills
-    pills.forEach((pill) => {
-      pill.addEventListener("click", () => setTag(pill.dataset.tag ?? ""), { signal });
-    });
+    function loadFromURL() {
+      const url = new URL(window.location.href);
+      searchQuery = url.searchParams.get("q") ?? "";
+      const catParam = url.searchParams.get("category") ?? "";
+      selectedCats = catParam ? new Set(catParam.split(",").filter(Boolean)) : new Set();
+      sortOrder = url.searchParams.get("sort") ?? "newest";
+      if (!["newest", "oldest", "alpha"].includes(sortOrder)) sortOrder = "newest";
+    }
 
-    // Tag links in post cards: intercept plain clicks to filter in-place;
-    // modifier keys (Ctrl/Cmd/Shift) let the browser open the tag archive page.
-    // Middle-clicks fire `auxclick`, not `click`, so they naturally pass through.
-    postList.querySelectorAll<HTMLAnchorElement>(".tag-sm").forEach((link) => {
-      link.addEventListener("click", (e) => {
-        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-        e.preventDefault();
-        setTag(link.dataset.tag ?? "");
+    // ── Sync UI controls to state ────────────────────────────────────
+    function syncControls() {
+      searchEl!.value = searchQuery;
+      checkboxes.forEach((cb) => {
+        cb.checked = selectedCats.has(cb.dataset.cat ?? "");
+      });
+      sortBtns.forEach((btn) => {
+        btn.setAttribute("aria-pressed", String(btn.dataset.sort === sortOrder));
+      });
+    }
+
+    // ── Clear ────────────────────────────────────────────────────────
+    function clearAll() {
+      searchQuery  = "";
+      selectedCats = new Set();
+      sortOrder    = "newest";
+      syncControls();
+      applyFilters();
+    }
+
+    // ── Event listeners ──────────────────────────────────────────────
+    let searchTimer: ReturnType<typeof setTimeout> | null = null;
+    searchEl.addEventListener("input", () => {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        searchQuery = searchEl.value.trim();
+        applyFilters();
+      }, 150);
+    }, { signal });
+
+    checkboxes.forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const slug = cb.dataset.cat ?? "";
+        if (cb.checked) selectedCats.add(slug);
+        else selectedCats.delete(slug);
+        applyFilters();
       }, { signal });
     });
 
-    // Apply tag from URL on load; clean up the URL if the tag is unknown.
-    const urlTag = new URL(window.location.href).searchParams.get("tag") ?? "";
-    const validInitialTag = knownTags.has(urlTag) ? urlTag : "";
-    if (urlTag && !validInitialTag) {
-      // Unknown tag in URL: remove it silently
-      const url = new URL(window.location.href);
-      url.searchParams.delete("tag");
-      history.replaceState(null, "", url.toString());
-    }
-    currentTag = validInitialTag;
-    applyFilter(validInitialTag);
+    sortBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        sortOrder = btn.dataset.sort ?? "newest";
+        sortBtns.forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.dataset.sort === sortOrder))
+        );
+        applyFilters();
+      }, { signal });
+    });
+
+    clearBtn?.addEventListener("click", clearAll, { signal });
+
+    // ── Init ─────────────────────────────────────────────────────────
+    loadFromURL();
+    syncControls();
+    applyFilters();
   }
 
-  // astro:page-load fires on each View Transition navigation (and initial load when
-  // Astro's <ClientRouter> is active). DOMContentLoaded handles initial load without VT.
-  // AbortController inside initTagFilter makes double-init safe (no listener stacking).
-  document.addEventListener("astro:page-load", initTagFilter);
-  document.addEventListener("DOMContentLoaded", initTagFilter, { once: true });
+  document.addEventListener("astro:page-load", initFilters);
+  document.addEventListener("DOMContentLoaded", initFilters, { once: true });
 </script>
