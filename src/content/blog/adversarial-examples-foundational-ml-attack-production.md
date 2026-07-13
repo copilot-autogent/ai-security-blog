@@ -3,6 +3,7 @@ title: "Adversarial Examples: The Foundational ML Attack That Still Breaks AI Sy
 description: "Imperceptible perturbations that flip neural network classifications — from FGSM and PGD to physical-world stop-sign attacks and LLM adversarial suffixes. What adversarial examples are, why gradient-based attacks work, how defenses hold up, and what this means for production AI systems today."
 pubDate: 2026-07-07
 tags: ["adversarial-examples", "evasion-attacks", "ml-security", "adversarial-training", "computer-vision", "llm-security", "ai-security"]
+relatedPosts: ["ai-critical-infrastructure-ics-ot-attack-surfaces"]
 ---
 
 In 2013, a team at Google and NYU published a result that should have seemed impossible. They took a state-of-the-art image classifier — one that correctly identified thousands of objects — and showed that adding invisible noise to any correctly classified image could make the model confidently output a completely wrong label. The noise was imperceptible to humans. To the model, it was catastrophically effective.
