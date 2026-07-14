@@ -74,7 +74,7 @@ This taxonomy exists to make capability grants explicit and auditable, not to su
 
 The blast radius of a compromised agent — the maximum damage achievable from a single successful attack — is a function of capability intersection. Individual capabilities have moderate impact; combinations compound dramatically.
 
-**Read-only, no network.** An agent limited to file-system read with no outbound network access and no write capability. Compromise enables information disclosure within the filesystem scope, nothing more. An attacker can observe data but cannot exfiltrate it (no network), modify it (no write), or escalate beyond the filesystem boundary. This is a genuinely bounded blast radius.
+**Read-only, no network.** An agent limited to file-system read with no outbound network access and no write capability. Compromise enables information disclosure within the filesystem scope, with limited exfiltration paths. An attacker cannot exfiltrate data via outbound tool calls or network requests; however, data can still leak through the agent's response channel — if the agent returns sensitive file contents in its reply, that reply passes through the orchestration layer and may appear in logs, UI, or upstream telemetry. Write capability is absent, so persistent modification is blocked. This is a meaningfully bounded blast radius compared to broader profiles, but it is not exfiltration-proof.
 
 **Read + outbound network.** Adding outbound HTTP to a read-only agent creates an exfiltration channel. An attacker who injects a malicious instruction can cause the agent to read sensitive files and POST their contents to an attacker-controlled endpoint. This combination is extremely common in RAG agents that need web access alongside document retrieval. The blast radius is: full exfiltration of anything in the agent's read scope.
 
@@ -153,22 +153,28 @@ The pattern enforces audit trail at the capability layer rather than relying on 
 Code-execution capability is the highest-risk single capability class because it can acquire all others. Agents that need code execution should operate in isolated containers with explicit restrictions:
 
 **Container isolation fundamentals:**
-- No host filesystem mount (`--no-mount` or equivalent; avoid `-v /:/host`)
+- No unnecessary host filesystem mounts — avoid `-v /:/host` or mounting sensitive host paths; use `--mount type=tmpfs,destination=/tmp` for scratch space rather than host bind mounts
 - No network access unless specifically required (`--network=none` or a restrictive egress allowlist)
-- Non-root execution inside the container
+- Non-root execution inside the container (set `USER` in the Dockerfile or use `--user 1000:1000`)
 - Read-only root filesystem where possible (`--read-only`), with explicit tmpfs mounts for necessary write paths
-- Resource limits (CPU, memory, PIDs) to prevent resource exhaustion
+- Resource limits (CPU, memory, PIDs) to prevent resource exhaustion (`--cpus`, `--memory`, `--pids-limit`)
 
-For Python interpreter access specifically, consider using `RestrictedPython` or `PyPy` with a custom `__builtins__` that removes `import`, `open`, `exec`, and `eval`:
+For Python interpreter access specifically, `RestrictedPython` provides a compile-time restricted execution mode that disables certain dangerous constructs. Note that Python-level restriction is not a security boundary on its own — it is a defense-in-depth supplement to container isolation, not a replacement. A `safe_globals` environment removes some dangerous builtins (like `exec`, `eval`, and `open`) that `RestrictedPython` compiles out, but a sophisticated attacker with code-execution capability may still find routes around Python-level restrictions. Always pair it with container isolation:
 
 ```python
-from RestrictedPython import compile_restricted, safe_globals
+from RestrictedPython import compile_restricted, safe_globals, safe_builtins
 
 def safe_exec(code: str) -> str:
-    """Execute Python code in a restricted interpreter."""
+    """Execute Python code in a restricted environment.
+    
+    NOTE: This is a defense-in-depth supplement to container isolation.
+    Deploy inside a sandboxed container — do not rely on this alone.
+    """
+    restricted_globals = safe_globals.copy()
+    restricted_globals["__builtins__"] = safe_builtins  # removes open, exec, eval, __import__
     byte_code = compile_restricted(code, filename="<agent_exec>", mode="exec")
     local_vars = {}
-    exec(byte_code, safe_globals, local_vars)
+    exec(byte_code, restricted_globals, local_vars)
     return str(local_vars.get("result", ""))
 ```
 
@@ -180,12 +186,14 @@ This doesn't replace container isolation — it adds a second containment layer 
 
 **LangChain tool filtering:**
 ```python
-from langchain.agents import AgentExecutor
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain.hub import pull
 
 # Scope the executor to a specific tool subset
 def create_scoped_executor(tool_names: list[str], all_tools: list, llm) -> AgentExecutor:
     scoped_tools = [t for t in all_tools if t.name in tool_names]
-    agent = create_react_agent(llm, scoped_tools, prompt)
+    react_prompt = pull("hwchase17/react")           # standard ReAct prompt template
+    agent = create_react_agent(llm, scoped_tools, react_prompt)
     return AgentExecutor(agent=agent, tools=scoped_tools, verbose=False)
 
 # Research task: read + web only
@@ -197,7 +205,7 @@ research_executor = create_scoped_executor(
 ```
 
 **AutoGen agent system message restrictions:**
-AutoGen's `UserProxyAgent` with `code_execution_config` controls what the code executor can do. Disable execution entirely for agents that don't need it, and use a `docker_base_url` with an isolated container when execution is required:
+AutoGen's `UserProxyAgent` with `code_execution_config` controls what the code executor can do. Disable execution entirely for agents that don't need it, and use `use_docker` with an isolated container image when execution is required. Additional network and filesystem isolation must be configured at the Docker level (not via AutoGen's API):
 
 ```python
 from autogen import UserProxyAgent
@@ -210,10 +218,13 @@ readonly_agent = UserProxyAgent(
 )
 
 # Agent with sandboxed execution
+# NOTE: use_docker restricts to the named image, but network and mount
+# isolation must be enforced via Docker daemon configuration or
+# a seccomp/AppArmor profile — AutoGen does not configure these automatically.
 sandboxed_agent = UserProxyAgent(
     name="sandboxed_coder",
     code_execution_config={
-        "use_docker": "python:3.11-slim",   # isolated image
+        "use_docker": "python:3.11-slim",   # restricted image (no dev tools)
         "timeout": 30,                       # execution timeout
         "work_dir": "/tmp/agent_workspace",  # contained work directory
     },
@@ -261,6 +272,7 @@ Instrument every tool call with:
 For LangChain, a custom callback handler makes this automatic:
 
 ```python
+import hashlib
 from langchain.callbacks.base import BaseCallbackHandler
 
 class CapabilityAuditHandler(BaseCallbackHandler):
