@@ -127,18 +127,23 @@ This approach forces every new task type to justify its capability requirements 
 
 Make read access the baseline and treat write access as a capability that requires explicit justification in the deployment documentation. This applies to all write classes: file system write, database write, email send, API submission.
 
-For LangChain, this means wrapping write tools in a confirmation layer when operating in non-automated pipelines:
+For LangChain, this means wrapping write tools in a confirmation layer when operating in non-automated pipelines. The wrapper below illustrates the pattern — in a real deployment, replace the `# ...` placeholders with your actual audit logging and write implementations:
 
 ```python
 from langchain.tools import Tool
 
 def confirmed_file_write(path: str, content: str) -> str:
-    """Write to a file only after confirmation. Use only when write access is documented."""
-    # In automated pipelines: log and audit every write
-    audit_log.record(action="file_write", path=path, caller=get_current_agent_id())
-    return _actual_file_write(path, content)
+    """Write to a file. Use only when write access is explicitly documented.
+    
+    Every write is logged with agent identity before execution.
+    """
+    # Log with your audit system before executing the write
+    # e.g., audit_log.record(action="file_write", path=path, agent_id=current_agent_id())
+    # Then perform the actual write:
+    # e.g., with open(path, "w") as f: f.write(content)
+    raise NotImplementedError("Replace with your audit + write implementation")
 
-# Register only the confirmed wrapper, not raw write
+# Register only the confirmed wrapper, not a raw write tool
 file_write_tool = Tool(
     name="file_write",
     func=confirmed_file_write,
@@ -159,22 +164,49 @@ Code-execution capability is the highest-risk single capability class because it
 - Read-only root filesystem where possible (`--read-only`), with explicit tmpfs mounts for necessary write paths
 - Resource limits (CPU, memory, PIDs) to prevent resource exhaustion (`--cpus`, `--memory`, `--pids-limit`)
 
-For Python interpreter access specifically, `RestrictedPython` provides a compile-time restricted execution mode that disables certain dangerous constructs. Note that Python-level restriction is not a security boundary on its own — it is a defense-in-depth supplement to container isolation, not a replacement. A `safe_globals` environment removes some dangerous builtins (like `exec`, `eval`, and `open`) that `RestrictedPython` compiles out, but a sophisticated attacker with code-execution capability may still find routes around Python-level restrictions. Always pair it with container isolation:
+For Python interpreter access specifically, `RestrictedPython` provides a compile-time restricted execution mode that disables certain dangerous constructs. A complete implementation requires installing RestrictedPython's policy guard helpers (`_write_`, `_getiter_`, `_getattr_`, `_getitem_`, `_inplacevar_`) so that attribute access, iteration, and assignment work correctly inside restricted bytecode. Python-level restriction is not a security boundary on its own — it is a defense-in-depth supplement to container isolation, not a replacement:
 
 ```python
-from RestrictedPython import compile_restricted, safe_globals, safe_builtins
+import signal
+from RestrictedPython import (
+    compile_restricted, safe_globals, safe_builtins,
+    guarded_iter_unpack_sequence, guarded_unpack_sequence,
+)
+from RestrictedPython.Guards import (
+    safe_globals as _safe_globals,
+    guarded_getattr, guarded_getitem, guarded_setattr,
+)
 
-def safe_exec(code: str) -> str:
+def safe_exec(code: str, timeout_seconds: int = 5) -> str:
     """Execute Python code in a restricted environment.
     
-    NOTE: This is a defense-in-depth supplement to container isolation.
-    Deploy inside a sandboxed container — do not rely on this alone.
+    Requires container isolation as the primary containment layer.
+    Executed code must assign its output to a variable named `result`.
     """
     restricted_globals = safe_globals.copy()
-    restricted_globals["__builtins__"] = safe_builtins  # removes open, exec, eval, __import__
+    restricted_globals["__builtins__"] = safe_builtins
+    # Install policy guards required for iteration, attribute access, and assignment
+    restricted_globals["_getiter_"] = iter
+    restricted_globals["_getattr_"] = guarded_getattr
+    restricted_globals["_getitem_"] = guarded_getitem
+    restricted_globals["_write_"] = guarded_setattr
+    restricted_globals["_inplacevar_"] = lambda op, x, y: x  # disallow in-place ops
+
     byte_code = compile_restricted(code, filename="<agent_exec>", mode="exec")
-    local_vars = {}
-    exec(byte_code, restricted_globals, local_vars)
+    local_vars: dict = {}
+
+    def _exec_with_timeout():
+        exec(byte_code, restricted_globals, local_vars)
+
+    # Enforce wall-clock timeout via SIGALRM (Unix only)
+    signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError("Execution timeout")))
+    signal.alarm(timeout_seconds)
+    try:
+        _exec_with_timeout()
+    finally:
+        signal.alarm(0)  # Cancel alarm
+
+    # Executed code must assign `result`; unset result returns empty string
     return str(local_vars.get("result", ""))
 ```
 
@@ -191,7 +223,11 @@ from langchain.hub import pull
 
 # Scope the executor to a specific tool subset
 def create_scoped_executor(tool_names: list[str], all_tools: list, llm) -> AgentExecutor:
-    scoped_tools = [t for t in all_tools if t.name in tool_names]
+    tool_map = {t.name: t for t in all_tools}
+    missing = [name for name in tool_names if name not in tool_map]
+    if missing:
+        raise ValueError(f"Unknown tools requested: {missing}. Refusing to create executor.")
+    scoped_tools = [tool_map[name] for name in tool_names]
     react_prompt = pull("hwchase17/react")           # standard ReAct prompt template
     agent = create_react_agent(llm, scoped_tools, react_prompt)
     return AgentExecutor(agent=agent, tools=scoped_tools, verbose=False)
@@ -205,10 +241,11 @@ research_executor = create_scoped_executor(
 ```
 
 **AutoGen agent system message restrictions:**
-AutoGen's `UserProxyAgent` with `code_execution_config` controls what the code executor can do. Disable execution entirely for agents that don't need it, and use `use_docker` with an isolated container image when execution is required. Additional network and filesystem isolation must be configured at the Docker level (not via AutoGen's API):
+AutoGen's `UserProxyAgent` with `code_execution_config` controls what the code executor can do. In AutoGen ≥ 0.4 (the `pyautogen` / `autogen-agentchat` packages), Docker-based sandboxing is configured via `DockerCommandLineCodeExecutor`. Disable execution entirely for agents that don't need it. When execution is required, use an isolated image and enforce additional network and filesystem restrictions at the Docker daemon level:
 
 ```python
-from autogen import UserProxyAgent
+from autogen_agentchat.agents import UserProxyAgent
+from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
 
 # Agent without code execution
 readonly_agent = UserProxyAgent(
@@ -217,17 +254,18 @@ readonly_agent = UserProxyAgent(
     human_input_mode="NEVER",
 )
 
-# Agent with sandboxed execution
-# NOTE: use_docker restricts to the named image, but network and mount
-# isolation must be enforced via Docker daemon configuration or
-# a seccomp/AppArmor profile — AutoGen does not configure these automatically.
+# Agent with Docker-sandboxed execution.
+# IMPORTANT: network isolation (--network=none or allowlist) and mount
+# restrictions must be configured on the Docker daemon or via the
+# executor's docker_run_kwargs — they are not enforced by default.
+docker_executor = DockerCommandLineCodeExecutor(
+    image="python:3.11-slim",      # minimal image without dev tools
+    timeout=30,                    # wall-clock execution limit
+    work_dir="/tmp/agent_workspace",
+)
 sandboxed_agent = UserProxyAgent(
     name="sandboxed_coder",
-    code_execution_config={
-        "use_docker": "python:3.11-slim",   # restricted image (no dev tools)
-        "timeout": 30,                       # execution timeout
-        "work_dir": "/tmp/agent_workspace",  # contained work directory
-    },
+    code_execution_config={"executor": docker_executor},
     human_input_mode="NEVER",
 )
 ```
@@ -276,18 +314,31 @@ import hashlib
 from langchain.callbacks.base import BaseCallbackHandler
 
 class CapabilityAuditHandler(BaseCallbackHandler):
-    def on_tool_start(self, serialized, input_str, **kwargs):
+    def __init__(self, agent_id: str, session_id: str):
+        super().__init__()
+        self.agent_id = agent_id
+        self.session_id = session_id
+        self._active_tool: str | None = None
+
+    def on_tool_start(self, serialized, input_str, run_id=None, **kwargs):
+        tool_name = serialized.get("name")
+        self._active_tool = tool_name
         audit_log.record(
             event="tool_start",
-            tool=serialized.get("name"),
+            tool=tool_name,
+            run_id=str(run_id),
             input_hash=hashlib.sha256(input_str.encode()).hexdigest()[:8],
             agent_id=self.agent_id,
             session_id=self.session_id,
         )
 
-    def on_tool_end(self, output, **kwargs):
+    def on_tool_end(self, output, run_id=None, **kwargs):
         audit_log.record(
             event="tool_end",
+            tool=self._active_tool,
+            run_id=str(run_id),
+            agent_id=self.agent_id,
+            session_id=self.session_id,
             output_type=type(output).__name__,
             output_len=len(str(output)),
         )
