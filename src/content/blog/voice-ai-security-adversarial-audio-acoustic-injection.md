@@ -219,12 +219,12 @@ When your AI agent can be instructed by sounds it cannot hear, the attack surfac
 
 **Key papers:**
 
-- *Nicholas Carlini and David Wagner. "Audio Adversarial Examples: Targeted Attacks on Speech-to-Text." IEEE Deep Learning and Security Workshop, co-located with IEEE S&P 2018. [arXiv:1801.01944](https://arxiv.org/abs/1801.01944)*
+- *Nicholas Carlini and David Wagner. "Audio Adversarial Examples: Targeted Attacks on Speech-to-Text." 1st Deep Learning and Security Workshop (DLS 2018), co-located with IEEE S&P 2018. [arXiv:1801.01944](https://arxiv.org/abs/1801.01944)*
 
-- *Guoming Zhang, Chen Yan, Xiaoyu Ji, Tianchen Zhang, Taimin Zhang, and Wenyuan Xu. "DolphinAttack: Inaudible Voice Commands." ACM CCS 2017.*
+- *Guoming Zhang, Chen Yan, Xiaoyu Ji, Tianchen Zhang, Taimin Zhang, and Wenyuan Xu. "DolphinAttack: Inaudible Voice Commands." ACM CCS 2017. [doi:10.1145/3133956.3134052](https://dl.acm.org/doi/10.1145/3133956.3134052)*
 
 - *Tavish Vaidya, Yuankai Zhang, Micah Sherr, and Clay Shields. "Cocaine Noodles: Exploiting the Gap between Human and Machine Speech Recognition." USENIX WOOT 2015.*
 
-- *Nirupam Roy, Sheng Shen, Haitham Hassanieh, and Romit Roy Choudhury. "Inaudible Voice Commands: The Long-Range Attack and Defense." USENIX NDSS 2018. [Paper](https://www.ndss-symposium.org/ndss2018/)*
+- *Nirupam Roy, Sheng Shen, Haitham Hassanieh, and Romit Roy Choudhury. "Inaudible Voice Commands: The Long-Range Attack and Defense." USENIX NSDI 2018. [Paper](https://www.usenix.org/conference/nsdi18/presentation/roy)*
 
 - *Divyanshu Kumar et al. "Beyond Text: Multimodal Jailbreaking of Vision-Language and Audio Models through Perceptually Simple Transformations." [arXiv:2510.20223](https://arxiv.org/abs/2510.20223) (2025) — documents audio-domain safety failures in GPT-4o-Audio and Gemini 2.5.*
