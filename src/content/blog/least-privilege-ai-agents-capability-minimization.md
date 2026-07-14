@@ -127,27 +127,29 @@ This approach forces every new task type to justify its capability requirements 
 
 Make read access the baseline and treat write access as a capability that requires explicit justification in the deployment documentation. This applies to all write classes: file system write, database write, email send, API submission.
 
-For LangChain, this means wrapping write tools in a confirmation layer when operating in non-automated pipelines. The wrapper below illustrates the pattern — in a real deployment, replace the `# ...` placeholders with your actual audit logging and write implementations:
+For LangChain, this means wrapping write tools in an audited layer. Use `StructuredTool` for tools with multiple parameters, and implement audit logging before the write executes:
 
 ```python
-from langchain.tools import Tool
+import logging
+from langchain.tools import StructuredTool
+
+logger = logging.getLogger(__name__)
 
 def confirmed_file_write(path: str, content: str) -> str:
     """Write to a file. Use only when write access is explicitly documented.
     
-    Every write is logged with agent identity before execution.
+    Logs the write operation with path and caller context before executing.
     """
-    # Log with your audit system before executing the write
-    # e.g., audit_log.record(action="file_write", path=path, agent_id=current_agent_id())
-    # Then perform the actual write:
-    # e.g., with open(path, "w") as f: f.write(content)
-    raise NotImplementedError("Replace with your audit + write implementation")
+    logger.info("file_write: path=%s len=%d", path, len(content))
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(content)
+    return f"Wrote {len(content)} bytes to {path}"
 
-# Register only the confirmed wrapper, not a raw write tool
-file_write_tool = Tool(
-    name="file_write",
+# Use StructuredTool for multi-argument write tools
+file_write_tool = StructuredTool.from_function(
     func=confirmed_file_write,
-    description="Write content to a file. Every write is audited.",
+    name="file_write",
+    description="Write content to a file. Every write is logged.",
 )
 ```
 
@@ -164,50 +166,53 @@ Code-execution capability is the highest-risk single capability class because it
 - Read-only root filesystem where possible (`--read-only`), with explicit tmpfs mounts for necessary write paths
 - Resource limits (CPU, memory, PIDs) to prevent resource exhaustion (`--cpus`, `--memory`, `--pids-limit`)
 
-For Python interpreter access specifically, `RestrictedPython` provides a compile-time restricted execution mode that disables certain dangerous constructs. A complete implementation requires installing RestrictedPython's policy guard helpers (`_write_`, `_getiter_`, `_getattr_`, `_getitem_`, `_inplacevar_`) so that attribute access, iteration, and assignment work correctly inside restricted bytecode. Python-level restriction is not a security boundary on its own — it is a defense-in-depth supplement to container isolation, not a replacement:
+For Python interpreter access specifically, `RestrictedPython` provides a compile-time restricted execution mode that disables certain dangerous constructs. A complete implementation requires installing RestrictedPython's policy guard helpers so that attribute access, iteration, and assignment work correctly inside restricted bytecode. Python-level restriction is not a security boundary on its own — it is a defense-in-depth supplement to container isolation, not a replacement.
+
+The key export names changed between RestrictedPython versions — always check your installed version's `Guards` module. The pattern below targets RestrictedPython ≥ 7.x:
 
 ```python
-import signal
-from RestrictedPython import (
-    compile_restricted, safe_globals, safe_builtins,
-    guarded_iter_unpack_sequence, guarded_unpack_sequence,
-)
-from RestrictedPython.Guards import (
-    safe_globals as _safe_globals,
-    guarded_getattr, guarded_getitem, guarded_setattr,
-)
+import concurrent.futures
+from RestrictedPython import compile_restricted, safe_globals, safe_builtins
+from RestrictedPython.Guards import safer_getattr, guarded_getitem_default
 
 def safe_exec(code: str, timeout_seconds: int = 5) -> str:
     """Execute Python code in a restricted environment.
     
     Requires container isolation as the primary containment layer.
     Executed code must assign its output to a variable named `result`.
+    Timeout uses a thread executor to work in both main and worker threads.
     """
     restricted_globals = safe_globals.copy()
     restricted_globals["__builtins__"] = safe_builtins
-    # Install policy guards required for iteration, attribute access, and assignment
     restricted_globals["_getiter_"] = iter
-    restricted_globals["_getattr_"] = guarded_getattr
-    restricted_globals["_getitem_"] = guarded_getitem
-    restricted_globals["_write_"] = guarded_setattr
-    restricted_globals["_inplacevar_"] = lambda op, x, y: x  # disallow in-place ops
+    restricted_globals["_getattr_"] = safer_getattr
+    restricted_globals["_getitem_"] = guarded_getitem_default
+    # _write_ guard: return a callable that sets the named attribute
+    restricted_globals["_write_"] = lambda obj: obj.__dict__.__setitem__
+    # Raise on in-place mutation (+=, -=, etc.) rather than silently ignoring it
+    def _inplacevar_(op: str, x, y):
+        raise RestrictedOperationError(f"In-place operator '{op}' not permitted")
+    restricted_globals["_inplacevar_"] = _inplacevar_
 
     byte_code = compile_restricted(code, filename="<agent_exec>", mode="exec")
     local_vars: dict = {}
 
-    def _exec_with_timeout():
-        exec(byte_code, restricted_globals, local_vars)
+    def _exec():
+        exec(byte_code, restricted_globals, local_vars)  # noqa: S102
 
-    # Enforce wall-clock timeout via SIGALRM (Unix only)
-    signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError("Execution timeout")))
-    signal.alarm(timeout_seconds)
-    try:
-        _exec_with_timeout()
-    finally:
-        signal.alarm(0)  # Cancel alarm
+    # Thread-pool timeout works in both main and worker threads (unlike signal.alarm)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(_exec)
+        try:
+            fut.result(timeout=timeout_seconds)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(f"Agent code execution exceeded {timeout_seconds}s limit")
 
-    # Executed code must assign `result`; unset result returns empty string
     return str(local_vars.get("result", ""))
+
+
+class RestrictedOperationError(Exception):
+    pass
 ```
 
 This doesn't replace container isolation — it adds a second containment layer so that even a container escape attempt starts from a more restricted execution context.
@@ -241,31 +246,29 @@ research_executor = create_scoped_executor(
 ```
 
 **AutoGen agent system message restrictions:**
-AutoGen's `UserProxyAgent` with `code_execution_config` controls what the code executor can do. In AutoGen ≥ 0.4 (the `pyautogen` / `autogen-agentchat` packages), Docker-based sandboxing is configured via `DockerCommandLineCodeExecutor`. Disable execution entirely for agents that don't need it. When execution is required, use an isolated image and enforce additional network and filesystem restrictions at the Docker daemon level:
+AutoGen's API for code execution has evolved across major versions. The principle — disable execution for agents that don't need it, containerize when execution is required — applies across versions. The example below uses the legacy `pyautogen` / AutoGen 0.2 API which remains widely deployed; for AutoGen 0.4+, the equivalent uses `DockerCommandLineCodeExecutor` from `autogen_ext`:
 
 ```python
-from autogen_agentchat.agents import UserProxyAgent
-from autogen_ext.code_executors.docker import DockerCommandLineCodeExecutor
+# pyautogen / AutoGen 0.2 API
+from autogen import UserProxyAgent
 
-# Agent without code execution
+# Agent without code execution — disable explicitly
 readonly_agent = UserProxyAgent(
     name="readonly_assistant",
-    code_execution_config=False,   # completely disable execution
+    code_execution_config=False,
     human_input_mode="NEVER",
 )
 
 # Agent with Docker-sandboxed execution.
-# IMPORTANT: network isolation (--network=none or allowlist) and mount
-# restrictions must be configured on the Docker daemon or via the
-# executor's docker_run_kwargs — they are not enforced by default.
-docker_executor = DockerCommandLineCodeExecutor(
-    image="python:3.11-slim",      # minimal image without dev tools
-    timeout=30,                    # wall-clock execution limit
-    work_dir="/tmp/agent_workspace",
-)
+# Additional network and mount isolation must be configured at the Docker
+# daemon level — AutoGen does not enforce --network=none or read-only FS.
 sandboxed_agent = UserProxyAgent(
     name="sandboxed_coder",
-    code_execution_config={"executor": docker_executor},
+    code_execution_config={
+        "use_docker": True,          # enable Docker; optionally specify image name
+        "timeout": 30,
+        "work_dir": "/tmp/agent_workspace",
+    },
     human_input_mode="NEVER",
 )
 ```
@@ -311,36 +314,40 @@ For LangChain, a custom callback handler makes this automatic:
 
 ```python
 import hashlib
+from uuid import UUID
 from langchain.callbacks.base import BaseCallbackHandler
 
 class CapabilityAuditHandler(BaseCallbackHandler):
+    """Logs every tool call with agent identity and run-level correlation.
+    
+    Thread-safe: uses run_id (UUID) as correlation key rather than a shared
+    mutable field, so concurrent or nested tool calls don't clobber each other.
+    """
     def __init__(self, agent_id: str, session_id: str):
         super().__init__()
         self.agent_id = agent_id
         self.session_id = session_id
-        self._active_tool: str | None = None
 
-    def on_tool_start(self, serialized, input_str, run_id=None, **kwargs):
-        tool_name = serialized.get("name")
-        self._active_tool = tool_name
+    def _common(self, run_id) -> dict:
+        return {"agent_id": self.agent_id, "session_id": self.session_id, "run_id": str(run_id)}
+
+    def on_tool_start(self, serialized, input_str, run_id: UUID | None = None, **kwargs):
+        tool_name = (serialized or {}).get("name", "unknown")
+        input_bytes = input_str.encode() if isinstance(input_str, str) else str(input_str).encode()
         audit_log.record(
             event="tool_start",
             tool=tool_name,
-            run_id=str(run_id),
-            input_hash=hashlib.sha256(input_str.encode()).hexdigest()[:8],
-            agent_id=self.agent_id,
-            session_id=self.session_id,
+            input_hash=hashlib.sha256(input_bytes).hexdigest()[:8],
+            **self._common(run_id),
         )
 
-    def on_tool_end(self, output, run_id=None, **kwargs):
+    def on_tool_end(self, output, run_id: UUID | None = None, **kwargs):
+        output_str = str(output)
         audit_log.record(
             event="tool_end",
-            tool=self._active_tool,
-            run_id=str(run_id),
-            agent_id=self.agent_id,
-            session_id=self.session_id,
             output_type=type(output).__name__,
-            output_len=len(str(output)),
+            output_len=len(output_str),
+            **self._common(run_id),
         )
 ```
 
