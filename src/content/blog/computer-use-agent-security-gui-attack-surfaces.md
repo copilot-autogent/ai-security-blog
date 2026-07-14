@@ -7,7 +7,7 @@ relatedPosts: ["browser-use-attacks-hijacking-ai-agents", "zero-trust-architectu
 featured: false
 ---
 
-In October 2024, Anthropic released a public beta of its Computer Use API — an interface that lets Claude control a desktop: take screenshots, move a cursor, click buttons, and type text into applications. OpenAI's Operator product, launched in January 2025, uses a specialized computer-using agent (CUA) model built on top of GPT-4o with similar capabilities. The capability is remarkable. The security implications are almost entirely unaddressed in current agent frameworks.
+In October 2024, Anthropic released a public beta of its Computer Use API — an interface that lets Claude control a desktop: take screenshots, move a cursor, click buttons, and type text into applications. OpenAI's Operator product, launched in January 2025, uses a specialized computer-using agent (CUA) model. The capability is remarkable. The security implications are almost entirely unaddressed in current agent frameworks.
 
 This post covers the attack surface that opens when an AI agent gains GUI access. If you've read [browser-use attacks](/blog/browser-use-attacks-hijacking-ai-agents), you have a foundation. Computer-use agents inherit that threat model entirely — and then extend it to every pixel on the display.
 
@@ -178,7 +178,7 @@ computer_use_agent:
 
 The container gets a virtual display with only the applications the agent needs for the current task. No password manager, no production terminals, no email client is visible. The blast radius of a visual injection is bounded by what the agent can see.
 
-Anthropic's own Computer Use API documentation explicitly recommends running agents in a container or VM: "We suggest taking screenshots of a virtual machine or container to limit the risk of giving Claude access to sensitive data."
+Anthropic's Computer Use API [documentation](https://docs.anthropic.com/en/docs/build-with-claude/computer-use) explicitly recommends running agents in a container or VM to limit exposure to sensitive data on the host.
 
 ### 2. Window Masking and Visible-Region Limitations
 
@@ -195,13 +195,15 @@ def masked_screenshot(window_title: str) -> bytes:
     """Capture only the specified window, not the full desktop."""
     # Step 1: find the window ID
     search = subprocess.run(
-        ["xdotool", "search", "--name", window_title],
+        ["xdotool", "search", "--onlyvisible", "--name", window_title],
         capture_output=True, text=True, check=True
     )
     lines = search.stdout.strip().splitlines()
     if not lines:
-        raise RuntimeError(f"No window found matching: {window_title!r}")
-    window_id = lines[0]  # use first match
+        raise RuntimeError(f"No visible window found matching: {window_title!r}")
+    if len(lines) > 1:
+        raise RuntimeError(f"Multiple windows match {window_title!r} — be more specific")
+    window_id = lines[0]
     # Step 2: get window geometry via separate xdotool call
     geo = subprocess.run(
         ["xdotool", "getwindowgeometry", window_id],
@@ -236,7 +238,10 @@ def confirm_action(action_type: str, action_details: dict) -> bool:
     if action_type in SENSITIVE_ACTIONS:
         display_confirmation_ui(action_type, action_details)
         return wait_for_user_approval(timeout_seconds=30)
-    # Separately gate clipboard shortcuts at the key level
+    # Separately gate clipboard shortcuts at the key level.
+    # Key format varies by framework: Anthropic computer_20241022 uses xdotool
+    # syntax ("ctrl+c"); Playwright/Operator use {"key": "c", "modifiers": ["ctrl"]}.
+    # Adapt this check to your framework's actual key event schema.
     if action_type == "key_press":
         key = action_details.get("key", "").lower()
         if key in ("ctrl+c", "ctrl+v", "ctrl+x"):
@@ -269,7 +274,7 @@ def build_step_prompt(original_task: str, screenshot: bytes) -> list:
     ]
 ```
 
-This doesn't eliminate injection — the model can still be influenced by screen content — but it consistently raises the bar. The original task is always in context, and the agent is explicitly prompted to treat it as authoritative. Combine with instruction-following evaluation at each step: if the proposed action diverges from the original task scope, flag it.
+This doesn't eliminate injection — the model can still be influenced by screen content, and text prepended to a multimodal prompt does not provide the cryptographic separation of a system-prompt delimiter — but it consistently raises the bar. The original task is always in context, and the agent is explicitly prompted to treat it as authoritative. Combine with instruction-following evaluation at each step: if the proposed action diverges from the original task scope, flag it.
 
 ### 5. Visual Content Scanning
 
@@ -290,16 +295,31 @@ INJECTION_PATTERNS = [
 ]
 
 def scan_for_injection(screenshot: Image.Image) -> list[str]:
-    """OCR the screenshot and check for injection signature patterns."""
+    """OCR the screenshot and check for injection signature patterns.
+    
+    Returns matched pattern strings if any injection signatures found.
+    This is an advisory/detection layer — the caller must decide whether
+    to block the screenshot from being sent to the agent. It will not
+    catch adversarially crafted pixel perturbations or very-low-contrast
+    text that OCR cannot recover.
+    """
     text = pytesseract.image_to_string(screenshot, config='--psm 11')
     findings = []
     for pattern in INJECTION_PATTERNS:
         if re.search(pattern, text, re.IGNORECASE):
             findings.append(pattern)
     return findings
+
+def safe_screenshot_for_agent(screenshot: Image.Image) -> Image.Image | None:
+    """Returns screenshot if clean, None if injection patterns detected."""
+    findings = scan_for_injection(screenshot)
+    if findings:
+        log_injection_attempt(findings)   # alert/log; don't silently pass
+        return None   # caller should halt agent step and notify user
+    return screenshot
 ```
 
-This catches the obvious cases — large-font injection text in the rendered viewport — but has two known limits: it cannot catch white-on-white text (invisible in the screenshot) or adversarially crafted pixel-level perturbations. Treat it as a defense layer, not a complete solution.
+This catches the obvious cases — large-font injection text in the rendered viewport — but has known limits: it cannot catch adversarially crafted pixel-level perturbations, and its OCR recovery of low-contrast text (near-white on white, very small fonts) depends on Tesseract's preprocessing thresholds. Treat it as a detection layer, not a complete solution.
 
 ### 6. Comprehensive Audit Logging
 
