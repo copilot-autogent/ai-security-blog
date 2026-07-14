@@ -41,7 +41,7 @@ The technique is conceptually similar to image adversarial examples (small, impe
 
 Carlini and Wagner used gradient-based optimization to find audio perturbations that cause DeepSpeech to transcribe a target phrase of the attacker's choosing, subject to the constraint that the perturbation is below a perceptual threshold. Their result: targeted audio files can be made to transcribe as any chosen phrase while remaining near-indistinguishable to a human listener, within the digital domain.
 
-**Important scope note**: The C&W attack was evaluated in a direct (digital-waveform) threat model. Physical over-the-air variants — where adversarial audio is played through a speaker and captured by a microphone — are significantly harder, because codec compression, speaker distortion, and room acoustics all degrade the adversarial perturbation. Robust over-the-air adversarial audio is an active research area (see CommanderSong, Qin et al. 2019, Yakura & Sakuma 2018) but requires substantially more effort than the original digital attack. The C&W result establishes the fundamental feasibility of audio adversarial attacks; robust physical deployment of such attacks against deployed systems remains more difficult.
+**Important scope note**: The C&W attack was evaluated in a direct (digital-waveform) threat model. Physical over-the-air variants — where adversarial audio is played through a speaker and captured by a microphone — are significantly harder, because codec compression, speaker distortion, and room acoustics all degrade the adversarial perturbation. Robust over-the-air adversarial audio is an active research area (CommanderSong, Qin et al. 2019, Yakura & Sakuma 2018) but requires substantially more effort than the digital attack and often assumes white-box access to the target ASR. The C&W result establishes the fundamental feasibility of audio adversarial attacks; robust physical deployment against deployed systems remains a harder, less-fully-characterized problem.
 
 ### Implications for ASR-Fronted AI Agents
 
@@ -139,13 +139,13 @@ The pipeline described above — microphone → ASR → text → LLM — is incr
 
 This architectural shift has security implications in both directions.
 
-**Potentially harder to attack**: End-to-end audio models don't have a discrete ASR stage where adversarial perturbations optimized against a specific ASR model can redirect transcription. Transfer between architectures is not automatic.
+**Potentially harder to attack for ASR-targeted perturbations**: End-to-end audio models don't have a discrete ASR stage where adversarial perturbations optimized against a specific ASR model can redirect transcription. Transfer between architectures is not automatic.
 
-**Potentially easier to attack on safety alignment**: The multimodal jailbreak research ([arXiv:2510.20223](https://arxiv.org/abs/2510.20223)) demonstrates that audio-domain attacks can defeat *safety alignment* in end-to-end audio models at rates of 74–75% against models like GPT-4o-Audio and Gemini-2.5-Flash using simple signal perturbations (pitch shifts, echo, volume changes). This is a different threat from instruction injection: it shows that safety behaviors trained on text don't generalize to the audio modality, meaning audio inputs can produce harmful outputs that equivalent text inputs would refuse.
+**Documented safety alignment failures in the audio domain**: The multimodal jailbreak research ([arXiv:2510.20223](https://arxiv.org/abs/2510.20223)) demonstrates that simple audio perturbations (pitch shifts, echo, volume changes) can defeat safety alignment in end-to-end audio models at rates of 74–75% against models like GPT-4o-Audio and Gemini-2.5-Flash on high-stakes content categories. This is specifically a safety bypass result — it shows that safety behaviors trained on text don't generalize to the audio modality, so audio inputs can produce harmful outputs that equivalent text inputs would refuse.
 
-**The open research question**: Whether adversarial audio can cause end-to-end audio models to treat attacker-injected content as trusted instructions (the injection threat) is less established than the safety bypass evidence. The physics of ultrasonic injection still applies to any device with a microphone; how an end-to-end audio model would process demodulated ultrasonic content is an open question. This is an area of active and rapidly evolving research.
+**The open research question**: Whether adversarial audio can cause end-to-end audio models to treat attacker-injected content as trusted instructions (the instruction injection threat, distinct from safety bypass) is less established. The physics of ultrasonic injection still applies to any device with a microphone; how an end-to-end audio model would process demodulated ultrasonic content is an open question that the academic literature has not fully characterized.
 
-The practical implication: organizations deploying GPT-4o Realtime or Gemini Live in high-stakes contexts (phone agents with tool access, voice-controlled autonomous systems) should not assume that moving to an end-to-end architecture eliminates audio-domain attack risk. The safety alignment failure mode is documented; the injection threat model requires additional scrutiny specific to end-to-end architectures.
+The practical implication: organizations deploying GPT-4o Realtime or Gemini Live in high-stakes contexts should not assume that moving to an end-to-end architecture eliminates audio-domain attack risk. The safety alignment failure mode is documented; the instruction injection threat warrants scrutiny specific to the architecture being deployed.
 
 ## Defenses: What Actually Helps
 
@@ -159,11 +159,11 @@ Adversarial audio perturbations can be detected by analyzing the audio signal fo
 
 ### Ultrasonic Filtering
 
-Ultrasonic command injection must be mitigated at the **hardware layer** — software-only approaches have significant limitations:
+Ultrasonic command injection must be addressed at the **hardware layer**. Because the demodulation occurs in the analog front-end before digitization, software-only approaches have fundamental limits:
 
-- **Hardware bandpass filtering**: A hardware low-pass filter applied before or within the analog front-end, cutting frequencies above ~18 kHz before they reach the ADC, prevents the demodulation nonlinearity from producing audible signals. This is the most reliable mitigation. Some device manufacturers have begun implementing this.
-- **Software bandpass filtering limitation**: A software filter applied to the *digitized* microphone signal operates after analog-to-digital conversion — the point at which DolphinAttack's demodulation has already occurred. Software filtering can remove remaining ultrasonic energy in the digital domain but does not reliably prevent the demodulated baseband signal from appearing in the audio stream that ASR processes.
-- **Frequency analysis monitoring**: Logging the frequency distribution of microphone input and alerting when significant energy is detected above normal speech ranges can flag potential ultrasonic injection attempts, even if not all ultrasonic content can be filtered in software.
+- **Hardware low-pass filtering**: A hardware filter applied before or within the analog front-end, cutting frequencies above ~18 kHz before they reach the ADC, prevents the demodulation nonlinearity from producing audible signals. This is the most reliable mitigation. Some device manufacturers have begun implementing this in response to published research.
+- **Software filtering limitation**: A software filter applied to the *digitized* microphone signal operates after analog-to-digital conversion — the point at which DolphinAttack's demodulation has already occurred. Software filtering can suppress any residual ultrasonic energy in the digital domain, but does not prevent the demodulated baseband signal from already appearing in the audio stream.
+- **Hardware-layer frequency monitoring**: Systems with access to raw analog signal characteristics (prior to digitization) can instrument ultrasonic band energy as an intrusion detection signal. Standard software-only monitoring of the digitized signal will not reliably detect the ultrasonic carrier in most deployed stacks, since the carrier is demodulated — not preserved — by the analog front-end.
 
 ### Multi-Modal Confirmation for High-Stakes Commands
 
@@ -175,10 +175,10 @@ This is the voice equivalent of multi-factor authentication: the attacker can in
 
 For systems using voiceprint authentication:
 
-- **Challenge-response liveness detection**: Require the caller to respond to dynamic challenges (repeat a randomly generated phrase or answer a novel question). This raises the bar for replay attacks using static cloned audio, though note that real-time neural TTS systems can generate arbitrary speech on demand, so challenge-response alone is not a sufficient defense against an attacker using live voice synthesis.
+- **Challenge-response liveness detection**: Require the caller to respond to dynamic challenges (repeat a randomly generated phrase or answer a novel question). This raises the bar for replay attacks using static cloned audio, though note that real-time neural TTS systems can generate arbitrary speech on demand — challenge-response alone is not sufficient against an attacker using live voice synthesis.
 - **Anti-spoofing classifiers**: Add a spoofing detection model that distinguishes synthesized speech from live speech, running in parallel with voiceprint matching. Current anti-spoofing classifiers have meaningful error rates against high-quality neural TTS, so this should be treated as a signal rather than a hard gate.
 - **Behavioral biometrics**: Supplement voiceprint matching with call metadata — calling pattern analysis, device fingerprinting, behavioral history — so that voice alone is not the sole authentication signal.
-- **Risk-based authentication**: Require stronger authentication for high-stakes actions (money movement, sensitive record access) than for low-stakes queries (account balance inquiries). No single voice authentication mechanism is currently robust against determined adversaries with high-quality TTS access.
+- **Risk-based authentication**: Require stronger authentication for high-stakes actions (money movement, sensitive record access) than for low-stakes queries (account balance inquiries). No single voice authentication mechanism is currently robust against determined adversaries with high-quality TTS access; layering is necessary.
 
 ### Intent Verification at the LLM Layer
 
@@ -202,20 +202,20 @@ Practitioners deploying voice-enabled AI agents should assess their threat model
 
 | Attack | Attacker Capability Required | Detection Signal | Mitigation |
 |---|---|---|---|
-| Digital adversarial audio perturbations | Can inject audio into digital pipeline (no over-the-air required) | Multi-ASR disagreement, spectral anomaly | Audio adversarial detection, context-layer intent verification |
-| Robust over-the-air adversarial audio | White-box ASR access + physical proximity | Multi-ASR disagreement (less reliable) | Ensemble ASR, hardware filtering, intent verification |
-| Ultrasonic injection (DolphinAttack) | Physical proximity with ultrasonic emitter | Above-band analog energy | Hardware bandpass filter (pre-ADC) |
+| Digital adversarial audio perturbations | Can inject audio into digital pipeline | Multi-ASR disagreement, spectral anomaly | Audio adversarial detection, intent verification |
+| Robust over-the-air adversarial audio | White-box ASR access + physical proximity | Multi-ASR disagreement (less reliable) | Ensemble ASR, intent verification |
+| Ultrasonic injection (DolphinAttack) | Physical proximity with ultrasonic emitter | Hardware-layer analog energy (not reliably visible to software) | Hardware low-pass filter (pre-ADC) |
 | Hidden voice commands in music/ambient | Can play audio near device | Low-amplitude command signature | Multi-ASR, voice activity detection thresholds |
-| Voice authentication bypass | TTS/voice cloning capability + target audio sample | Anti-spoofing classifier | Anti-spoofing classifier + behavioral biometrics + out-of-band confirmation |
+| Voice authentication bypass | TTS/voice cloning capability + target audio sample | Anti-spoofing classifier, behavioral anomaly | Anti-spoofing classifier + behavioral biometrics + out-of-band confirmation |
 | Phone-channel instruction injection | Can call the AI agent and play TTS audio | Context inconsistency, instruction boundary detection | Intent verification at LLM layer, multi-turn confirmation for sensitive actions |
 
-High-risk deployments — phone agents in banking or healthcare, voice-controlled systems with consequential tool access — should treat the full threat model as active, not theoretical. These attacks have been demonstrated against deployed consumer devices and production AI systems. The academic literature establishing them is from 2015–2018; the attack techniques are mature and widely documented.
+Attacks with peer-reviewed, widely replicated demonstrations against production consumer hardware — DolphinAttack (16 devices), Carlini & Wagner (DeepSpeech, digital domain), Vaidya et al. (ASR gap exploitation), and phone-channel injection via TTS — represent an established threat model. Robust over-the-air adversarial audio and instruction injection against end-to-end audio LLMs are active research areas where feasibility has been partially demonstrated but the full characterization is ongoing.
 
 ## The Bottom Line
 
 Voice AI agents face a threat class that text-based AI security doesn't address: attacks delivered through the physics of sound. Adversarial audio perturbations operate below human perception while redirecting ASR transcription — with robust over-the-air variants extending feasibility to physical environments. Ultrasonic signals exploit microphone analog front-end nonlinearities to inject commands humans cannot hear. Voice cloning and adversarial voiceprint attacks break authentication assumptions in phone-channel deployments. End-to-end audio models face documented safety alignment failures in the audio domain.
 
-The defenses exist — hardware bandpass filtering, anti-spoofing classifiers, multi-modal confirmation, intent verification at the LLM layer. But they require knowing that the threat model is fundamentally different from text-based AI systems. Organizations deploying voice AI without extending their security model to the audio modality are missing an attack surface that has been systematically documented and exploited for nearly a decade.
+The defenses exist — hardware low-pass filtering, anti-spoofing classifiers, multi-modal confirmation, intent verification at the LLM layer. But they require knowing that the threat model is fundamentally different from text-based AI systems. Organizations deploying voice AI without extending their security model to the audio modality are missing an attack surface that has been systematically documented for nearly a decade.
 
 When your AI agent can be instructed by sounds it cannot hear, the attack surface extends beyond the keyboard.
 
