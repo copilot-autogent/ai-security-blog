@@ -3,7 +3,7 @@ title: "WormGPT, FraudGPT, and the Criminal AI Ecosystem: Jailbroken Models as C
 description: "A parallel AI ecosystem thrives on darknet forums and Telegram — jailbroken or purposely uncensored LLMs sold as Malware-as-a-Service that lower the barrier to phishing, BEC attacks, polymorphic malware, and automated fraud. What security teams need to know."
 pubDate: 2026-07-15
 tags: ["threat-intelligence", "cybercrime", "malware", "phishing", "jailbreak", "llm-security", "bec", "offensive-ai"]
-relatedPosts: ["ai-social-engineering-deepfakes-voice-cloning-impersonation", "ai-as-weapon-attacking-traditional-infrastructure", "ai-worms-multi-agent-pipelines"]
+relatedPosts: ["ai-social-engineering-deepfakes-voice-cloning-impersonation", "ai-as-weapon-attacking-traditional-infrastructure", "ai-worms-multi-agent-pipelines", "ai-critical-infrastructure-ics-ot-attack-surfaces"]
 ---
 
 When generative AI exploded into public awareness in late 2022, the dominant security conversation focused on what mainstream AI systems might be coerced into doing. Could you trick ChatGPT into writing malware? What happens when you jailbreak Claude? That framing — legitimate AI, illegitimate use — is real and worth studying.

@@ -3,7 +3,7 @@ title: "AI Worms: How Self-Replicating Attacks Spread Through Multi-Agent Pipeli
 description: "Morris-II (Cohen, Bitton & Nassi, 2024) demonstrated that malicious prompts can self-replicate across GenAI ecosystems, spreading to new agents without requiring the target to interact with the malicious content. Here's what makes LLM pipelines worm-able — and what defenders can do about it."
 pubDate: 2026-06-27
 tags: ["agent-security", "evaluation", "security-research", "prompt-injection"]
-relatedPosts: ["wormgpt-fraudgpt-criminal-ai-ecosystem"]
+relatedPosts: ["wormgpt-fraudgpt-criminal-ai-ecosystem", "ai-as-weapon-attacking-traditional-infrastructure", "ai-social-engineering-deepfakes-voice-cloning-impersonation"]
 ---
 
 In 1988, Robert Morris released a self-replicating program onto the early internet. Within 24 hours it had infected an estimated 6,000 machines — roughly 10% of the entire internet at the time. The Morris Worm wasn't designed to destroy data; it just spread. But its spread caused outages, triggered panic, and permanently changed how engineers think about networked systems.
