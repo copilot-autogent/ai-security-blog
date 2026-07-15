@@ -3,7 +3,7 @@ title: "AI in Critical Infrastructure: Attack Surfaces in Industrial Control Sys
 description: "How AI integration into power grids, water treatment, manufacturing, and transportation creates novel attack surfaces distinct from traditional ICS/SCADA threats — sensor spoofing against ML anomaly detectors, adversarial attacks on predictive maintenance, model poisoning in federated industrial AI, and mitigations specific to OT environments."
 pubDate: 2026-07-13
 tags: ["adversarial-ml", "adversarial-examples", "ics-security", "ot-security", "critical-infrastructure", "scada", "ai-security", "defense-patterns"]
-relatedPosts: ["ai-as-weapon-attacking-traditional-infrastructure", "adversarial-examples-foundational-ml-attack-production", "mitre-atlas-adversarial-ai-threat-landscape"]
+relatedPosts: ["ai-as-weapon-attacking-traditional-infrastructure", "adversarial-examples-foundational-ml-attack-production", "mitre-atlas-adversarial-ai-threat-landscape", "wormgpt-fraudgpt-criminal-ai-ecosystem"]
 ---
 
 Researchers have demonstrated that an adversary can inject carefully crafted false readings into the sensor streams of an industrial anomaly detection system — readings that, examined individually, look entirely plausible — and cause the ML model to classify an ongoing equipment fault as normal operation. The attack is silent. The physical process is degrading. The AI watchdog says nothing is wrong.

@@ -24,7 +24,7 @@ The SlashNext researchers tested it directly. They prompted WormGPT to generate 
 
 The BEC threat is illustrative because BEC is already the most financially damaging category of cybercrime. The FBI's Internet Crime Complaint Center reported BEC losses of approximately $2.9 billion in 2023 alone. WormGPT did not create this threat class. It lowered the skill threshold required to execute it.
 
-Within weeks of the SlashNext publication, a second tool surfaced. Netenrich researcher Rakesh Krishnan documented FraudGPT in July 2023 — a similar model marketed on Telegram and dark web forums. FraudGPT was sold on a subscription model ranging from $200/month to $1,700/year, with marketing materials listing its capabilities: writing undetectable malware, generating phishing pages, creating cracking tools, and producing BEC email chains customized per target industry. Krishnan's research noted the seller had accumulated over 3,000 confirmed sales and positive reviews across forum threads by the time of publication.
+Within weeks of the SlashNext publication, a second tool surfaced. Netenrich researcher Rakesh Krishnan documented FraudGPT in July 2023 — a similar model marketed on Telegram and dark web forums. FraudGPT was sold on a subscription model ranging from $200/month to $1,700/year, with marketing materials listing its capabilities: writing undetectable malware, generating phishing pages, creating cracking tools, and producing BEC email chains customized per target industry. Krishnan's research noted the seller was claiming over 3,000 positive reviews and confirmed sales on forum threads by the time of publication.
 
 The subscription pricing is notable. These were not one-off tools sold to elite actors. They were consumer-grade criminal services with recurring revenue models.
 
@@ -36,11 +36,9 @@ WormGPT and FraudGPT were the first tools to attract widespread security researc
 
 **EvilGPT** appeared with similar positioning — an unrestricted chatbot for offensive use, sold at lower price points targeting volume sales rather than premium subscribers.
 
-**DarkBERT** occupied a distinct technical niche. Rather than a criminal marketplace tool, DarkBERT was a research model developed by researchers at KAIST and S2W — trained specifically on dark web content to improve cybersecurity intelligence work. Its existence is notable in a different sense: it demonstrates that models trained on dark web corpus data produce meaningfully better performance on dark web intelligence tasks, which implies that criminal actors with the motivation to replicate the technique could build operationally relevant intelligence tooling. The research itself was published for defensive purposes; the underlying technique is available to any actor.
-
-**PoisonGPT** emerged from academic research at Mithril Security, and similarly occupies the PoC-not-criminal-product category. The researchers demonstrated that an open-weight model (Falcon-7B) could be surgically modified to produce specific false factual claims while otherwise performing normally — a targeted disinformation capability embedded in a model that passed standard evaluations. PoisonGPT is a supply-chain threat demonstration rather than an attacker-service tool; it belongs here not as part of the marketplace, but as evidence that the open-weight model ecosystem enables threat classes that extend beyond the Telegram subscription services. The criminal AI tooling economy is wider than WormGPT-style services.
-
 By early 2024, the pattern was established: a marketplace with multiple vendors, competitive pricing, recurring revenue models, Telegram-based customer support, and iterative product updates in response to user feedback. This is not the tradecraft of isolated lone-wolf attackers. It is the structure of a legitimate software business, applied to criminal services.
+
+Two additional projects from the research community — **DarkBERT** (KAIST/S2W, trained on dark web corpus for defensive intelligence work) and **PoisonGPT** (Mithril Security, a supply-chain PoC demonstrating surgical false-fact injection into open-weight models) — are not criminal marketplace tools, but are worth noting as illustrations of the wider threat surface that open-weight model accessibility creates: the risks extend beyond subscription phishing services into model integrity, intelligence tooling, and supply-chain attacks.
 
 ## How These Tools Are Actually Built
 
@@ -122,7 +120,7 @@ The appropriate response is not panic — BEC attacks were already a multi-billi
 ## Further Reading
 
 - Kelley, D. "WormGPT – The Generative AI Tool Cybercriminals Are Using to Launch Business Email Compromise Attacks." SlashNext, July 2023. The primary research source for WormGPT documentation.
-- CheckPoint Research. "FraudGPT: Another Worry in the World of Generative AI." August 2023. Documents FraudGPT capabilities and Telegram distribution.
+- Krishnan, R. "FraudGPT: The Villain Avatar of ChatGPT." Netenrich, July 2023. Primary source documenting FraudGPT capabilities and darknet distribution.
 - Europol Innovation Lab. "ChatGPT – The Impact of Large Language Models on Law Enforcement." April 2023. Broad analysis of LLM implications for criminal activity and law enforcement response.
 - FBI Internet Crime Complaint Center (IC3) Annual Reports. For current BEC loss statistics.
 - Fang, R. et al. "LLM Agents can Autonomously Exploit One-day Vulnerabilities." arXiv:2404.08144, April 2024. Relevant context on AI offensive capability development.
