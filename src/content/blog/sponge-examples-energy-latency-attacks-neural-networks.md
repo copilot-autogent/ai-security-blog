@@ -60,7 +60,7 @@ Modern large language models amplify every sponge mechanism simultaneously:
 
 **KV cache pressure**. Long-context transformers maintain key-value caches that grow with sequence length. A sponge input that saturates the KV cache consumes memory that could otherwise hold cached state for concurrent requests. Depending on the serving architecture, the effect ranges from reduced concurrency and longer queue times to increased memory pressure and admission throttling for other users sharing the inference backend — not necessarily direct cache eviction (many systems isolate KV blocks per request), but meaningful throughput degradation across the multi-tenant population.
 
-**Multi-modal inputs**. Vision-language models process images before encoding. For standard Vision Transformer (ViT) architectures, inference cost is driven primarily by image resolution and patch count — more patches require more attention operations in the vision encoder. An adversarially crafted high-resolution image maximizes patch count and thus encoder cost before any text processing begins. For adaptive-compute vision models (those with dynamic routing or early exit), image content complexity can additionally force late-exit paths.
+**Multi-modal inputs**. Vision-language models process images before encoding. For standard Vision Transformer (ViT) architectures, inference cost is driven primarily by image resolution and patch count — more patches require more attention operations in the vision encoder. Where VLM pipelines lack preprocessing caps (resolution limits, tile count ceilings), an adversarially crafted high-resolution image maximizes patch count and thus encoder cost before any text processing begins. In practice, many production pipelines do apply max-resolution preprocessing; this attack path is most relevant to deployments that accept arbitrary-resolution inputs or that can be manipulated to bypass tiling limits.
 
 ## The Threat Models
 
@@ -154,7 +154,7 @@ The defense is partial: it bounds output cost but not input attention cost. A 10
 
 ### Server-Side Request Costing and Dynamic Backpressure
 
-Instrument the inference serving layer to measure actual compute cost per request — GPU time, memory bandwidth, FLOPs — and maintain a per-user compute budget alongside the per-user request budget. A user who submits one very expensive request is subject to backpressure (queuing delay, throttling) on subsequent requests even if they haven't exceeded their request-count quota.
+Instrument the inference serving layer to measure actual compute cost per request — GPU time, memory bandwidth, FLOPs — and maintain a per-user compute budget alongside the per-user request budget. A user who submits one very expensive request is subject to backpressure (queuing delay, throttling) on subsequent requests even if they haven't exceeded their request-count quota. **Caveat on Sybil resistance**: per-user compute budgets address single-account abuse but not multi-account distribution. An attacker spreading expensive requests across many free-tier accounts or compromised credentials can evade per-user limits; effective coverage requires combining compute accounting with Sybil-resistance measures (phone/payment verification, behavioral clustering across accounts, IP-level compute budgets).
 
 This is the analog of bandwidth-based rate limiting for network traffic: rather than counting packets, count bytes. For inference, rather than counting requests, count GPU-seconds.
 
@@ -204,7 +204,7 @@ For organizations deploying inference APIs at scale, the practical risk assessme
 
 **Low risk**: fixed-architecture models with no dynamic computation (classical CNNs, transformers with fixed input and output lengths), isolated single-tenant deployments where cost inflation doesn't affect other users.
 
-The defenses with the highest impact-to-effort ratio are per-request timeout enforcement (cheap to implement, immediately effective) and output token limits (already built into most generation APIs). Hardware performance counter monitoring requires more investment but provides the most robust detection capability.
+The defenses with the highest impact-to-effort ratio are per-request timeout enforcement (cheap to implement, immediately effective) and input token length limits — which directly constrain the O(n²) prefill cost that dominates LLM sponge attacks. Output token limits (`max_tokens`) are already built into most generation APIs and cap decode-phase cost, but are a partial defense: they don't address long-prompt prefill, which is typically the larger sponge surface for modern LLMs. Hardware performance counter monitoring requires more investment but provides the most robust detection capability.
 
 ## Summary
 
