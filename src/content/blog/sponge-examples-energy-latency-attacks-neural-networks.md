@@ -14,11 +14,11 @@ The result is a denial-of-service attack operating at a level that conventional 
 
 This post covers what sponge examples are, how the attack works across NLP and vision models, the specific mechanics for modern LLMs, what the real-world threat models look like, why standard defenses fail, and what actually helps.
 
-## The Paper: Shumailov et al., NeurIPS 2021
+## The Paper: Shumailov et al., EuroS&P 2021
 
-The foundational reference is Shumailov, Zhao, Gal, Papernot, Anderson, and Gal, "Sponge Examples: Energy-Latency Attacks on Neural Networks," published at the IEEE European Symposium on Security and Privacy (EuroS&P 2021) and also appearing as NeurIPS 2021 workshop material (arXiv:2006.03463).
+The foundational reference is Shumailov, Zhao, Bates, Papernot, Mullins, and Anderson, "Sponge Examples: Energy-Latency Attacks on Neural Networks," published at the IEEE European Symposium on Security and Privacy (EuroS&P 2021) (arXiv:2006.03463).
 
-The core empirical result: on standard NLP models (BERT, AlBERT, ALBERT-xxlarge), adversarially crafted inputs increased energy consumption by **10 to 35 times** relative to typical inputs. On vision models, the increase was smaller but still meaningful — 1.5 to 3x on architectures using dynamic computation (adaptive computation graphs, early-exit networks).
+The core empirical result: on seq2seq translation models (WMT16 benchmarks), adversarially crafted inputs increased energy consumption by **10 to 35 times** relative to typical inputs. On classification models such as BERT variants, increases were more modest. On vision models, the increase was smaller but still meaningful — 1.5 to 3x on architectures using dynamic computation (adaptive computation graphs, early-exit networks).
 
 The attack targets a structural property of neural networks, not a bug in any particular implementation. Understanding why requires understanding what determines inference cost.
 
@@ -32,7 +32,7 @@ Vulnerable models are those with **input-dependent computation**:
 
 **Dynamic computation graphs**. Some architectures — adaptive computation networks, MoE routing, early-exit networks — take different paths through the compute graph depending on input content. Early-exit networks, designed to save energy by short-circuiting easy inputs, provide confidence signals that an adversary can invert: maximize the difficulty signal to force late exit (most computation), or manipulate it to trigger long chains. The energy-saving mechanism becomes the attack surface.
 
-**Beam search and auto-regressive generation**. In seq2seq models and language model generation, the output length is not fixed. Beam search with width `k` explores `k` candidate sequences at each decoding step. More steps × wider beam = quadratically more computation. An input that triggers longer, more complex outputs amplifies inference cost multiplicatively.
+**Beam search and auto-regressive generation**. In seq2seq models and language model generation, the output length is not fixed. Beam search with width `k` explores `k` candidate sequences at each decoding step. The cost scales linearly with both beam width and output length — a wider beam or longer output multiplies inference time directly. An input that triggers longer, more complex outputs amplifies inference cost proportionally.
 
 **Tokenization variability**. Some tokenization schemes (BPE, WordPiece) produce variable-length token sequences from equal-length text. Adversarial inputs can be crafted to maximize token count from the tokenizer, inflating the effective sequence length before attention even begins.
 
@@ -44,7 +44,7 @@ For white-box attacks (gradient access), they used gradient ascent on the energy
 
 For NLP, the attack exploits the relationship between input structure and attention cost:
 
-**Maximizing attended tokens**. Inputs that cause dense attention — where each token attends heavily to many others rather than a few — are more expensive. Adversarial inputs can push attention patterns from sparse (cheap) to dense (expensive).
+**Maximizing sequence length**. In standard dense-attention transformers, the dominant cost driver is sequence length (attention scales as O(n²) in sequence length). Adversarial inputs that cause longer effective token sequences — through pathological tokenization or prompting patterns — are therefore more expensive. Attention weight distribution (sparse vs. dense) is a secondary effect; the primary lever is the number of tokens in play.
 
 **Triggering worst-case tokenization**. Inputs crafted with unusual character sequences, rare unicode, or specific subword combinations force tokenizers to produce many more tokens than the raw character count would suggest. A 100-character input can produce 150 tokens if it hits pathological tokenization cases.
 
@@ -86,7 +86,7 @@ Shumailov et al. explicitly demonstrated this in their energy measurements using
 
 ### Fine-Tuning and Training Poisoning
 
-A related attack: injecting sponge inputs into training datasets so that the model learns to produce expensive computation patterns on certain trigger inputs. This isn't just adversarial training; it's an attack on the operational cost of running the model at inference time, embedded invisibly in the model's weights. A model deployed from a poisoned dataset may have artificially elevated inference costs at production scale that are indistinguishable from legitimate increased demand.
+A related — and more speculative — attack vector: injecting crafted inputs into training datasets to influence what patterns the model learns to produce at inference time. For models with dynamic computation paths (early-exit networks, adaptive routing), poisoning could in principle bias the routing decisions toward expensive paths. However, most fixed-architecture models with server-enforced output limits have bounded inference cost regardless of training data; this threat is most relevant to architectures where inference cost is genuinely input-dependent at the learned-behavior level. This attack class goes beyond the original Shumailov et al. paper, which focuses on inference-time inputs rather than training-time poisoning.
 
 ## Why Rate Limiting Doesn't Catch Sponge Attacks
 
@@ -210,10 +210,10 @@ The defenses with the highest impact-to-effort ratio are per-request timeout enf
 
 Sponge examples represent a threat class that's fundamentally distinct from both classical adversarial attacks (which target output correctness) and volumetric DoS (which targets request volume). They exploit a real structural property of input-adaptive computation — attention's O(n²) scaling, dynamic routing, auto-regressive generation — to impose adversarially inflated compute costs within a single, quota-compliant request.
 
-The Shumailov et al. measurement (10–35× energy increase on NLP models, peer-reviewed at NeurIPS 2021) establishes that this is a practical attack, not a theoretical curiosity. The defenses — compute budget enforcement, input complexity scoring, hardware PMU monitoring, output length limits, per-user compute accounting — are implementable with current infrastructure, but require deliberate instrumentation work rather than default configuration.
+The Shumailov et al. measurement (10–35× energy increase on seq2seq translation models, peer-reviewed at IEEE EuroS&P 2021) establishes that this is a practical attack, not a theoretical curiosity. The defenses — compute budget enforcement, input complexity scoring, hardware PMU monitoring, output length limits, per-user compute accounting — are implementable with current infrastructure, but require deliberate instrumentation work rather than default configuration.
 
 The gap to address: most deployments have request-count rate limits and no compute-per-request accounting. Closing that gap is the primary actionable step.
 
 ---
 
-*Primary reference: Shumailov, Zhao, Gal, Papernot, Anderson, and Gal. "Sponge Examples: Energy-Latency Attacks on Neural Networks." IEEE European Symposium on Security and Privacy, 2021. arXiv:2006.03463.*
+*Primary reference: Shumailov, Zhao, Bates, Papernot, Mullins, and Anderson. "Sponge Examples: Energy-Latency Attacks on Neural Networks." IEEE European Symposium on Security and Privacy (EuroS&P), 2021. arXiv:2006.03463.*
