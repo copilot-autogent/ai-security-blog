@@ -1,6 +1,6 @@
 ---
 title: "Prompt Cache Timing Attacks: Side-Channel Leakage in LLM API Infrastructure"
-description: "Major LLM providers cache prompt prefixes across requests to reduce latency and cost — but shared cache infrastructure creates a timing side-channel. An attacker measuring API response times can infer whether a specific prefix is cached, leaking information about other users' system prompts and conversation context."
+description: "Major LLM providers cache prompt prefixes to reduce latency and cost — but shared cache infrastructure creates a timing side-channel. An attacker with access to a shared API key or multi-tenant deployment can measure whether a specific prefix is cached, leaking information about co-tenant system prompts and conversation context within the same cache namespace."
 pubDate: 2026-07-15
 tags: ["side-channel", "prompt-injection", "inference-infrastructure", "cache-attacks", "llm-security", "privacy"]
 relatedPosts: ["system-prompt-extraction-attacks", "securing-ai-inference-stack-gpu-memory-model-serving", "privacy-preserving-ai-inference-tee-homomorphic-encryption-confidential-computing", "adversarial-prompt-caching-kv-timing-attacks"]
@@ -24,7 +24,7 @@ Provider implementations differ on the specifics:
 
 **Google Gemini** supports explicit context caching with configurable TTLs. Documentation covers cost and token structures but, like the other providers, doesn't specify the storage-layer isolation architecture.
 
-All three use the same foundational model: a hash of the prompt prefix content (combined with model version and other request parameters) serves as the cache key. Two requests share a cache entry when they match on the full key — same model, same prefix text.
+The general model across providers — based on public documentation — is that a hash of the prompt prefix content (combined with model version and other request parameters) serves as the cache key. Two requests share a cache entry when they match on the full key. Providers have not published specifications of the exact key derivation scheme, including whether project, organization, or tool parameters are included; the precise granularity may vary and is not independently verifiable.
 
 ## The Timing Side-Channel
 
@@ -58,7 +58,7 @@ This means the most immediately actionable attack scenario is **intra-account**:
 - A development/staging environment shares an API key with production. Probing from staging can detect what system prompts are active in production.
 - A contractor or internal attacker has limited API access but not direct access to the system prompt configuration.
 
-The oracle doesn't return the content of the cached prefix — it only confirms or denies presence of a *known* target string. The attacker must already have a hypothesis about the prompt text to test.
+The oracle doesn't return the content of the cached prefix — it only confirms or denies presence of a *tested* prefix. For a brute-force oracle over an unknown prompt, the attacker must enumerate candidate strings, which is only tractable when the search space is small (known templates, short prefixes, constrained vocabulary). An iterative character-by-character probe extending a confirmed prefix can in principle recover unknown suffixes one token at a time if the signal is reliable enough — making the leakage potentially stronger than simple whole-string confirmation, though significantly harder to execute in practice under network jitter.
 
 ### Cross-Account Timing: Where Isolation Should Hold
 
@@ -96,7 +96,7 @@ The pattern is consistent: shared infrastructure with observable behavior create
 
 ### For Application Developers
 
-**Use separate API keys per tenant.** If your application serves multiple tenants, each with distinct system prompts or conversation contexts, assign each tenant its own API key. This moves them into separate cache namespaces, preventing any intra-account cross-tenant timing leakage. Cost: you now manage N API keys rather than one.
+**Use separate accounts or projects per tenant, not just separate API keys.** If your application serves multiple tenants, ensure each tenant operates in an isolated cache namespace — typically a separate provider account or project, depending on how the provider partitions cache state. API keys alone may not provide cache isolation if multiple keys map to the same underlying account or project namespace; check provider documentation for the exact isolation unit before assuming key-level separation is sufficient. Where supported, sub-account namespace isolation (e.g., separate projects or organizations) is the correct isolation boundary.
 
 **Add a deployment-unique identifier to every system prompt.** Include a short, stable, deployment-specific prefix at the beginning of your system prompt — a UUID or deployment name works. This changes the provider-computed cache key, preventing an attacker who knows your generic prompt template from using a timing oracle to confirm your deployment uses it. The identifier doesn't need to be secret; it just needs to be unique per deployment.
 
