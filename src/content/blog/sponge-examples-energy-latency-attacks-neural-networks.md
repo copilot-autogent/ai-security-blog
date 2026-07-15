@@ -28,7 +28,7 @@ For a fixed-architecture model like a CNN with no dynamic components, inference 
 
 Vulnerable models are those with **input-dependent computation**:
 
-**Attention mechanisms** (transformers, self-attention). The attention operation has O(n²) complexity in sequence length: computing attention between n tokens requires n² pair-wise attention scores. A 512-token input requires 4× the attention computation of a 256-token input. An attacker who can push inputs toward longer processed sequences directly scales inference cost quadratically.
+**Attention mechanisms** (transformers, self-attention). The attention operation has O(n²) complexity in sequence length: computing attention between n tokens requires n² pairwise attention scores. A 512-token input requires 4× the attention computation of a 256-token input. An attacker who can push inputs toward longer processed sequences directly scales inference cost quadratically.
 
 **Dynamic computation graphs**. Some architectures — adaptive computation networks, MoE routing, early-exit networks — take different paths through the compute graph depending on input content. Early-exit networks, designed to save energy by short-circuiting easy inputs, provide confidence signals that an adversary can invert: maximize the difficulty signal to force late exit (most computation), or manipulate it to trigger long chains. The energy-saving mechanism becomes the attack surface.
 
@@ -54,13 +54,13 @@ For NLP, the attack exploits the relationship between input structure and attent
 
 Modern large language models amplify every sponge mechanism simultaneously:
 
-**O(n²) attention at scale**. A 128K-context transformer has attention cost that scales with the square of the context length. Processing a 64K-token sponge input costs 4× more than a 32K-token sponge input. API providers that charge per input token still face GPU saturation effects: a single 100K-token request can tie up a GPU for seconds while thousands of normal 1K-token requests would serve the same user count at normal latency.
+**O(n²) attention at scale**. A transformer's prefill phase — processing the input prompt — has attention cost that scales quadratically with input sequence length. Processing a 64K-token input prompt costs 4× more prefill compute than a 32K-token prompt. (The decode phase — generating output tokens one at a time with KV cache — is roughly linear per output token in sequence length, so the quadratic cost is concentrated in the prefill.) API providers that charge per input token still face GPU saturation effects: a single 100K-token request can tie up a GPU for seconds during prefill, while thousands of normal 1K-token requests would serve the same user count at normal latency.
 
 **Chain-of-thought depth**. Models prompted to reason step-by-step generate intermediate tokens before the final answer. An adversarial input that maximizes chain-of-thought length — by posing a problem that appears to require deep reasoning — multiplies output cost by the reasoning depth. The final answer might be correct; the energy expenditure is adversarially inflated.
 
-**KV cache pressure**. Long-context transformers maintain key-value caches that grow with sequence length. A sponge input that saturates KV cache forces cache eviction for concurrent requests, degrading throughput system-wide for all users sharing the inference backend — not just the attacker's own requests.
+**KV cache pressure**. Long-context transformers maintain key-value caches that grow with sequence length. A sponge input that saturates the KV cache consumes memory that could otherwise hold cached state for concurrent requests. Depending on the serving architecture, the effect ranges from reduced concurrency and longer queue times to increased memory pressure and admission throttling for other users sharing the inference backend — not necessarily direct cache eviction (many systems isolate KV blocks per request), but meaningful throughput degradation across the multi-tenant population.
 
-**Multi-modal inputs**. Vision-language models that process images at full resolution before encoding face image-resolution-dependent cost. An adversarially crafted high-resolution image with maximally complex visual structure can inflate vision encoder cost before any text processing begins.
+**Multi-modal inputs**. Vision-language models process images before encoding. For standard Vision Transformer (ViT) architectures, inference cost is driven primarily by image resolution and patch count — more patches require more attention operations in the vision encoder. An adversarially crafted high-resolution image maximizes patch count and thus encoder cost before any text processing begins. For adaptive-compute vision models (those with dynamic routing or early exit), image content complexity can additionally force late-exit paths.
 
 ## The Threat Models
 
@@ -144,7 +144,7 @@ Modern GPUs and CPUs expose performance monitoring units (PMUs) that count low-l
 
 Monitoring GPU utilization, memory bandwidth, and compute duration per request provides a behavioral signal that's hard to spoof: an adversary can shape their input content, but they can't (from user space) control how it executes on the hardware. An inference request that consumes 10× the normal GPU-seconds is an anomaly regardless of what the input looks like.
 
-Operationally: baseline normal per-request GPU utilization; set an anomaly threshold; flag or terminate requests that exceed it. This requires instrumentation at the inference serving layer, not just the API gateway layer.
+Operationally: baseline normal per-request GPU utilization; set an anomaly threshold; flag or terminate requests that exceed it. **Caveat**: per-request hardware-counter attribution requires inference serving instrumentation that is often unavailable in managed cloud environments and difficult to disaggregate under continuous batching (where multiple requests execute concurrently on shared hardware). This defense is more tractable on dedicated GPU instances or in self-hosted inference serving stacks (Triton, vLLM with observability extensions) than on managed API endpoints.
 
 ### Maximum Output Length Limits
 
