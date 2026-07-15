@@ -3,6 +3,7 @@ title: "AI-Powered Social Engineering: Deepfakes, Voice Cloning, and the Industr
 description: "How AI voice cloning, deepfake video, and LLM-personalized phishing have collapsed the cost of impersonation attacks — and why technical controls alone cannot stop attacks designed to exploit human trust."
 pubDate: 2026-07-05
 tags: ["social-engineering", "deepfakes", "voice-cloning", "phishing", "identity-fraud", "ai-threats"]
+relatedPosts: ["wormgpt-fraudgpt-criminal-ai-ecosystem", "ai-as-weapon-attacking-traditional-infrastructure", "ai-worms-multi-agent-pipelines"]
 ---
 
 In January 2024, a finance employee at the Hong Kong office of Arup — the global engineering firm — attended what appeared to be a routine video conference with the company's CFO and other senior executives. The call was compelling: familiar faces, recognizable voices, normal business context. Over the course of the scheme, the employee executed 15 wire transfers totaling HK$200 million — approximately US$25.6 million. Hong Kong police reported that the other participants on the call were impersonated via deepfake. Police [announced the case in February 2024](https://www.scmp.com/news/hong-kong/law-and-crime/article/3250851/hong-kong-police-flag-deepfake-scams-after-finance-worker-fooled-video-conference-sends-hk200-million); Arup subsequently confirmed in May 2024 via press statements to CNN, the Financial Times, and others that it was the victim.

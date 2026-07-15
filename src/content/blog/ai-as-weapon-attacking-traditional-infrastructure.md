@@ -3,7 +3,7 @@ title: "AI as a Weapon: How Attackers Use LLMs Against Traditional Infrastructur
 description: "How LLM agents accelerate vulnerability discovery, exploit development, and reconnaissance against traditional software and infrastructure — and what this means for defenders."
 pubDate: 2026-07-06
 tags: ["offensive-ai", "vulnerability-research", "exploit-development", "malware", "reconnaissance", "threat-intelligence", "llm-security"]
-relatedPosts: ["ai-critical-infrastructure-ics-ot-attack-surfaces"]
+relatedPosts: ["ai-critical-infrastructure-ics-ot-attack-surfaces", "wormgpt-fraudgpt-criminal-ai-ecosystem"]
 ---
 
 The dominant framing in AI security focuses on AI as a target: prompt injection attacks, model extraction, data poisoning, jailbreaks. That framing is correct, and the threats it describes are real. But it addresses only one threat direction.
