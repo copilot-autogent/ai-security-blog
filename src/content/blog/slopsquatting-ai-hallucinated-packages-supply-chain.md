@@ -1,6 +1,6 @@
 ---
 title: "Slopsquatting: When AI Hallucinated Package Names Become a Supply Chain Attack"
-description: "LLMs hallucinate package names at rates exceeding 20%. Attackers register those hallucinated names on npm, PyPI, and crates.io with malicious payloads. No typo required — the developer trusts the AI. This post explains the mechanics, documents the evidence, and gives developers concrete defenses."
+description: "LLMs hallucinate package names at rates exceeding 20%. Attackers register those hallucinated names on npm and PyPI with malicious payloads. No typo required — the developer trusts the AI. This post explains the mechanics, documents the evidence, and gives developers concrete defenses."
 pubDate: 2026-07-15
 tags: ["supply-chain", "llm-security", "package-security", "code-generation", "defense-patterns"]
 category: supply-chain
@@ -8,7 +8,7 @@ evidenceLevel: strong
 relatedPosts: ["model-hub-supply-chain-attacks", "hallucination-security-surface-package-fabrication-wrong-advice", "ml-model-provenance-signing-sboms-verification"]
 ---
 
-In 2023, security researcher Bar Lanyado at Vulcan Cyber published research on LLM package recommendation reliability ("Can You Trust ChatGPT's Package Recommendations?"). He asked ChatGPT, Bard, and CodeLlama to recommend Python and JavaScript packages for common development tasks — parsing JSON, generating UUIDs, handling HTTP requests — then checked every recommendation against the actual registries.
+In 2023, security researcher Bar Lanyado at Vulcan Cyber published research on LLM package recommendation reliability ("Can You Trust ChatGPT's Package Recommendations?"). He asked ChatGPT and Bard to recommend Python and JavaScript packages for common development tasks — parsing JSON, generating UUIDs, handling HTTP requests — then checked every recommendation against the actual registries.
 
 More than 20% of the packages the models recommended didn't exist.
 
@@ -30,7 +30,7 @@ This shifts the threat model from "humans make mistakes under time pressure" to 
 
 ## The Statistics Behind the Risk
 
-Lanyado's 2023 Vulcan Cyber study remains the most-cited quantification of the phenomenon. The methodology was straightforward: ask multiple LLMs to recommend packages for specific tasks, then check each recommendation against npm and PyPI. The study surveyed ChatGPT, Bard, and CodeLlama across hundreds of package recommendations and found:
+Lanyado's 2023 Vulcan Cyber study remains the most-cited quantification of the phenomenon. The methodology: ask multiple LLMs (GPT-3.5, GPT-4, and Bard) to recommend packages for specific tasks, then check each recommendation against npm and PyPI. The study found:
 
 - More than 20% of recommended packages didn't exist at query time
 - Hallucinated packages were concentrated in less-common tasks (edge use cases, niche libraries, platform-specific integrations) — the model's training data had less signal to anchor on
@@ -48,7 +48,7 @@ The mechanics of execution are straightforward once the name is registered:
 Developer prompt → LLM response → pip install <hallucinated-name> → attacker setup.py runs
 ```
 
-In Python, `setup.py` runs at install time for source distributions (sdists) — specifically during the build phase that `pip install` triggers when a pre-built wheel isn't available. An attacker who controls the package and publishes only an sdist controls code that executes on the developer's machine before they've seen any of the package's "functionality." For wheel distributions, malicious code can still be embedded in the package's own modules, which execute as soon as the developer imports the package. npm's `preinstall` and `postinstall` lifecycle scripts run by default during `npm install` (they can be disabled with `--ignore-scripts`, but this is not the default behavior and is rarely set in standard workflows).
+In Python, the build backend (specified in `pyproject.toml` under `[build-system]`, or legacy `setup.py` for older packages) runs arbitrary code during the isolated build step that `pip install` triggers for source distributions when no pre-built wheel is available. This build step runs in an isolated environment per PEP 517, but it still executes the package maintainer's code on the installing machine. An attacker who controls the package controls code that runs before the developer has seen any of its "functionality." For wheel distributions, malicious code can be embedded in the package's modules and executes on first import. npm's `preinstall` and `postinstall` lifecycle scripts run by default during `npm install` (they can be disabled with `--ignore-scripts`, but this is not the default behavior and is rarely set in standard workflows).
 
 A realistic payload at this stage typically aims for:
 
@@ -63,7 +63,7 @@ The attacker's investment is modest: register a plausible package name, upload a
 
 The Checkmarx 2024 research documented specific instances of previously-hallucinated package names being registered on npm and PyPI by parties other than their original maintainers (if any existed). In the most direct cases, the sequence is traceable: a name appears in LLM outputs, the name was unregistered, later the name is registered with a package whose content is inconsistent with its purported purpose.
 
-Beyond research-documented cases, npm and PyPI administrators have removed packages identified as slopsquatting attempts — packages registered with names that appear in AI-generated code samples, containing install-time payloads targeting developer credentials. PyPI's name reuse/reclaim workflow (formalized under PEP 541, accepted 2018) means that once a legitimate package has held a name, reclaiming that name after deletion requires administrative review — this is a meaningful friction for attackers targeting well-known package names, but offers no protection for newly invented names that never existed on the registry.
+Beyond research-documented cases, npm and PyPI administrators have removed packages identified as slopsquatting attempts — packages registered with names that appear in AI-generated code samples, containing install-time payloads targeting developer credentials. PyPI's name reuse/reclaim workflow (formalized under PEP 541, active since 2018) means that once a legitimate package has held a name, reclaiming that name after deletion requires administrative review — this is a meaningful friction for attackers targeting well-known package names, but offers no protection for newly invented names that never existed on the registry.
 
 The pattern has precedents in the broader typosquatting literature. The `ctx` PyPI incident (2022) — where a legitimate package name was claimed by a malicious upload — demonstrated that developers will install plausible-sounding packages without checking provenance. Slopsquatting removes even the step where the developer made the choice to type a name — the choice was delegated to the model.
 
@@ -91,10 +91,10 @@ Before running any AI-suggested install command, verify the package exists and h
 
 ```bash
 # Python — check if package exists and get latest version (stable PyPI JSON API)
-curl -sf https://pypi.org/pypi/<package-name>/json | jq -r '.info.version // "NOT FOUND"'
+curl -s https://pypi.org/pypi/<package-name>/json | jq -r 'if .info then .info.version else "NOT FOUND" end'
 # List all available versions
-curl -sf https://pypi.org/pypi/<package-name>/json | jq -r '.releases | keys[]'
-# 404 = package does not exist on PyPI
+curl -s https://pypi.org/pypi/<package-name>/json | jq -r '.releases | keys[]'
+# HTTP 404 response means the package does not exist on PyPI
 ```
 
 A package that returns "not found" is the obvious red flag. But also check the creation date, download counts, and whether there's a GitHub repository that matches the claimed maintainer. A package registered two days ago with zero stars and no README is a credible warning sign even if it technically "exists."
