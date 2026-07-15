@@ -50,12 +50,12 @@ The information gain from a cache oracle depends critically on what cache namesp
 
 ### Intra-Account Probing
 
-Under standard provider implementations, cache namespaces are scoped to the API *account* — the entity identified by the API key used to make the request. Two calls using the same API key share a cache namespace; calls from different accounts are isolated.
+Under standard provider implementations, cache namespaces are scoped to the API *account* or *project* — the organizational entity associated with the API key, not necessarily the key itself. Multiple keys issued under the same account or project may share a cache namespace. Two calls sharing a cache namespace can observe each other's cache state; calls from isolated accounts or projects cannot.
 
-This means the most immediately actionable attack scenario is **intra-account**: an attacker who has API access (even partial access, e.g., a shared key in a multi-tenant application) can probe whether specific prefixes are cached *within the same account*. This is relevant when:
+This means the most immediately actionable attack scenario is **intra-account**: an attacker who shares a cache namespace (via a shared API key in the same account or project) can probe whether specific prefixes are cached. This is relevant when:
 
-- A multi-tenant SaaS application issues API calls for multiple customers under a single provider API key. An attacker who is one customer can probe for another customer's cached system prompt prefix.
-- A development/staging environment shares an API key with production. Probing from staging can detect what system prompts are active in production.
+- A multi-tenant SaaS application issues API calls for multiple customers under a single provider account. An attacker who is one customer and who has (or can gain) direct provider API access can probe for another customer's cached system prompt prefix — subject to being able to reproduce the exact prefix and other cache-key inputs (model version, options, tool schemas) as they appear in the provider's cache key derivation.
+- A development/staging environment shares an account with production. Probing from staging can detect what system prompts are active in production.
 - A contractor or internal attacker has limited API access but not direct access to the system prompt configuration.
 
 The oracle doesn't return the content of the cached prefix — it only confirms or denies presence of a *tested* prefix. For a brute-force oracle over an unknown prompt, the attacker must enumerate candidate strings, which is only tractable when the search space is small (known templates, short prefixes, constrained vocabulary). An iterative character-by-character probe extending a confirmed prefix can in principle recover unknown suffixes one token at a time if the signal is reliable enough — making the leakage potentially stronger than simple whole-string confirmation, though significantly harder to execute in practice under network jitter.
@@ -108,7 +108,7 @@ The pattern is consistent: shared infrastructure with observable behavior create
 
 ### For Providers
 
-**Timing normalization.** Add a minimum response time floor that eliminates the observable differential between cache hits and misses. This is the standard defense for password-comparison timing attacks and applies directly. The tradeoff: users lose the latency benefit of cache hits (though the cost benefit can still be preserved).
+**Timing normalization.** Add a minimum response time floor that eliminates the observable differential between cache hits and misses at the API latency layer. This is the standard defense for password-comparison timing attacks and applies directly. Note: if providers also expose cache-hit status explicitly in response metadata, billing discounts, or usage records, timing normalization alone does not fully close the oracle — those secondary channels also need to be considered. The tradeoff: users lose the latency benefit of cache hits (though the cost benefit can still be preserved).
 
 **Per-account cache hit obfuscation.** Rather than returning cached responses immediately, inject random micro-delays to blur the signal. Less reliable than full normalization but lower impact on the user-visible latency benefit.
 
@@ -120,10 +120,9 @@ The pattern is consistent: shared infrastructure with observable behavior create
 
 | Attack | Requirement | Isolation Dependency | Evidence Status |
 |---|---|---|---|
-| Intra-account cache oracle (same API key) | API access; knowledge of target prefix | Intra-account namespace | Theoretically well-motivated; not peer-reviewed |
-| Cross-tenant timing in multi-tenant app | Access to shared-key application | Shared-key architecture | Theoretically well-motivated; not peer-reviewed |
+| Intra-account cache oracle | Shared cache namespace + ability to drive leading prefix | Intra-account/project namespace | Theoretically well-motivated; not peer-reviewed |
+| Cross-tenant timing in multi-tenant app | Direct provider API access within same account; ability to reproduce exact cache-key inputs | Shared account/project; server-mediated apps reduce attack surface | Theoretically well-motivated; not peer-reviewed |
 | Cross-account oracle (competitor detection) | API access | Requires cross-account isolation weakness | Not expected to work under standard architecture |
-| Cache namespace injection via second-preimage | Hash collision in key derivation scheme | Hard under well-designed schemes | No reported instances |
 
 The threat model for prompt cache timing attacks is most concrete for organizations sharing API keys across tenants or deployments. The timing differential is real; the oracle attack is theoretically sound; empirical confirmation of practical signal quality under real-world conditions hasn't been published. The primary architectural mitigation is **namespace isolation per tenant** — separate accounts or projects, not just separate API keys — combined with deployment-unique prefix identifiers to prevent template-confirmation probes. Provider-side timing normalization, when available, addresses the signal at the source.
 
