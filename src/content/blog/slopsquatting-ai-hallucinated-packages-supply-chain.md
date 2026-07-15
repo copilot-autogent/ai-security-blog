@@ -8,7 +8,7 @@ evidenceLevel: strong
 relatedPosts: ["model-hub-supply-chain-attacks", "hallucination-security-surface-package-fabrication-wrong-advice", "ml-model-provenance-signing-sboms-verification"]
 ---
 
-In April 2023, security researcher Bar Lanyado at Vulcan Cyber ran a simple experiment. He asked ChatGPT, Bard, and CodeLlama to recommend Python and JavaScript packages for common development tasks — parsing JSON, generating UUIDs, handling HTTP requests. He then checked every recommendation against the actual registries.
+In 2023, security researcher Bar Lanyado at Vulcan Cyber published research on LLM package recommendation reliability ("Can You Trust ChatGPT's Package Recommendations?"). He asked ChatGPT, Bard, and CodeLlama to recommend Python and JavaScript packages for common development tasks — parsing JSON, generating UUIDs, handling HTTP requests — then checked every recommendation against the actual registries.
 
 More than 20% of the packages the models recommended didn't exist.
 
@@ -16,7 +16,7 @@ This isn't a reliability problem. It's the precondition for a supply chain attac
 
 ## What Slopsquatting Is
 
-The term — a portmanteau of "slop" (AI-generated low-quality output) and "typosquatting" — names a specific attack pattern:
+The term — a portmanteau of "slop" (AI-generated low-quality output) and "typosquatting" — was coined by Seth Larson (Python Software Foundation Security Developer-in-Residence) in early 2025, naming an attack pattern that researchers had been documenting since 2023:
 
 1. An LLM generates code or installation instructions that reference a package name that does not exist in the target registry.
 2. An attacker identifies that name (either by querying LLMs at scale or by monitoring unregistered-but-plausible namespaces) and registers it with a malicious payload.
@@ -48,7 +48,7 @@ The mechanics of execution are straightforward once the name is registered:
 Developer prompt → LLM response → pip install <hallucinated-name> → attacker setup.py runs
 ```
 
-In Python, `setup.py` runs at install time for source distributions (sdists) — specifically during the build phase that `pip install` triggers when a pre-built wheel isn't available. An attacker who controls the package and publishes only an sdist controls code that executes on the developer's machine before they've seen any of the package's "functionality." For wheel distributions, malicious code can still be embedded in the package's own modules, which execute as soon as the developer imports the package. npm's `preinstall` and `postinstall` lifecycle scripts run unconditionally during `npm install` regardless of distribution format.
+In Python, `setup.py` runs at install time for source distributions (sdists) — specifically during the build phase that `pip install` triggers when a pre-built wheel isn't available. An attacker who controls the package and publishes only an sdist controls code that executes on the developer's machine before they've seen any of the package's "functionality." For wheel distributions, malicious code can still be embedded in the package's own modules, which execute as soon as the developer imports the package. npm's `preinstall` and `postinstall` lifecycle scripts run by default during `npm install` (they can be disabled with `--ignore-scripts`, but this is not the default behavior and is rarely set in standard workflows).
 
 A realistic payload at this stage typically aims for:
 
@@ -63,7 +63,7 @@ The attacker's investment is modest: register a plausible package name, upload a
 
 The Checkmarx 2024 research documented specific instances of previously-hallucinated package names being registered on npm and PyPI by parties other than their original maintainers (if any existed). In the most direct cases, the sequence is traceable: a name appears in LLM outputs, the name was unregistered, later the name is registered with a package whose content is inconsistent with its purported purpose.
 
-Beyond research-documented cases, npm and PyPI administrators have removed packages identified as slopsquatting attempts — packages registered with names that appear in AI-generated code samples, containing install-time payloads targeting developer credentials. PyPI's name reuse policy (enforced since 2022 under PEP 541) means that once a legitimate package has held a name, reclaiming that name after deletion requires administrative review — this is a meaningful friction for attackers targeting well-known package names, but offers no protection for newly invented names that never existed on the registry.
+Beyond research-documented cases, npm and PyPI administrators have removed packages identified as slopsquatting attempts — packages registered with names that appear in AI-generated code samples, containing install-time payloads targeting developer credentials. PyPI's name reuse/reclaim workflow (formalized under PEP 541, accepted 2018) means that once a legitimate package has held a name, reclaiming that name after deletion requires administrative review — this is a meaningful friction for attackers targeting well-known package names, but offers no protection for newly invented names that never existed on the registry.
 
 The pattern has precedents in the broader typosquatting literature. The `ctx` PyPI incident (2022) — where a legitimate package name was claimed by a malicious upload — demonstrated that developers will install plausible-sounding packages without checking provenance. Slopsquatting removes even the step where the developer made the choice to type a name — the choice was delegated to the model.
 
@@ -90,10 +90,11 @@ Effective defenses require moving the verification step *before* the install, no
 Before running any AI-suggested install command, verify the package exists and has a credible history:
 
 ```bash
-# Python — check package metadata (note: pip index is experimental in pip ≥21.2)
-pip index versions <package-name>
-# or use the PyPI JSON API directly (stable, no pip dependency)
-curl -sf https://pypi.org/pypi/<package-name>/json | grep -o '"version":"[^"]*"' | head -5
+# Python — check if package exists and get latest version (stable PyPI JSON API)
+curl -sf https://pypi.org/pypi/<package-name>/json | jq -r '.info.version // "NOT FOUND"'
+# List all available versions
+curl -sf https://pypi.org/pypi/<package-name>/json | jq -r '.releases | keys[]'
+# 404 = package does not exist on PyPI
 ```
 
 A package that returns "not found" is the obvious red flag. But also check the creation date, download counts, and whether there's a GitHub repository that matches the claimed maintainer. A package registered two days ago with zero stars and no README is a credible warning sign even if it technically "exists."
