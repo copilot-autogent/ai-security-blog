@@ -30,7 +30,7 @@ This shifts the threat model from "humans make mistakes under time pressure" to 
 
 ## The Statistics Behind the Risk
 
-Lanyado's 2023 Vulcan Cyber study remains the most-cited quantification of the phenomenon. The methodology was straightforward: ask multiple LLMs to recommend packages for specific tasks, then check each recommendation against npm and PyPI. Across 464 unique package recommendations:
+Lanyado's 2023 Vulcan Cyber study remains the most-cited quantification of the phenomenon. The methodology was straightforward: ask multiple LLMs to recommend packages for specific tasks, then check each recommendation against npm and PyPI. The study surveyed ChatGPT, Bard, and CodeLlama across hundreds of package recommendations and found:
 
 - More than 20% of recommended packages didn't exist at query time
 - Hallucinated packages were concentrated in less-common tasks (edge use cases, niche libraries, platform-specific integrations) — the model's training data had less signal to anchor on
@@ -48,7 +48,7 @@ The mechanics of execution are straightforward once the name is registered:
 Developer prompt → LLM response → pip install <hallucinated-name> → attacker setup.py runs
 ```
 
-In Python, the `setup.py` or `pyproject.toml` `[build-system]` hooks run at install time. An attacker who controls the package controls code that executes on the developer's machine before the developer has seen a single line of the package's "functionality." The same applies to npm's `preinstall` and `postinstall` lifecycle scripts.
+In Python, `setup.py` runs at install time for source distributions (sdists) — specifically during the build phase that `pip install` triggers when a pre-built wheel isn't available. An attacker who controls the package and publishes only an sdist controls code that executes on the developer's machine before they've seen any of the package's "functionality." For wheel distributions, malicious code can still be embedded in the package's own modules, which execute as soon as the developer imports the package. npm's `preinstall` and `postinstall` lifecycle scripts run unconditionally during `npm install` regardless of distribution format.
 
 A realistic payload at this stage typically aims for:
 
@@ -63,9 +63,9 @@ The attacker's investment is modest: register a plausible package name, upload a
 
 The Checkmarx 2024 research documented specific instances of previously-hallucinated package names being registered on npm and PyPI by parties other than their original maintainers (if any existed). In the most direct cases, the sequence is traceable: a name appears in LLM outputs, the name was unregistered, later the name is registered with a package whose content is inconsistent with its purported purpose.
 
-Beyond research-documented cases, the npm security team and PyPI administrators have removed packages identified as slopsquatting attempts — packages registered with names known to appear in AI-generated code samples, with install-time payloads targeting developer credentials.
+Beyond research-documented cases, npm and PyPI administrators have removed packages identified as slopsquatting attempts — packages registered with names that appear in AI-generated code samples, containing install-time payloads targeting developer credentials. PyPI's name reuse policy (enforced since 2022 under PEP 541) means that once a legitimate package has held a name, reclaiming that name after deletion requires administrative review — this is a meaningful friction for attackers targeting well-known package names, but offers no protection for newly invented names that never existed on the registry.
 
-The pattern has precedents in the broader typosquatting literature. The `ctx` and `rectory` PyPI incidents (2022) demonstrated that developers will install plausible-sounding packages without checking provenance. Slopsquatting removes even the step where the developer made the choice to type a name — the choice was delegated to the model.
+The pattern has precedents in the broader typosquatting literature. The `ctx` PyPI incident (2022) — where a legitimate package name was claimed by a malicious upload — demonstrated that developers will install plausible-sounding packages without checking provenance. Slopsquatting removes even the step where the developer made the choice to type a name — the choice was delegated to the model.
 
 ## Why Existing Defenses Don't Stop This
 
@@ -90,39 +90,37 @@ Effective defenses require moving the verification step *before* the install, no
 Before running any AI-suggested install command, verify the package exists and has a credible history:
 
 ```bash
-# Python — check package metadata
+# Python — check package metadata (note: pip index is experimental in pip ≥21.2)
 pip index versions <package-name>
-
-# Node.js — check registry record
-npm view <package-name>
-
-# Or using curl directly against PyPI JSON API
-curl -s https://pypi.org/pypi/<package-name>/json | python3 -m json.tool | grep '"version"'
+# or use the PyPI JSON API directly (stable, no pip dependency)
+curl -sf https://pypi.org/pypi/<package-name>/json | grep -o '"version":"[^"]*"' | head -5
 ```
 
 A package that returns "not found" is the obvious red flag. But also check the creation date, download counts, and whether there's a GitHub repository that matches the claimed maintainer. A package registered two days ago with zero stars and no README is a credible warning sign even if it technically "exists."
 
 ### 2. AI dependency diff in CI/CD
 
-Add a CI step that compares AI-generated dependency additions against your locked baseline and fails the build if any new package:
+Add a CI step that compares AI-generated dependency additions against your locked baseline and flags new packages for review. The specific checks worth automating:
 
-- Has been in the registry for less than 30 days
-- Has fewer than a threshold of downloads (e.g., under 1,000 weekly downloads — tunable per ecosystem)
-- Has no associated source repository
+- Query the PyPI JSON API or npm registry metadata API for each new package's creation date — flag packages less than 30 days old
+- Check download statistics (PyPI Stats, npm download counts) — very low download counts are a risk signal
+- Verify the package has an associated source repository linked in its metadata
 
-Tools like `pip-audit`, `npm audit`, and the `ossf/scorecard` Action can be combined to create this gate. The key is making the check blocking, not advisory.
+Tools like `pip-audit` and `npm audit` scan against known vulnerability databases, but they don't natively gate on package age or download counts. That registry-metadata check requires a dedicated script or a service like `deps.dev` (Google's Open Source Insights API), which exposes package metadata including project health signals. The OSSF Scorecard GitHub Action evaluates source repository security practices but requires the package to have a linked repo. Combine these as complementary layers rather than treating any single tool as sufficient.
 
 ### 3. Sandboxed install environments
 
-Run initial installs in a container or VM snapshot that is isolated from host credentials and file system. If the install is malicious, the blast radius is limited to the sandbox. Typical implementation:
+Run initial installs in a container or VM snapshot that is isolated from host credentials and file system. The goal is to limit the blast radius if the install is malicious. A workable approach:
 
 ```bash
-# Run install in Docker with no credential mounts
-docker run --rm -v $(pwd):/app --network=none python:3.12-slim pip install <package> -d /tmp/pkg-cache
-# Then inspect /tmp/pkg-cache before copying to real environment
+# Download the package tarball without executing it (wheels-only avoids sdist build hooks)
+docker run --rm -v $(pwd)/pkg-cache:/cache python:3.12-slim \
+  pip download <package> --only-binary=:all: -d /cache
+# Inspect the contents before bringing into your real environment
+unzip -l pkg-cache/*.whl
 ```
 
-The `--network=none` flag prevents exfiltration during the install step. Combined with volume inspection afterward, this lets you observe what the install does without exposing production credentials.
+Note the limitations: `--only-binary=:all:` fails if no pre-built wheel exists (sdist-only packages); using `--network=none` prevents the download step itself, so network isolation must be applied *after* download and before any build step. For sdist packages, the safest option is to download the tarball first, inspect it manually, then build in an isolated environment. There's no fully automated sandbox primitive in pip that's both safe and transparent — manual inspection remains part of the workflow for high-risk cases.
 
 ### 4. Validate AI-suggested packages against a curated allowlist
 
@@ -142,7 +140,7 @@ The simplest and most immediately deployable mitigation: treat any package name 
 
 Slopsquatting sits at the intersection of several documented threats but is distinct from each:
 
-**Model hub typosquatting** ([model-hub-supply-chain-attacks](/blog/model-hub-supply-chain-attacks)) targets model weights on platforms like Hugging Face. The attacker registers a malicious model under a name similar to a popular one. The attack surface is model downloads, not package installs. The hallucination mechanism doesn't apply — typosquatting on model hubs relies on human misspelling, not LLM recommendation.
+**Model hub typosquatting** ([model-hub-supply-chain-attacks](/blog/model-hub-supply-chain-attacks)) targets model weights on platforms like Hugging Face. The attacker registers a malicious model under a name similar to a popular one. The attack surface is model downloads, not package installs. The hallucination mechanism doesn't apply — typosquatting on model hubs relies on human misspelling or namespace confusion, not LLM recommendation.
 
 **LLM hallucination as a general security surface** ([hallucination-security-surface-package-fabrication-wrong-advice](/blog/hallucination-security-surface-package-fabrication-wrong-advice)) covers the broader space of hallucination-derived security failures: wrong credentials, incorrect security advice, fabricated CVE details. Slopsquatting is a specific exploitation path within that surface — the one where hallucinated package names become actionable attack vectors.
 
@@ -152,7 +150,7 @@ Slopsquatting sits at the intersection of several documented threats but is dist
 
 Slopsquatting exposes a fundamental tension in how developers are adopting AI coding assistants. The value proposition of these tools is speed — they reduce the cognitive load of remembering exact API names, package configurations, and implementation patterns. That value is real. But the speed comes from the model generating outputs that *look correct*, not from outputs that have been verified against authoritative sources.
 
-LLMs don't query package registries before recommending packages. They generate statistically plausible tokens based on training data. A package that was widely discussed in Stack Overflow threads from 2020 will be recommended confidently in 2026 even if it was deprecated in 2022, removed from the registry in 2023, and re-registered by an attacker in 2024. The model has no mechanism to know any of this.
+LLMs that operate purely as text generators — base models or chat models without tool access — don't query package registries before generating install commands. They produce statistically plausible tokens based on training data. A package that was widely discussed in Stack Overflow threads from 2020 will be recommended confidently in 2026 even if it was deprecated in 2022, removed from the registry in 2023, and re-registered by an attacker in 2024. The model has no mechanism to know any of this.
 
 The 20%+ hallucination rate Lanyado documented isn't a bug in a specific model — it's a property of the approach. Models that generate more fluent, confident text also generate more plausible-sounding fictional package names. Better models may hallucinate less, but the research doesn't show elimination — it shows reduction. At the scale of development teams running AI-assisted coding at high volume, "reduced hallucination rate" still produces a substantial volume of unverified package recommendations.
 
