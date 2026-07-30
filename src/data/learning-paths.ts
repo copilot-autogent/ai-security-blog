@@ -235,4 +235,51 @@ export const LEARNING_PATHS: LearningPath[] = [
       },
     ],
   },
+  {
+    slug: "ai-ml-security-lifecycle",
+    title: "AI/ML Security Lifecycle",
+    description:
+      "A stage-by-stage curriculum for protecting AI/ML systems from training-data integrity through model artifacts, inference, production monitoring, and incident response.",
+    audience: "ML engineers, AI platform teams, and security practitioners responsible for the integrity and operation of AI/ML systems.",
+    intro:
+      "AI/ML security is a lifecycle problem: a trustworthy production service depends on the provenance of its training data, the integrity of its model artifacts, the controls around inference, and the evidence collected while the system runs. This path follows that chain in order. Start with upstream poisoning and backdoors, then verify what enters the model supply chain, harden the serving layer, and finish with monitoring and incident response. Each step adds a distinct control or failure mode so the final threat model connects prevention, detection, and recovery.",
+    posts: [
+      {
+        slug: "pretraining-corpus-poisoning-web-scale-attack",
+        why: "Begin at the source: poisoned pretraining data can bias or implant behavior before a model exists, so provenance and corpus integrity are the first controls in the lifecycle.",
+      },
+      {
+        slug: "fine-tuning-trojans-backdoors-training-pipeline",
+        why: "Fine-tuning introduces a second training-stage attack surface where a targeted contributor or dataset can implant a trigger without changing the base model.",
+      },
+      {
+        slug: "backdoor-attacks-foundation-models",
+        why: "See how sleeper triggers persist in foundation models and survive later adaptation, turning a training-time integrity failure into a latent production threat.",
+      },
+      {
+        slug: "model-hub-supply-chain-attacks",
+        why: "Move from model behavior to distribution: public model hubs can introduce malicious weights or metadata, making publisher and dependency trust part of deployment security.",
+      },
+      {
+        slug: "malicious-ai-model-files-pickle-exploits-arbitrary-code-execution",
+        why: "Model files are executable supply-chain artifacts in practice; this post shows why unsafe serialization can compromise the environment before inference begins.",
+      },
+      {
+        slug: "ml-model-provenance-signing-sboms-verification",
+        why: "Apply artifact integrity controls: provenance records, signatures, and SBOM-style verification establish what was built, inspected, and approved before promotion.",
+      },
+      {
+        slug: "securing-ai-inference-stack-gpu-memory-model-serving",
+        why: "Once an artifact is trusted, protect its runtime: model-serving and GPU-memory boundaries create deployment-specific confidentiality, isolation, and availability risks.",
+      },
+      {
+        slug: "llm-security-monitoring-production-anomaly-detection-audit-logging",
+        why: "Operationalize detection by monitoring anomalous behavior and retaining audit evidence that can distinguish misuse, drift, and compromise in production.",
+      },
+      {
+        slug: "ai-incident-response-playbook",
+        why: "Close the loop with response: use the lifecycle evidence to contain affected models or data, eradicate the cause, and improve controls before the next release.",
+      },
+    ],
+  },
 ];
