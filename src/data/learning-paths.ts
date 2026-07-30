@@ -12,6 +12,20 @@ export interface LearningPath {
   posts: LearningPathStep[];
 }
 
+export function assertLearningPathSlugs(
+  path: LearningPath,
+  availableSlugs: ReadonlySet<string>,
+): void {
+  for (const step of path.posts) {
+    if (!availableSlugs.has(step.slug)) {
+      throw new Error(
+        `Learning path "${path.slug}" references unknown slug: "${step.slug}". ` +
+          "Verify the slug exists in src/content/blog/.",
+      );
+    }
+  }
+}
+
 /** Curated learning paths through the post collection.
  *  Every slug must correspond to an existing post in src/content/blog/.
  *  Paths are ordered — read from first to last. */
