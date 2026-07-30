@@ -15,13 +15,29 @@ export interface LearningPath {
 export function assertLearningPathSlugs(
   path: LearningPath,
   availableSlugs: ReadonlySet<string>,
+  unpublishedSlugs: ReadonlySet<string> = new Set(),
 ): void {
   for (const step of path.posts) {
     if (!availableSlugs.has(step.slug)) {
+      if (unpublishedSlugs.has(step.slug)) {
+        throw new Error(
+          `Learning path "${path.slug}" references draft or unpublished slug: "${step.slug}". ` +
+            "Publish the post before adding it to a learning path.",
+        );
+      }
       throw new Error(
         `Learning path "${path.slug}" references unknown slug: "${step.slug}". ` +
           "Verify the slug exists in src/content/blog/.",
       );
+    }
+  }
+}
+
+export function assertUniqueLearningPathSlugs(paths: readonly LearningPath[]): void {
+  const seen = new Set<string>();
+  for (const path of paths) {
+    if (!seen.add(path.slug)) {
+      throw new Error(`Duplicate learning path slug: "${path.slug}".`);
     }
   }
 }

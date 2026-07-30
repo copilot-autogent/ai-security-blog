@@ -7,15 +7,20 @@ import Header from "../../components/Header.astro";
 import { SITE_TITLE, WORDS_PER_MINUTE } from "../../consts";
 import {
   assertLearningPathSlugs,
+  assertUniqueLearningPathSlugs,
   LEARNING_PATHS,
 } from "../../data/learning-paths";
 
 export async function getStaticPaths() {
-  const allPosts = (await getCollection("blog")).filter((p) => !p.data.draft);
-  const postBySlug = new Map(allPosts.map((p) => [p.id, p]));
+  const allPosts = await getCollection("blog");
+  const draftSlugs = new Set(allPosts.filter((p) => p.data.draft).map((p) => p.id));
+  const publishedPosts = allPosts.filter((p) => !p.data.draft);
+  const postBySlug = new Map(publishedPosts.map((p) => [p.id, p]));
+  const publishedSlugs = new Set(postBySlug.keys());
 
+  assertUniqueLearningPathSlugs(LEARNING_PATHS);
   return LEARNING_PATHS.map((path) => {
-    assertLearningPathSlugs(path, new Set(postBySlug.keys()));
+    assertLearningPathSlugs(path, publishedSlugs, draftSlugs);
     const steps = path.posts
       .map((step) => {
         const post = postBySlug.get(step.slug);
