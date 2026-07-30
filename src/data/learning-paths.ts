@@ -17,7 +17,17 @@ export function assertLearningPathSlugs(
   availableSlugs: ReadonlySet<string>,
   unpublishedSlugs: ReadonlySet<string> = new Set(),
 ): void {
+  if (path.posts.length === 0) {
+    throw new Error(`Learning path "${path.slug}" must contain at least one post.`);
+  }
+  const seenStepSlugs = new Set<string>();
   for (const step of path.posts) {
+    if (seenStepSlugs.has(step.slug)) {
+      throw new Error(
+        `Learning path "${path.slug}" repeats post slug: "${step.slug}".`,
+      );
+    }
+    seenStepSlugs.add(step.slug);
     if (!availableSlugs.has(step.slug)) {
       if (unpublishedSlugs.has(step.slug)) {
         throw new Error(
@@ -36,9 +46,10 @@ export function assertLearningPathSlugs(
 export function assertUniqueLearningPathSlugs(paths: readonly LearningPath[]): void {
   const seen = new Set<string>();
   for (const path of paths) {
-    if (!seen.add(path.slug)) {
+    if (seen.has(path.slug)) {
       throw new Error(`Duplicate learning path slug: "${path.slug}".`);
     }
+    seen.add(path.slug);
   }
 }
 
